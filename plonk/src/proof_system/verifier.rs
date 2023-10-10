@@ -47,7 +47,7 @@ pub(crate) struct PcsInfo<E: Pairing> {
     pub(crate) shifted_opening_proof: Commitment<E>,
 }
 
-pub(crate) struct Verifier<E: Pairing> {
+pub struct Verifier<E: Pairing> {
     pub(crate) domain: Radix2EvaluationDomain<E::ScalarField>,
 }
 
@@ -257,7 +257,7 @@ where
     /// Compute verifier challenges `tau`, `beta`, `gamma`, `alpha`, `zeta`,
     /// 'v', 'u'.
     #[inline]
-    pub(crate) fn compute_challenges<T>(
+    pub fn compute_challenges<T>(
         verify_keys: &[&VerifyingKey<E>],
         public_inputs: &[&[E::ScalarField]],
         batch_proof: &BatchProof<E>,

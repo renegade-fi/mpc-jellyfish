@@ -233,26 +233,26 @@ pub struct PlookupProof<E: Pairing> {
 #[derivative(PartialEq, Hash(bound = "E:Pairing"))]
 pub struct BatchProof<E: Pairing> {
     /// The list of wire witness polynomials commitments.
-    pub(crate) wires_poly_comms_vec: Vec<Vec<Commitment<E>>>,
+    pub wires_poly_comms_vec: Vec<Vec<Commitment<E>>>,
 
     /// The list of polynomial commitment for the wire permutation argument.
-    pub(crate) prod_perm_poly_comms_vec: Vec<Commitment<E>>,
+    pub prod_perm_poly_comms_vec: Vec<Commitment<E>>,
 
     /// The list of polynomial evaluations.
-    pub(crate) poly_evals_vec: Vec<ProofEvaluations<E::ScalarField>>,
+    pub poly_evals_vec: Vec<ProofEvaluations<E::ScalarField>>,
 
     /// The list of partial proofs for Plookup argument
-    pub(crate) plookup_proofs_vec: Vec<Option<PlookupProof<E>>>,
+    pub plookup_proofs_vec: Vec<Option<PlookupProof<E>>>,
 
     /// Splitted quotient polynomial commitments.
-    pub(crate) split_quot_poly_comms: Vec<Commitment<E>>,
+    pub split_quot_poly_comms: Vec<Commitment<E>>,
 
     /// (Aggregated) proof of evaluations at challenge point `zeta`.
-    pub(crate) opening_proof: Commitment<E>,
+    pub opening_proof: Commitment<E>,
 
     /// (Aggregated) proof of evaluation at challenge point `zeta * g` where `g`
     /// is the root of unity.
-    pub(crate) shifted_opening_proof: Commitment<E>,
+    pub shifted_opening_proof: Commitment<E>,
 }
 
 impl<E: Pairing> BatchProof<E> {
@@ -402,14 +402,14 @@ impl<E: Pairing> BatchProof<E> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 pub struct ProofEvaluations<F: Field> {
     /// Wire witness polynomials evaluations at point `zeta`.
-    pub(crate) wires_evals: Vec<F>,
+    pub wires_evals: Vec<F>,
 
     /// Extended permutation (sigma) polynomials evaluations at point `zeta`.
     /// We do not include the last sigma polynomial evaluation.
-    pub(crate) wire_sigma_evals: Vec<F>,
+    pub wire_sigma_evals: Vec<F>,
 
     /// Permutation product polynomial evaluation at point `zeta * g`.
-    pub(crate) perm_next_eval: F,
+    pub perm_next_eval: F,
 }
 
 impl<F: Field> TryFrom<Vec<F>> for ProofEvaluations<F> {
@@ -655,29 +655,29 @@ impl<E: Pairing> ProvingKey<E> {
 #[derive(Debug, Clone, Eq, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct VerifyingKey<E: Pairing> {
     /// The size of the evaluation domain. Should be a power of two.
-    pub(crate) domain_size: usize,
+    pub domain_size: usize,
 
     /// The number of public inputs.
-    pub(crate) num_inputs: usize,
+    pub num_inputs: usize,
 
     /// The permutation polynomial commitments. The commitments are not hiding.
-    pub(crate) sigma_comms: Vec<Commitment<E>>,
+    pub sigma_comms: Vec<Commitment<E>>,
 
     /// The selector polynomial commitments. The commitments are not hiding.
-    pub(crate) selector_comms: Vec<Commitment<E>>,
+    pub selector_comms: Vec<Commitment<E>>,
 
     /// The constants K0, ..., K_num_wire_types that ensure wire subsets are
     /// disjoint.
-    pub(crate) k: Vec<E::ScalarField>,
+    pub k: Vec<E::ScalarField>,
 
     /// KZG PCS opening key.
     pub open_key: OpenKey<E>,
 
     /// A flag indicating whether the key is a merged key.
-    pub(crate) is_merged: bool,
+    pub is_merged: bool,
 
     /// Plookup verifying key, None if not support lookup.
-    pub(crate) plookup_vk: Option<PlookupVerifyingKey<E>>,
+    pub plookup_vk: Option<PlookupVerifyingKey<E>>,
 }
 
 impl<E, F, P1, P2> From<VerifyingKey<E>> for Vec<E::BaseField>
@@ -838,14 +838,14 @@ impl<E: Pairing> VerifyingKey<E> {
 
 /// Plonk IOP verifier challenges.
 #[derive(Debug, Default)]
-pub(crate) struct Challenges<F: Field> {
-    pub(crate) tau: F,
-    pub(crate) alpha: F,
-    pub(crate) beta: F,
-    pub(crate) gamma: F,
-    pub(crate) zeta: F,
-    pub(crate) v: F,
-    pub(crate) u: F,
+pub struct Challenges<F: Field> {
+    pub tau: F,
+    pub alpha: F,
+    pub beta: F,
+    pub gamma: F,
+    pub zeta: F,
+    pub v: F,
+    pub u: F,
 }
 
 /// Plonk IOP online polynomial oracles.

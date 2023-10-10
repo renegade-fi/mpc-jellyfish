@@ -16,8 +16,10 @@ use jf_relation::Arithmetization;
 pub mod batch_arg;
 pub(crate) mod prover;
 pub(crate) mod snark;
+#[allow(missing_docs)]
 pub mod structs;
-pub(crate) mod verifier;
+#[allow(missing_docs)]
+pub mod verifier;
 use crate::transcript::PlonkTranscript;
 pub use snark::PlonkKzgSnark;
 
