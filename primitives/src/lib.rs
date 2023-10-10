@@ -10,6 +10,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(warnings)]
 #![deny(missing_docs)]
+#![allow(unknown_lints)]
 #[cfg(test)]
 extern crate std;
 
