@@ -18,6 +18,7 @@ extern crate derivative;
 pub mod circuit;
 pub mod constants;
 pub mod errors;
+pub mod multiprover;
 pub mod proof_system;
 pub mod transcript;
 

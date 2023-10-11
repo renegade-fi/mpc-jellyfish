@@ -579,7 +579,7 @@ mod nmt_tests {
 
         // Ensure that the absence proof returns a verification error when one of the
         // boundary proofs is incorrect
-        let mut malicious_proof = absence_proof.clone();
+        let mut malicious_proof = absence_proof;
         malicious_proof.right_boundary_proof = malicious_proof.left_boundary_proof.clone();
         assert!(tree
             .verify_namespace_proof(&malicious_proof, 3)

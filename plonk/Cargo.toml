@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 ark-ec = "0.4.0"
 ark-ff = { version = "0.4.0", features = ["asm"] }
+ark-mpc = "0.1"
 ark-poly = "0.4.0"
 ark-serialize = "0.4.0"
 ark-std = { version = "0.4.0", default-features = false }
@@ -42,6 +43,8 @@ ark-ed-on-bls12-377 = "0.4.0"
 ark-ed-on-bls12-381 = "0.4.0"
 ark-ed-on-bn254 = "0.4.0"
 hex = "^0.4.3"
+tokio = "1.33"
+rand = "0.8"
 
 # Benchmarks
 [[bench]]
@@ -50,7 +53,8 @@ path = "benches/bench.rs"
 harness = false
 
 [features]
-default = ["parallel"]
+all-tests = ["ark-mpc/test_helpers"]
+default = ["parallel", "std"]
 std = [
     "ark-std/std",
     "ark-serialize/std",
