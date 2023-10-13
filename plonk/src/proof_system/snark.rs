@@ -1271,49 +1271,71 @@ pub mod test {
         let q_o = &pk.selectors[2 * GATE_WIDTH + 2];
         let q_c = &pk.selectors[2 * GATE_WIDTH + 3];
         let q_ecc = &pk.selectors[2 * GATE_WIDTH + 4];
+
+        // rustc does not seem to properly infer that the indexing below should return
+        // borrows of the polynomials, so we use the following macro to ensure that
+        // inputs to each multiplication in a chain are borrows
+        macro_rules! chained_mul {
+            // Base case, direct multiplication
+            ($lhs:expr, $rhs:expr) => {
+                $lhs * $rhs
+            };
+
+            // Recursive case, two or more elements
+            ($first:expr, $($rest:expr),+) => {
+                { $first * &(chained_mul!($($rest),+)) }
+            };
+        }
+
         let circuit_poly = q_c
             + &oracles.pub_inp_poly
-            + oracles.wire_polys[0].mul(q_lc[0])
-            + oracles.wire_polys[1].mul(q_lc[1])
-            + oracles.wire_polys[2].mul(q_lc[2])
-            + oracles.wire_polys[3].mul(q_lc[3])
-            + oracles.wire_polys[0]
-                .mul(&oracles.wire_polys[1])
-                .mul(q_mul[0])
-            + oracles.wire_polys[2]
-                .mul(&oracles.wire_polys[3])
-                .mul(q_mul[1])
-            + oracles.wire_polys[0]
-                .mul(&oracles.wire_polys[1])
-                .mul(&oracles.wire_polys[2])
-                .mul(&oracles.wire_polys[3])
-                .mul(&oracles.wire_polys[4])
-                .mul(q_ecc)
-            + oracles.wire_polys[0]
-                .mul(&oracles.wire_polys[0])
-                .mul(&oracles.wire_polys[0])
-                .mul(&oracles.wire_polys[0])
-                .mul(&oracles.wire_polys[0])
-                .mul(q_hash[0])
-            + oracles.wire_polys[1]
-                .mul(&oracles.wire_polys[1])
-                .mul(&oracles.wire_polys[1])
-                .mul(&oracles.wire_polys[1])
-                .mul(&oracles.wire_polys[1])
-                .mul(q_hash[1])
-            + oracles.wire_polys[2]
-                .mul(&oracles.wire_polys[2])
-                .mul(&oracles.wire_polys[2])
-                .mul(&oracles.wire_polys[2])
-                .mul(&oracles.wire_polys[2])
-                .mul(q_hash[2])
-            + oracles.wire_polys[3]
-                .mul(&oracles.wire_polys[3])
-                .mul(&oracles.wire_polys[3])
-                .mul(&oracles.wire_polys[3])
-                .mul(&oracles.wire_polys[3])
-                .mul(q_hash[3])
-            + oracles.wire_polys[4].mul(q_o).neg();
+            + chained_mul!(&oracles.wire_polys[0], q_lc[0])
+            + chained_mul!(&oracles.wire_polys[1], q_lc[1])
+            + chained_mul!(&oracles.wire_polys[2], q_lc[2])
+            + chained_mul!(&oracles.wire_polys[3], q_lc[3])
+            + chained_mul!(&oracles.wire_polys[0], &oracles.wire_polys[1], q_mul[0])
+            + chained_mul!(&oracles.wire_polys[2], &oracles.wire_polys[3], q_mul[1])
+            + chained_mul!(
+                &oracles.wire_polys[0],
+                &oracles.wire_polys[1],
+                &oracles.wire_polys[2],
+                &oracles.wire_polys[3],
+                &oracles.wire_polys[4],
+                q_ecc
+            )
+            + chained_mul!(
+                &oracles.wire_polys[0],
+                &oracles.wire_polys[0],
+                &oracles.wire_polys[0],
+                &oracles.wire_polys[0],
+                &oracles.wire_polys[0],
+                q_hash[0]
+            )
+            + chained_mul!(
+                &oracles.wire_polys[1],
+                &oracles.wire_polys[1],
+                &oracles.wire_polys[1],
+                &oracles.wire_polys[1],
+                &oracles.wire_polys[1],
+                q_hash[1]
+            )
+            + chained_mul!(
+                &oracles.wire_polys[2],
+                &oracles.wire_polys[2],
+                &oracles.wire_polys[2],
+                &oracles.wire_polys[2],
+                &oracles.wire_polys[2],
+                q_hash[2]
+            )
+            + chained_mul!(
+                &oracles.wire_polys[3],
+                &oracles.wire_polys[3],
+                &oracles.wire_polys[3],
+                &oracles.wire_polys[3],
+                &oracles.wire_polys[3],
+                q_hash[3]
+            )
+            + chained_mul!(&oracles.wire_polys[4], q_o).neg();
 
         // check that the polynomial evaluates to zero on the vanishing set
         let domain = Radix2EvaluationDomain::<E::ScalarField>::new(pk.domain_size())
@@ -1346,7 +1368,7 @@ pub mod test {
             .fold(one_poly.clone(), |acc, (j, w)| {
                 let poly =
                     &DensePolynomial::from_coefficients_vec(vec![gamma, beta * pk.k()[j]]) + w;
-                acc.mul(&poly)
+                (&acc).mul(&poly)
             });
         let poly_2 =
             oracles
@@ -1357,7 +1379,7 @@ pub mod test {
                     let poly = w.clone()
                         + sigma.mul(beta)
                         + DensePolynomial::from_coefficients_vec(vec![gamma]);
-                    acc.mul(&poly)
+                    (&acc).mul(&poly)
                 });
 
         let domain = Radix2EvaluationDomain::<E::ScalarField>::new(pk.domain_size())

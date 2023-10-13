@@ -38,7 +38,7 @@ where
     F: RescueParameter + SWToTEConParam,
 {
     /// create a new RescueTranscriptVar for a given circuit.
-    pub(crate) fn new(circuit: &mut PlonkCircuit<F>) -> Self {
+    pub(crate) fn new(circuit: &PlonkCircuit<F>) -> Self {
         Self {
             transcript_var: Vec::new(),
             state_var: [circuit.zero(); STATE_SIZE],
@@ -250,7 +250,7 @@ mod tests {
 
         let label = "testing".as_ref();
 
-        let mut transcipt_var = RescueTranscriptVar::new(&mut circuit);
+        let mut transcipt_var = RescueTranscriptVar::new(&circuit);
         let mut transcript = RescueTranscript::<F>::new(label);
 
         for _ in 0..10 {
@@ -298,7 +298,7 @@ mod tests {
 
         let label = "testing".as_ref();
 
-        let mut transcript_var = RescueTranscriptVar::new(&mut circuit);
+        let mut transcript_var = RescueTranscriptVar::new(&circuit);
         let mut transcript = RescueTranscript::<F>::new(label);
 
         let open_key: UnivariateVerifierParam<E> = UnivariateVerifierParam {
