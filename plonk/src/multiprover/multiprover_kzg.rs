@@ -117,6 +117,7 @@ where
 // | Commitment Scheme Implementation |
 // ------------------------------------
 
+// TODO: Implement a more efficient batching scheme
 impl<E: Pairing> MultiproverKZG<E> {
     /// Commit to a polynomial that is shared between the provers
     pub fn commit(
@@ -130,9 +131,28 @@ impl<E: Pairing> MultiproverKZG<E> {
         }
 
         // Map the prover params to `CurvePoint`s in the MPC framework
+        let n_terms = poly.degree() + 1;
         let eval_terms = Self::convert_prover_params(prover_params);
-        let commitment = CurvePoint::msm_authenticated(&poly.coeffs, &eval_terms);
+        let commitment = CurvePoint::msm_authenticated(&poly.coeffs, &eval_terms[..n_terms]);
         Ok(MultiproverKzgCommitment { commitment })
+    }
+
+    /// Commit to a batch of polynomials shared between the provers
+    ///
+    /// Note that the batching scheme here is naively committing to each
+    /// polynomial separately as in the single-prover implementation
+    pub fn batch_commit(
+        prover_params: &UnivariateProverParam<E>,
+        polynomials: &[AuthenticatedDensePoly<E::G1>],
+    ) -> Result<Vec<MultiproverKzgCommitment<E>>, PCSError> {
+        let mut commitments = Vec::with_capacity(polynomials.len());
+
+        for poly in polynomials.iter() {
+            let commitment = Self::commit(prover_params, poly)?;
+            commitments.push(commitment);
+        }
+
+        Ok(commitments)
     }
 
     /// Prove opening of a polynomial at a point
@@ -169,6 +189,43 @@ impl<E: Pairing> MultiproverKZG<E> {
         let eval = poly.eval(point);
 
         Ok((MultiproverKzgProof { proof }, eval))
+    }
+
+    /// Open a batch of polynomials together
+    ///
+    /// This method matches the functionality of the `batch_open` method in the
+    /// single-prover implementation, which naively opens each polynomial
+    /// separately
+    #[allow(clippy::type_complexity)]
+    pub fn batch_open(
+        prover_params: &UnivariateProverParam<E>,
+        polynomials: &[AuthenticatedDensePoly<E::G1>],
+        points: &[ScalarResult<E::G1>],
+    ) -> Result<
+        (
+            Vec<MultiproverKzgProof<E>>,
+            Vec<AuthenticatedScalarResult<E::G1>>,
+        ),
+        PCSError,
+    > {
+        if polynomials.len() != points.len() {
+            return Err(PCSError::InvalidParameters(format!(
+                "poly length {} is different from points length {}",
+                polynomials.len(),
+                points.len()
+            )));
+        }
+
+        let mut proofs = Vec::with_capacity(polynomials.len());
+        let mut evals = Vec::with_capacity(polynomials.len());
+
+        for (poly, point) in polynomials.iter().zip(points.iter()) {
+            let (proof, eval) = Self::open(prover_params, poly, point)?;
+            proofs.push(proof);
+            evals.push(eval);
+        }
+
+        Ok((proofs, evals))
     }
 
     /// Convert native prover params to prover params in the MPC framework
@@ -291,5 +348,76 @@ mod test {
         let eval = eval.unwrap().inner();
 
         assert!(UnivariateKzgPCS::<TestCurve>::verify(&vk, &comm, &point, &eval, &proof).unwrap())
+    }
+
+    /// Tests the batch commit and open methods
+    #[tokio::test]
+    async fn test_batch_commit_open() {
+        const N_POLYS: usize = 10;
+        let polys = (0..N_POLYS)
+            .map(|_| random_poly(DEGREE_BOUND))
+            .collect_vec();
+        let points = (0..N_POLYS)
+            .map(|_| ScalarField::rand(&mut test_rng()))
+            .collect_vec();
+
+        let pp = <UnivariateKzgPCS<TestCurve> as PolynomialCommitmentScheme>::gen_srs_for_testing(
+            &mut test_rng(),
+            DEGREE_BOUND,
+        )
+        .unwrap();
+        let (ck, vk) = pp.trim(DEGREE_BOUND).unwrap();
+
+        let ((comms, proofs, evals), _) = execute_mock_mpc(|fabric| {
+            let ck = ck.clone();
+            let polys = polys.clone();
+            let points = points.clone();
+
+            async move {
+                let shared_polys = polys
+                    .iter()
+                    .map(|poly| share_poly(poly, PARTY0, &fabric))
+                    .collect_vec();
+                let allocated_points = points
+                    .iter()
+                    .map(|point| fabric.allocate_scalar(Scalar::new(*point)))
+                    .collect_vec();
+
+                let comms = MultiproverKZG::<TestCurve>::batch_commit(&ck, &shared_polys).unwrap();
+                let (proofs, evals) =
+                    MultiproverKZG::<TestCurve>::batch_open(&ck, &shared_polys, &allocated_points)
+                        .unwrap();
+
+                let comms_open = comms
+                    .into_iter()
+                    .map(|comm| comm.open_authenticated())
+                    .collect_vec();
+                let proofs_open = proofs
+                    .into_iter()
+                    .map(|proof| proof.open_authenticated())
+                    .collect_vec();
+                let evals_open = evals
+                    .into_iter()
+                    .map(|eval| eval.open_authenticated())
+                    .collect_vec();
+
+                (
+                    futures::future::join_all(comms_open).await,
+                    futures::future::join_all(proofs_open).await,
+                    futures::future::join_all(evals_open).await,
+                )
+            }
+        })
+        .await;
+
+        let comms = comms.into_iter().collect::<Result<Vec<_>, _>>().unwrap();
+        let proofs = proofs.into_iter().collect::<Result<Vec<_>, _>>().unwrap();
+        let evals = evals.into_iter().map(|e| e.unwrap().inner()).collect_vec();
+
+        let mut rng = test_rng();
+        assert!(UnivariateKzgPCS::<TestCurve>::batch_verify(
+            &vk, &comms, &points, &evals, &proofs, &mut rng
+        )
+        .unwrap())
     }
 }
