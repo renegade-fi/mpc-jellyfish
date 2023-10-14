@@ -12,8 +12,10 @@ rust-version = { workspace = true }
 [dependencies]
 ark-ec = "0.4.0"
 ark-ff = { version = "0.4.0", features = ["asm"] }
-ark-mpc = "0.1"
-ark-poly = "0.4.0"
+ark-mpc = { git = "https://github.com/renegade-fi/ark-mpc.git", branch = "joey/polynomials", features = [
+    "poly",
+] }
+ark-poly = "0.4.2"
 ark-serialize = "0.4.0"
 ark-std = { version = "0.4.0", default-features = false }
 derivative = { version = "2", features = ["use_core"] }
@@ -21,6 +23,7 @@ displaydoc = { version = "0.2.3", default-features = false }
 downcast-rs = { version = "1.2.0", default-features = false }
 dyn-clone = "^1.0"
 espresso-systems-common = { git = "https://github.com/espressosystems/espresso-systems-common", tag = "0.4.0" }
+futures = "0.3"
 hashbrown = "0.13.2"
 itertools = { workspace = true }
 jf-primitives = { path = "../primitives", default-features = false }
@@ -53,7 +56,7 @@ path = "benches/bench.rs"
 harness = false
 
 [features]
-all-tests = ["ark-mpc/test_helpers"]
+all-tests = ["ark-mpc/test_helpers", "jf-primitives/test-srs"]
 default = ["parallel", "std"]
 std = [
     "ark-std/std",

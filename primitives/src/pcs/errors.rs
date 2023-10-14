@@ -23,6 +23,8 @@ pub enum PCSError {
     InvalidProof(String),
     /// Invalid parameters: {0}
     InvalidParameters(String),
+    /// An error constructing a collaborative KZG proof
+    Multiprover(String),
     /// An error during (de)serialization: {0}
     SerializationError(SerializationError),
     /// Transcript error {0}

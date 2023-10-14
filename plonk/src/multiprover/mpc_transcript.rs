@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_mpc::{
-    algebra::scalar::{Scalar, ScalarResult},
+    algebra::{Scalar, ScalarResult},
     MpcFabric, ResultId, ResultValue,
 };
 
@@ -93,7 +93,7 @@ impl<C: CurveGroup> MpcTranscript<C> {
 mod test {
     use ark_bn254::Bn254;
     use ark_ec::pairing::Pairing;
-    use ark_mpc::{algebra::scalar::Scalar, test_helpers::execute_mock_mpc};
+    use ark_mpc::{algebra::Scalar, test_helpers::execute_mock_mpc};
     use itertools::Itertools;
     use rand::{thread_rng, CryptoRng, Rng, RngCore};
 
