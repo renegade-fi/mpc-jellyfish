@@ -60,26 +60,26 @@ pub type OpenKey<E> = UnivariateVerifierParam<E>;
 #[derivative(PartialEq, Hash(bound = "E:Pairing"))]
 pub struct Proof<E: Pairing> {
     /// Wire witness polynomials commitments.
-    pub(crate) wires_poly_comms: Vec<Commitment<E>>,
+    pub wires_poly_comms: Vec<Commitment<E>>,
 
     /// The polynomial commitment for the wire permutation argument.
-    pub(crate) prod_perm_poly_comm: Commitment<E>,
+    pub prod_perm_poly_comm: Commitment<E>,
 
     /// Splitted quotient polynomial commitments.
-    pub(crate) split_quot_poly_comms: Vec<Commitment<E>>,
+    pub split_quot_poly_comms: Vec<Commitment<E>>,
 
     /// (Aggregated) proof of evaluations at challenge point `zeta`.
-    pub(crate) opening_proof: Commitment<E>,
+    pub opening_proof: Commitment<E>,
 
     /// (Aggregated) proof of evaluation at challenge point `zeta * g` where `g`
     /// is the root of unity.
-    pub(crate) shifted_opening_proof: Commitment<E>,
+    pub shifted_opening_proof: Commitment<E>,
 
     /// Polynomial evaluations.
-    pub(crate) poly_evals: ProofEvaluations<E::ScalarField>,
+    pub poly_evals: ProofEvaluations<E::ScalarField>,
 
     /// The partial proof for Plookup argument
-    pub(crate) plookup_proof: Option<PlookupProof<E>>,
+    pub plookup_proof: Option<PlookupProof<E>>,
 }
 
 impl<E, P> TryFrom<Vec<E::BaseField>> for Proof<E>
