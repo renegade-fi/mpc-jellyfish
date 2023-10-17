@@ -2,11 +2,16 @@
 //! MPC-enabled arithmetic
 
 use ark_ec::CurveGroup;
-use ark_mpc::algebra::AuthenticatedScalarResult;
+use ark_ff::FftField;
+use ark_mpc::algebra::{AuthenticatedDensePoly, AuthenticatedScalarResult};
+use ark_poly::univariate::DensePolynomial;
 
 use super::MpcCircuitError;
 
 /// The variable type in an MPC constraint system
+///
+/// This represents an index into the wire assignments as flattened out
+/// canonically
 pub type MpcVariable = usize;
 /// A variable of boolean type
 pub struct MpcBoolVar(usize);
@@ -179,4 +184,48 @@ pub trait MpcCircuit<C: CurveGroup> {
 
     /// Pad the circuit with n dummy gates
     fn pad_gates(&mut self, n: usize);
+}
+
+/// An abstraction shimming the `Circuit` abstraction and the PIOP based
+/// arguments in the MPC prover. The `MpcArithmetization` takes circuit wire
+/// assignments and constructs polynomial representations of the assignment
+pub trait MpcArithmetization<C: CurveGroup>: MpcCircuit<C>
+where
+    C::ScalarField: FftField,
+{
+    /// The required SRS size for the circuit.
+    fn srs_size(&self) -> Result<usize, MpcCircuitError>;
+
+    /// Get the size of the evaluation domain for arithmetization (after circuit
+    /// has been finalized).
+    fn eval_domain_size(&self) -> Result<usize, MpcCircuitError>;
+
+    /// Compute and return selector polynomials.
+    /// Return an error if the circuit has not been finalized yet.
+    fn compute_selector_polynomials(
+        &self,
+    ) -> Result<Vec<DensePolynomial<C::ScalarField>>, MpcCircuitError>;
+
+    /// Compute and return extended permutation polynomials.
+    /// Return an error if the circuit has not been finalized yet.
+    fn compute_extended_permutation_polynomials(
+        &self,
+    ) -> Result<Vec<AuthenticatedDensePoly<C>>, MpcCircuitError>;
+
+    /// Compute and return the product polynomial for permutation arguments.
+    /// Return an error if the circuit has not been finalized yet.
+    fn compute_prod_permutation_polynomial(
+        &self,
+        beta: &C::ScalarField,
+        gamma: &C::ScalarField,
+    ) -> Result<AuthenticatedDensePoly<C>, MpcCircuitError>;
+
+    /// Compute and return the list of wiring witness polynomials.
+    /// Return an error if the circuit has not been finalized yet.
+    fn compute_wire_polynomials(&self) -> Result<Vec<AuthenticatedDensePoly<C>>, MpcCircuitError>;
+
+    /// Compute and return the public input polynomial.
+    /// Return an error if the circuit has not been finalized yet.
+    /// The IO gates of the circuit are guaranteed to be in the front.
+    fn compute_pub_input_polynomial(&self) -> Result<AuthenticatedDensePoly<C>, MpcCircuitError>;
 }
