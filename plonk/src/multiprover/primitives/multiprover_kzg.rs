@@ -260,7 +260,7 @@ mod test {
     use jf_utils::test_rng;
     use rand::Rng;
 
-    use crate::multiprover::multiprover_kzg::MultiproverKZG;
+    use crate::multiprover::primitives::MultiproverKZG;
 
     /// The curve used for testing
     type TestCurve = Bn254;

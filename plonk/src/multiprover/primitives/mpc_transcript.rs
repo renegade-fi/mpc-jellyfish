@@ -98,7 +98,7 @@ mod test {
     use rand::{thread_rng, CryptoRng, Rng, RngCore};
 
     use crate::{
-        multiprover::mpc_transcript::MpcTranscript,
+        multiprover::primitives::MpcTranscript,
         transcript::{PlonkTranscript, SolidityTranscript},
     };
 
