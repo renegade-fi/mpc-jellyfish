@@ -327,6 +327,66 @@ where
 
         circuit
     }
+
+    /// Insert an algebraic gate
+    pub fn insert_gate(
+        &mut self,
+        wire_vars: &[MpcVariable; GATE_WIDTH + 1],
+        gate: Box<dyn Gate<C::ScalarField>>,
+    ) -> Result<(), MpcCircuitError> {
+        self.check_finalize_flag(false)?;
+
+        for (wire_var, wire_variable) in wire_vars
+            .iter()
+            .zip(self.wire_variables.iter_mut().take(GATE_WIDTH + 1))
+        {
+            wire_variable.push(*wire_var)
+        }
+
+        self.gates.push(gate);
+        Ok(())
+    }
+
+    /// Checks if a variable is strictly less than the number of variables.
+    /// This function must be invoked for each gate as this check is not applied
+    /// in the function `insert_gate`
+    #[inline]
+    pub fn check_var_bound(&self, var: Variable) -> Result<(), MpcCircuitError> {
+        if var >= self.num_vars {
+            return Err(MpcCircuitError::ConstraintSystem(
+                CircuitError::VarIndexOutOfBound(var, self.num_vars),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Check if a list of variables are strictly less than the number of
+    /// variables
+    pub fn check_vars_bound(&self, vars: &[Variable]) -> Result<(), MpcCircuitError> {
+        for &var in vars {
+            self.check_var_bound(var)?
+        }
+        Ok(())
+    }
+
+    /// Change the value of a variable. Only used for testing.
+    #[cfg(feature = "test_apis")]
+    pub fn witness_mut(&mut self, idx: Variable) -> &mut AuthenticatedScalarResult<C> {
+        &mut self.witness[idx]
+    }
+
+    /// Creating a `BoolVar` without checking if `v` is a boolean value!
+    ///
+    /// You should absolutely sure about what you are doing
+    /// You should normally only use this API if you already enforce `v` to be a
+    /// boolean value using other constraints.
+    pub(crate) fn create_boolean_variable_unchecked(
+        &mut self,
+        a: AuthenticatedScalarResult<C>,
+    ) -> Result<MpcBoolVar, MpcCircuitError> {
+        let var = self.create_variable(a)?;
+        Ok(MpcBoolVar::new_unchecked(var))
+    }
 }
 
 /// Private helper methods
