@@ -3,9 +3,14 @@
 use core::fmt::Display;
 use std::error::Error;
 
+use jf_relation::errors::CircuitError;
+
 /// The error type emitted by MPC circuit operations
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MpcCircuitError {}
+#[derive(Debug)]
+pub enum MpcCircuitError {
+    /// An error with the constraint system
+    ConstraintSystem(CircuitError),
+}
 
 impl Display for MpcCircuitError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
