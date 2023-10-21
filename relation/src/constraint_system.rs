@@ -1119,8 +1119,10 @@ impl<F: PrimeField> PlonkCircuit<F> {
         // Compute the extended identity permutation
         // id[i*n+j] = k[i] * g^j
         let k: Vec<F> = compute_coset_representatives(self.num_wire_types, Some(n));
+
         // Precompute domain elements
         let group_elems: Vec<F> = self.eval_domain.elements().collect();
+
         // Compute extended identity permutation
         self.extended_id_permutation = vec![F::zero(); self.num_wire_types * n];
         for (i, &coset_repr) in k.iter().enumerate() {
