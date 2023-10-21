@@ -24,7 +24,7 @@ pub use logic::*;
 pub use lookup::*;
 
 /// Describes a gate with getter for all selectors configuration
-pub trait Gate<F: Field>: Downcast + DynClone {
+pub trait Gate<F: Field>: Downcast + DynClone + Send + Sync {
     /// Get the name of a gate.
     fn name(&self) -> &'static str;
     /// Selectors for linear combination.

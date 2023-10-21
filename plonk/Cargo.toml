@@ -16,6 +16,7 @@ ark-mpc = { git = "https://github.com/renegade-fi/ark-mpc.git" }
 ark-poly = "0.4.2"
 ark-serialize = "0.4.0"
 ark-std = { version = "0.4.0", default-features = false }
+async-trait = "0.1"
 derivative = { version = "2", features = ["use_core"] }
 displaydoc = { version = "0.2.3", default-features = false }
 downcast-rs = { version = "1.2.0", default-features = false }

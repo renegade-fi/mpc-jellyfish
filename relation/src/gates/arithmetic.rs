@@ -12,7 +12,7 @@ use ark_ff::Field;
 
 /// A constant gate
 #[derive(Debug, Clone)]
-pub struct ConstantGate<F: Field>(pub(crate) F);
+pub struct ConstantGate<F: Field>(pub F);
 
 impl<F> Gate<F> for ConstantGate<F>
 where
