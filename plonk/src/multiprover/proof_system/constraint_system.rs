@@ -26,8 +26,6 @@ use jf_relation::{
 use jf_utils::par_utils::parallelizable_slice_iter;
 use rayon::prelude::*;
 
-use super::MpcCircuitError;
-
 // --------------------
 // | Traits and Types |
 // --------------------
@@ -80,23 +78,23 @@ pub trait MpcCircuit<C: CurveGroup> {
     ///
     /// Note that while the input is public, it may not have yet been *made*
     /// public so the result type is a secret shared field element
-    fn public_input(&self) -> Result<Vec<AuthenticatedScalarResult<C>>, MpcCircuitError>;
+    fn public_input(&self) -> Result<Vec<AuthenticatedScalarResult<C>>, CircuitError>;
 
     /// Check whether the circuit constraints are satisfied
     async fn check_circuit_satisfiability(
         &self,
         public_input: &[AuthenticatedScalarResult<C>],
-    ) -> Result<(), MpcCircuitError>;
+    ) -> Result<(), CircuitError>;
 
     /// Create a constant variable in the circuit, returning the index of the
     /// variable
-    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<MpcVariable, MpcCircuitError>;
+    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<MpcVariable, CircuitError>;
 
     /// Add a variable to the circuit; returns the index of the variable
     fn create_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcVariable, MpcCircuitError>;
+    ) -> Result<MpcVariable, CircuitError>;
 
     /// Add a bool variable to the circuit; return the index of the variable.
     ///
@@ -109,7 +107,7 @@ pub trait MpcCircuit<C: CurveGroup> {
     fn create_boolean_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcBoolVar, MpcCircuitError> {
+    ) -> Result<MpcBoolVar, CircuitError> {
         let var = self.create_variable(val)?;
         self.enforce_bool(var)?;
         Ok(MpcBoolVar(var))
@@ -119,10 +117,10 @@ pub trait MpcCircuit<C: CurveGroup> {
     fn create_public_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcVariable, MpcCircuitError>;
+    ) -> Result<MpcVariable, CircuitError>;
 
     /// Set a variable to a public variable
-    fn set_variable_public(&mut self, var: MpcVariable) -> Result<(), MpcCircuitError>;
+    fn set_variable_public(&mut self, var: MpcVariable) -> Result<(), CircuitError>;
 
     /// Return a default variable with value zero.
     fn zero(&self) -> MpcVariable;
@@ -142,7 +140,7 @@ pub trait MpcCircuit<C: CurveGroup> {
 
     /// Return the witness value of variable `idx`.
     /// Return error if the input variable is invalid.
-    fn witness(&self, idx: MpcVariable) -> Result<AuthenticatedScalarResult<C>, MpcCircuitError>;
+    fn witness(&self, idx: MpcVariable) -> Result<AuthenticatedScalarResult<C>, CircuitError>;
 
     /// Common gates that should be implemented in any constraint systems.
     ///
@@ -152,7 +150,7 @@ pub trait MpcCircuit<C: CurveGroup> {
         &mut self,
         var: MpcVariable,
         constant: Scalar<C>,
-    ) -> Result<(), MpcCircuitError>;
+    ) -> Result<(), CircuitError>;
 
     /// Constrain variable `c` to the addition of `a` and `b`.
     /// Return error if the input variables are invalid.
@@ -161,12 +159,12 @@ pub trait MpcCircuit<C: CurveGroup> {
         a: MpcVariable,
         b: MpcVariable,
         c: MpcVariable,
-    ) -> Result<(), MpcCircuitError>;
+    ) -> Result<(), CircuitError>;
 
     /// Obtain a variable representing an addition.
     /// Return the index of the variable.
     /// Return error if the input variables are invalid.
-    fn add(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, MpcCircuitError>;
+    fn add(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError>;
 
     /// Constrain variable `c` to the subtraction of `a` and `b`.
     /// Return error if the input variables are invalid.
@@ -175,12 +173,12 @@ pub trait MpcCircuit<C: CurveGroup> {
         a: MpcVariable,
         b: MpcVariable,
         c: MpcVariable,
-    ) -> Result<(), MpcCircuitError>;
+    ) -> Result<(), CircuitError>;
 
     /// Obtain a variable representing a subtraction.
     /// Return the index of the variable.
     /// Return error if the input variables are invalid.
-    fn sub(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, MpcCircuitError>;
+    fn sub(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError>;
 
     /// Constrain variable `c` to the multiplication of `a` and `b`.
     /// Return error if the input variables are invalid.
@@ -189,20 +187,20 @@ pub trait MpcCircuit<C: CurveGroup> {
         a: MpcVariable,
         b: MpcVariable,
         c: MpcVariable,
-    ) -> Result<(), MpcCircuitError>;
+    ) -> Result<(), CircuitError>;
 
     /// Obtain a variable representing a multiplication.
     /// Return the index of the variable.
     /// Return error if the input variables are invalid.
-    fn mul(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, MpcCircuitError>;
+    fn mul(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError>;
 
     /// Constrain a variable to a bool.
     /// Return error if the input is invalid.
-    fn enforce_bool(&mut self, a: MpcVariable) -> Result<(), MpcCircuitError>;
+    fn enforce_bool(&mut self, a: MpcVariable) -> Result<(), CircuitError>;
 
     /// Constrain two variables to have the same value.
     /// Return error if the input variables are invalid.
-    fn enforce_equal(&mut self, a: MpcVariable, b: MpcVariable) -> Result<(), MpcCircuitError>;
+    fn enforce_equal(&mut self, a: MpcVariable, b: MpcVariable) -> Result<(), CircuitError>;
 
     /// Pad the circuit with n dummy gates
     fn pad_gates(&mut self, n: usize);
@@ -216,23 +214,23 @@ where
     C::ScalarField: FftField,
 {
     /// The required SRS size for the circuit.
-    fn srs_size(&self) -> Result<usize, MpcCircuitError>;
+    fn srs_size(&self) -> Result<usize, CircuitError>;
 
     /// Get the size of the evaluation domain for arithmetization (after circuit
     /// has been finalized).
-    fn eval_domain_size(&self) -> Result<usize, MpcCircuitError>;
+    fn eval_domain_size(&self) -> Result<usize, CircuitError>;
 
     /// Compute and return selector polynomials.
     /// Return an error if the circuit has not been finalized yet.
     fn compute_selector_polynomials(
         &self,
-    ) -> Result<Vec<DensePolynomial<C::ScalarField>>, MpcCircuitError>;
+    ) -> Result<Vec<DensePolynomial<C::ScalarField>>, CircuitError>;
 
     /// Compute and return extended permutation polynomials.
     /// Return an error if the circuit has not been finalized yet.
     fn compute_extended_permutation_polynomials(
         &self,
-    ) -> Result<Vec<DensePolynomial<C::ScalarField>>, MpcCircuitError>;
+    ) -> Result<Vec<DensePolynomial<C::ScalarField>>, CircuitError>;
 
     /// Compute and return the product polynomial for permutation arguments.
     /// Return an error if the circuit has not been finalized yet.
@@ -240,16 +238,16 @@ where
         &self,
         beta: &C::ScalarField,
         gamma: &C::ScalarField,
-    ) -> Result<AuthenticatedDensePoly<C>, MpcCircuitError>;
+    ) -> Result<AuthenticatedDensePoly<C>, CircuitError>;
 
     /// Compute and return the list of wiring witness polynomials.
     /// Return an error if the circuit has not been finalized yet.
-    fn compute_wire_polynomials(&self) -> Result<Vec<AuthenticatedDensePoly<C>>, MpcCircuitError>;
+    fn compute_wire_polynomials(&self) -> Result<Vec<AuthenticatedDensePoly<C>>, CircuitError>;
 
     /// Compute and return the public input polynomial.
     /// Return an error if the circuit has not been finalized yet.
     /// The IO gates of the circuit are guaranteed to be in the front.
-    fn compute_pub_input_polynomial(&self) -> Result<AuthenticatedDensePoly<C>, MpcCircuitError>;
+    fn compute_pub_input_polynomial(&self) -> Result<AuthenticatedDensePoly<C>, CircuitError>;
 }
 
 // --------------------------------
@@ -344,7 +342,7 @@ where
         &mut self,
         wire_vars: &[MpcVariable; GATE_WIDTH + 1],
         gate: Box<dyn Gate<C::ScalarField>>,
-    ) -> Result<(), MpcCircuitError> {
+    ) -> Result<(), CircuitError> {
         self.check_finalize_flag(false)?;
 
         for (wire_var, wire_variable) in wire_vars
@@ -362,18 +360,16 @@ where
     /// This function must be invoked for each gate as this check is not applied
     /// in the function `insert_gate`
     #[inline]
-    pub fn check_var_bound(&self, var: Variable) -> Result<(), MpcCircuitError> {
+    pub fn check_var_bound(&self, var: Variable) -> Result<(), CircuitError> {
         if var >= self.num_vars {
-            return Err(MpcCircuitError::ConstraintSystem(
-                CircuitError::VarIndexOutOfBound(var, self.num_vars),
-            ));
+            return Err(CircuitError::VarIndexOutOfBound(var, self.num_vars));
         }
         Ok(())
     }
 
     /// Check if a list of variables are strictly less than the number of
     /// variables
-    pub fn check_vars_bound(&self, vars: &[Variable]) -> Result<(), MpcCircuitError> {
+    pub fn check_vars_bound(&self, vars: &[Variable]) -> Result<(), CircuitError> {
         for &var in vars {
             self.check_var_bound(var)?
         }
@@ -395,7 +391,7 @@ where
     pub(crate) fn create_boolean_variable_unchecked(
         &mut self,
         a: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcBoolVar, MpcCircuitError> {
+    ) -> Result<MpcBoolVar, CircuitError> {
         let var = self.create_variable(a)?;
         Ok(MpcBoolVar::new_unchecked(var))
     }
@@ -410,7 +406,7 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
 
     /// Re-arrange the order of the gates so that IO (public input) gates are at
     /// the front
-    fn rearrange_gates(&mut self) -> Result<(), MpcCircuitError> {
+    fn rearrange_gates(&mut self) -> Result<(), CircuitError> {
         self.check_finalize_flag(true)?;
         for (gate_id, io_gate_id) in self.pub_input_gate_ids.iter_mut().enumerate() {
             if *io_gate_id > gate_id {
@@ -439,7 +435,7 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
     /// arithmetization
     ///
     /// This is a pad to a power of two
-    fn pad(&mut self) -> Result<(), MpcCircuitError> {
+    fn pad(&mut self) -> Result<(), CircuitError> {
         self.check_finalize_flag(true)?;
         let n = self.eval_domain.size();
         for _ in self.num_gates()..n {
@@ -584,16 +580,12 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
     // Check whether the circuit is finalized. Return an error if the finalizing
     // status is different from the expected status.
     #[inline]
-    fn check_finalize_flag(&self, expect_finalized: bool) -> Result<(), MpcCircuitError> {
+    fn check_finalize_flag(&self, expect_finalized: bool) -> Result<(), CircuitError> {
         if !self.is_finalized() && expect_finalized {
-            return Err(MpcCircuitError::ConstraintSystem(
-                CircuitError::UnfinalizedCircuit,
-            ));
+            return Err(CircuitError::UnfinalizedCircuit);
         }
         if self.is_finalized() && !expect_finalized {
-            return Err(MpcCircuitError::ConstraintSystem(
-                CircuitError::ModifyFinalizedCircuit,
-            ));
+            return Err(CircuitError::ModifyFinalizedCircuit);
         }
         Ok(())
     }
@@ -703,14 +695,14 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         self.num_wire_types
     }
 
-    fn public_input(&self) -> Result<Vec<AuthenticatedScalarResult<C>>, MpcCircuitError> {
+    fn public_input(&self) -> Result<Vec<AuthenticatedScalarResult<C>>, CircuitError> {
         self.pub_input_gate_ids
             .iter()
             .map(|&gate_id| {
                 let var = self.wire_variables[GATE_WIDTH][gate_id];
                 self.witness(var)
             })
-            .collect::<Result<Vec<_>, MpcCircuitError>>()
+            .collect::<Result<Vec<_>, CircuitError>>()
     }
 
     // Note: This method involves opening the witness values, it should only be
@@ -719,11 +711,12 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     async fn check_circuit_satisfiability(
         &self,
         public_input: &[AuthenticatedScalarResult<C>],
-    ) -> Result<(), MpcCircuitError> {
+    ) -> Result<(), CircuitError> {
         let n = public_input.len();
         if n != self.num_inputs() {
-            return Err(MpcCircuitError::ConstraintSystem(
-                CircuitError::PubInputLenMismatch(n, self.pub_input_gate_ids.len()),
+            return Err(CircuitError::PubInputLenMismatch(
+                n,
+                self.pub_input_gate_ids.len(),
             ));
         }
 
@@ -753,12 +746,13 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
                 if res == Scalar::zero() {
                     Ok(())
                 } else {
-                    Err(MpcCircuitError::ConstraintSystem(
-                        CircuitError::GateCheckFailure(idx, "gate check failed".to_string()),
+                    Err(CircuitError::GateCheckFailure(
+                        idx,
+                        "gate check failed".to_string(),
                     ))
                 }
             })
-            .collect::<Result<Vec<_>, MpcCircuitError>>()
+            .collect::<Result<Vec<_>, CircuitError>>()
             .map(|_| ())
     }
 
@@ -766,11 +760,11 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     fn check_circuit_satisfiability(
         &self,
         public_input: &[AuthenticatedScalarResult<C>],
-    ) -> Result<(), MpcCircuitError> {
+    ) -> Result<(), CircuitError> {
         panic("`check_circuit_satisfiability` should not be called outside of tests, this method leaks privacy")
     }
 
-    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<MpcVariable, MpcCircuitError> {
+    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<MpcVariable, CircuitError> {
         let authenticated_val = self.fabric.one_authenticated() * val;
         let var = self.create_variable(authenticated_val)?;
         self.enforce_constant(var, val)?;
@@ -781,7 +775,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     fn create_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcVariable, MpcCircuitError> {
+    ) -> Result<MpcVariable, CircuitError> {
         self.check_finalize_flag(false)?;
         self.witness.push(val);
         self.num_vars += 1;
@@ -792,14 +786,14 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     fn create_public_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcVariable, MpcCircuitError> {
+    ) -> Result<MpcVariable, CircuitError> {
         let var = self.create_variable(val)?;
         self.set_variable_public(var)?;
 
         Ok(var)
     }
 
-    fn set_variable_public(&mut self, var: MpcVariable) -> Result<(), MpcCircuitError> {
+    fn set_variable_public(&mut self, var: MpcVariable) -> Result<(), CircuitError> {
         self.check_finalize_flag(false)?;
         self.pub_input_gate_ids.push(self.num_gates());
 
@@ -817,7 +811,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         1
     }
 
-    fn witness(&self, idx: MpcVariable) -> Result<AuthenticatedScalarResult<C>, MpcCircuitError> {
+    fn witness(&self, idx: MpcVariable) -> Result<AuthenticatedScalarResult<C>, CircuitError> {
         self.check_var_bound(idx)?;
 
         Ok(self.witness[idx].clone())
@@ -827,7 +821,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         &mut self,
         var: MpcVariable,
         constant: Scalar<C>,
-    ) -> Result<(), MpcCircuitError> {
+    ) -> Result<(), CircuitError> {
         self.check_var_bound(var)?;
 
         let wire_vars = &[0, 0, 0, 0, var];
@@ -840,7 +834,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         a: MpcVariable,
         b: MpcVariable,
         c: MpcVariable,
-    ) -> Result<(), MpcCircuitError> {
+    ) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
         self.check_var_bound(c)?;
@@ -850,7 +844,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn add(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, MpcCircuitError> {
+    fn add(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
 
@@ -866,7 +860,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         a: MpcVariable,
         b: MpcVariable,
         c: MpcVariable,
-    ) -> Result<(), MpcCircuitError> {
+    ) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
         self.check_var_bound(c)?;
@@ -876,7 +870,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn sub(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, MpcCircuitError> {
+    fn sub(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
 
@@ -892,7 +886,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         a: MpcVariable,
         b: MpcVariable,
         c: MpcVariable,
-    ) -> Result<(), MpcCircuitError> {
+    ) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
         self.check_var_bound(c)?;
@@ -902,7 +896,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn mul(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, MpcCircuitError> {
+    fn mul(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
 
@@ -913,7 +907,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(c)
     }
 
-    fn enforce_bool(&mut self, a: MpcVariable) -> Result<(), MpcCircuitError> {
+    fn enforce_bool(&mut self, a: MpcVariable) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
 
         let wire_vars = &[a, a, 0, 0, a];
@@ -921,7 +915,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn enforce_equal(&mut self, a: MpcVariable, b: MpcVariable) -> Result<(), MpcCircuitError> {
+    fn enforce_equal(&mut self, a: MpcVariable, b: MpcVariable) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
 
@@ -964,7 +958,7 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
     }
 
     #[inline]
-    fn compute_extended_permutation(&self) -> Result<Vec<C::ScalarField>, MpcCircuitError> {
+    fn compute_extended_permutation(&self) -> Result<Vec<C::ScalarField>, CircuitError> {
         assert!(self.is_finalized());
         let n = self.eval_domain.size();
 
@@ -984,12 +978,10 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
             .collect();
 
         if extended_perm.len() != self.num_wire_types * n {
-            return Err(MpcCircuitError::ConstraintSystem(
-                CircuitError::ParameterError(
-                    "Length of the extended permutation vector should be number of gate \
+            return Err(CircuitError::ParameterError(
+                "Length of the extended permutation vector should be number of gate \
                          (including padded dummy gates) * number of wire types"
-                        .to_string(),
-                ),
+                    .to_string(),
             ));
         }
         Ok(extended_perm)
@@ -999,14 +991,13 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
 /// Finalization
 impl<C: CurveGroup> MpcPlonkCircuit<C> {
     /// Finalize the setup of the circuit before arithmetization.
-    pub fn finalize_for_arithmetization(&mut self) -> Result<(), MpcCircuitError> {
+    pub fn finalize_for_arithmetization(&mut self) -> Result<(), CircuitError> {
         if self.is_finalized() {
             return Ok(());
         }
 
         self.eval_domain = Radix2EvaluationDomain::new(self.num_gates())
-            .ok_or(CircuitError::DomainCreationError)
-            .map_err(MpcCircuitError::ConstraintSystem)?;
+            .ok_or(CircuitError::DomainCreationError)?;
         self.pad()?;
         self.rearrange_gates()?;
         self.compute_wire_permutation();
@@ -1016,25 +1007,23 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
 }
 
 impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
-    fn srs_size(&self) -> Result<usize, MpcCircuitError> {
+    fn srs_size(&self) -> Result<usize, CircuitError> {
         Ok(self.eval_domain_size()? + 2)
     }
 
-    fn eval_domain_size(&self) -> Result<usize, MpcCircuitError> {
+    fn eval_domain_size(&self) -> Result<usize, CircuitError> {
         self.check_finalize_flag(true)?;
         Ok(self.eval_domain.size())
     }
 
     fn compute_selector_polynomials(
         &self,
-    ) -> Result<Vec<DensePolynomial<<C>::ScalarField>>, MpcCircuitError> {
+    ) -> Result<Vec<DensePolynomial<<C>::ScalarField>>, CircuitError> {
         self.check_finalize_flag(true)?;
         let domain = &self.eval_domain;
         if domain.size() < self.num_gates() {
-            return Err(MpcCircuitError::ConstraintSystem(
-                CircuitError::ParameterError(
-                    "Domain size should be bigger than number of constraint".to_string(),
-                ),
+            return Err(CircuitError::ParameterError(
+                "Domain size should be bigger than number of constraint".to_string(),
             ));
         }
 
@@ -1047,7 +1036,7 @@ impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
 
     fn compute_extended_permutation_polynomials(
         &self,
-    ) -> Result<Vec<DensePolynomial<C::ScalarField>>, MpcCircuitError> {
+    ) -> Result<Vec<DensePolynomial<C::ScalarField>>, CircuitError> {
         self.check_finalize_flag(true)?;
         let domain = &self.eval_domain;
         let n = domain.size();
@@ -1069,7 +1058,7 @@ impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
         &self,
         beta: &<C>::ScalarField,
         gamma: &<C>::ScalarField,
-    ) -> Result<AuthenticatedDensePoly<C>, MpcCircuitError> {
+    ) -> Result<AuthenticatedDensePoly<C>, CircuitError> {
         self.check_finalize_flag(true)?;
         let n = self.eval_domain.size();
 
@@ -1115,17 +1104,15 @@ impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
         Ok(AuthenticatedDensePoly::from_coeffs(coeffs))
     }
 
-    fn compute_wire_polynomials(&self) -> Result<Vec<AuthenticatedDensePoly<C>>, MpcCircuitError> {
+    fn compute_wire_polynomials(&self) -> Result<Vec<AuthenticatedDensePoly<C>>, CircuitError> {
         self.check_finalize_flag(true)?;
         let domain = &self.eval_domain;
         if domain.size() < self.num_gates() {
-            return Err(MpcCircuitError::ConstraintSystem(
-                CircuitError::ParameterError(format!(
-                    "Domain size {} should be bigger than number of constraint {}",
-                    domain.size(),
-                    self.num_gates()
-                )),
-            ));
+            return Err(CircuitError::ParameterError(format!(
+                "Domain size {} should be bigger than number of constraint {}",
+                domain.size(),
+                self.num_gates()
+            )));
         }
 
         let witness = &self.witness;
@@ -1150,7 +1137,7 @@ impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
         Ok(wire_polys)
     }
 
-    fn compute_pub_input_polynomial(&self) -> Result<AuthenticatedDensePoly<C>, MpcCircuitError> {
+    fn compute_pub_input_polynomial(&self) -> Result<AuthenticatedDensePoly<C>, CircuitError> {
         self.check_finalize_flag(true)?;
 
         let domain = &self.eval_domain;

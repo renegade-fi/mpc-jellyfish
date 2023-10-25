@@ -3,9 +3,9 @@
 //! arithmetization
 
 mod constraint_system;
-mod error;
+mod prover;
 mod snark;
 
 pub use constraint_system::*;
-pub use error::*;
+pub(crate) use prover::*;
 pub use snark::*;
