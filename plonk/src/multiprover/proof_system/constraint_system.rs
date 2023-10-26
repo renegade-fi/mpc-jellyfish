@@ -236,8 +236,8 @@ where
     /// Return an error if the circuit has not been finalized yet.
     fn compute_prod_permutation_polynomial(
         &self,
-        beta: &C::ScalarField,
-        gamma: &C::ScalarField,
+        beta: &ScalarResult<C>,
+        gamma: &ScalarResult<C>,
     ) -> Result<AuthenticatedDensePoly<C>, CircuitError>;
 
     /// Compute and return the list of wiring witness polynomials.
@@ -1056,14 +1056,11 @@ impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
 
     fn compute_prod_permutation_polynomial(
         &self,
-        beta: &<C>::ScalarField,
-        gamma: &<C>::ScalarField,
+        beta: &ScalarResult<C>,
+        gamma: &ScalarResult<C>,
     ) -> Result<AuthenticatedDensePoly<C>, CircuitError> {
         self.check_finalize_flag(true)?;
         let n = self.eval_domain.size();
-
-        let gamma = Scalar::new(*gamma);
-        let beta = Scalar::new(*beta);
         let one = self.fabric.one_authenticated();
 
         let mut numerators = Vec::with_capacity(self.num_wire_types() * (n - 1));

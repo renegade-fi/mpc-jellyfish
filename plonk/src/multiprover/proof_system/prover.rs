@@ -1,24 +1,27 @@
 //! A multiprover implementation of the PLONK proof system
-
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{FftField, Field, One};
 use ark_mpc::{
-    algebra::{AuthenticatedDensePoly, AuthenticatedScalarResult, Scalar},
-    MpcFabric,
+    algebra::{AuthenticatedDensePoly, AuthenticatedScalarResult, Scalar, ScalarResult},
+    MpcFabric, ResultValue,
 };
 use ark_poly::{
-    DenseUVPolynomial, EvaluationDomain, GeneralEvaluationDomain, Radix2EvaluationDomain,
+    univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, GeneralEvaluationDomain,
+    Polynomial, Radix2EvaluationDomain,
 };
 use ark_std::rand::{CryptoRng, RngCore};
 use jf_relation::constants::GATE_WIDTH;
 use jf_utils::par_utils::parallelizable_slice_iter;
-use rayon::iter::ParallelIterator;
+use rayon::prelude::*;
 
 use crate::{
     constants::domain_size_ratio,
     errors::{PlonkError, SnarkError},
-    multiprover::primitives::{MultiproverKZG, MultiproverKzgCommitment},
-    proof_system::structs::{Challenges, CommitKey, ProvingKey},
+    multiprover::{
+        primitives::{MultiproverKZG, MultiproverKzgCommitment},
+        proof_system::structs::*,
+    },
+    proof_system::structs::{CommitKey, ProvingKey},
 };
 
 use super::{MpcArithmetization, MpcOracles};
@@ -114,7 +117,7 @@ impl<E: Pairing> MpcProver<E> {
         &self,
         ck: &CommitKey<E>,
         cs: &C,
-        challenges: &Challenges<E::ScalarField>,
+        challenges: &MpcChallenges<E::G1>,
     ) -> Result<(MultiproverKzgCommitment<E>, AuthenticatedDensePoly<E::G1>), PlonkError> {
         let prod_perm_poly = self.mask_polynomial(
             &cs.compute_prod_permutation_polynomial(&challenges.beta, &challenges.gamma)?,
@@ -133,7 +136,7 @@ impl<E: Pairing> MpcProver<E> {
         prng: &mut R,
         ck: &CommitKey<E>,
         pks: &[&ProvingKey<E>],
-        challenges: &Challenges<E::ScalarField>,
+        challenges: &MpcChallenges<E::G1>,
         online_oracles: &[MpcOracles<E::G1>],
         num_wire_types: usize,
     ) -> Result<MpcCommitmentsAndPolys<E>, PlonkError> {
@@ -143,6 +146,47 @@ impl<E: Pairing> MpcProver<E> {
         let split_quot_poly_comms = MultiproverKZG::batch_commit(ck, &split_quot_polys)?;
 
         Ok((split_quot_poly_comms, split_quot_polys))
+    }
+
+    /// Round 4: Compute then openings needed for the linearization polynomial
+    /// and evaluate polynomials to be opened.
+    ///
+    /// The linearization polynomial reduces the number of openings needed
+    /// by linearizing the verification equation with existing openings.
+    /// This allows the verifier to use the linear properties of the
+    /// commitment scheme to compute the expected opening result
+    pub(crate) fn compute_evaluations(
+        &self,
+        pk: &ProvingKey<E>,
+        challenges: &MpcChallenges<E::G1>,
+        online_oracles: &MpcOracles<E::G1>,
+        num_wire_types: usize,
+    ) -> MpcProofEvaluations<E::G1> {
+        let wires_evals: Vec<AuthenticatedScalarResult<E::G1>> =
+            parallelizable_slice_iter(&online_oracles.wire_polys)
+                .map(|poly| poly.eval(&challenges.zeta))
+                .collect();
+
+        let wire_sigma_evals: Vec<ScalarResult<E::G1>> = parallelizable_slice_iter(&pk.sigmas)
+            .take(num_wire_types - 1)
+            .map(|poly| eval_poly_on_result(&challenges.zeta, poly.clone(), &self.fabric))
+            .collect();
+
+        let perm_next_eval = online_oracles
+            .prod_perm_poly
+            .eval(&(&challenges.zeta * Scalar::new(self.domain.group_gen)));
+
+        let wire_evals_open = AuthenticatedScalarResult::open_authenticated_batch(&wires_evals)
+            .into_iter()
+            .map(|o| o.value)
+            .collect();
+        let perm_next_eval_open = perm_next_eval.open_authenticated().value;
+
+        MpcProofEvaluations {
+            wires_evals: wire_evals_open,
+            wire_sigma_evals,
+            perm_next_eval: perm_next_eval_open,
+        }
     }
 }
 
@@ -173,7 +217,7 @@ impl<E: Pairing> MpcProver<E> {
     /// constraints and copy constraints over the evaluation domain
     fn compute_quotient_polynomial(
         &self,
-        challenges: &Challenges<E::ScalarField>,
+        challenges: &MpcChallenges<E::G1>,
         pks: &[&ProvingKey<E>],
         online_oracles: &[MpcOracles<E::G1>],
         num_wire_types: usize,
@@ -212,8 +256,8 @@ impl<E: Pairing> MpcProver<E> {
 
         // Compute coset evaluations of the quotient polynomial
         let mut quot_poly_coset_evals_sum = self.fabric.zeros_authenticated(m);
-        let mut alpha_base = E::ScalarField::one();
-        let alpha_3 = challenges.alpha.square() * challenges.alpha;
+        let mut alpha_base = self.fabric.one();
+        let alpha_3 = challenges.alpha.pow(3);
 
         // The coset we use to compute the quotient polynomial
         let coset = self
@@ -292,11 +336,11 @@ impl<E: Pairing> MpcProver<E> {
                 .iter_mut()
                 .zip(quot_poly_coset_evals.iter())
             {
-                *a = &*a + Scalar::new(alpha_base) * b;
+                *a = &*a + &alpha_base * b;
             }
 
             // update the random combiner for aggregating multiple proving instances
-            alpha_base *= alpha_3;
+            alpha_base = alpha_base * &alpha_3;
         }
 
         // Compute the coefficient form of the quotient polynomial
@@ -372,7 +416,7 @@ impl<E: Pairing> MpcProver<E> {
         w: &[AuthenticatedScalarResult<E::G1>],
         z_x: &AuthenticatedScalarResult<E::G1>,
         z_xw: &AuthenticatedScalarResult<E::G1>,
-        challenges: &Challenges<E::ScalarField>,
+        challenges: &MpcChallenges<E::G1>,
         sigmas_coset_fft: &[Vec<E::ScalarField>],
     ) -> (
         AuthenticatedScalarResult<E::G1>,
@@ -380,6 +424,7 @@ impl<E: Pairing> MpcProver<E> {
     ) {
         let num_wire_types = w.len();
         let n = pk.domain_size();
+        let eval_point = Scalar::new(eval_point);
 
         // The check that:
         //   \prod_i [w_i(X) + beta * k_i * X + gamma] * z(X)
@@ -393,28 +438,27 @@ impl<E: Pairing> MpcProver<E> {
             .collect();
 
         // Compute the 1st term
-        let mut result_1 = Scalar::new(challenges.alpha)
+        let mut result_1 = &challenges.alpha
             * w.iter().enumerate().fold(z_x.clone(), |acc, (j, w)| {
-                let challenge = pk.k()[j] * eval_point * challenges.beta + challenges.gamma;
-                acc * (w + Scalar::new(challenge))
+                let challenge =
+                    Scalar::new(pk.k()[j]) * eval_point * &challenges.beta + &challenges.gamma;
+                acc * (w + challenge)
             });
 
         // Minus the 2nd term
         result_1 = result_1
-            - Scalar::new(challenges.alpha)
+            - &challenges.alpha
                 * w.iter()
                     .zip(sigmas.iter())
                     .fold(z_xw.clone(), |acc, (w, &sigma)| {
-                        let challenge = sigma * challenges.beta + challenges.gamma;
-                        acc * (w + Scalar::new(challenge))
+                        let challenge = Scalar::new(sigma) * &challenges.beta + &challenges.gamma;
+                        acc * (w + challenge)
                     });
 
         // The check that z(x) = 1 at point 1
         // (z(x)-1) * L1(x) * alpha^2 / Z_H(x) = (z(x)-1) * alpha^2 / (n * (x - 1))
-        let denom =
-            Scalar::new(E::ScalarField::from(n as u64) * (eval_point - E::ScalarField::one()));
-        let result_2 =
-            Scalar::new(challenges.alpha.square()) * (z_x - Scalar::one()) * denom.inverse();
+        let denom = Scalar::from(n as u64) * (eval_point - Scalar::one());
+        let result_2 = challenges.alpha.pow(2) * (z_x - Scalar::one()) * denom.inverse();
 
         (result_1, result_2)
     }
@@ -525,4 +569,24 @@ fn mul_by_vanishing_poly<C: CurveGroup, D: EvaluationDomain<C::ScalarField>>(
 #[inline]
 fn quotient_polynomial_degree(domain_size: usize, num_wire_types: usize) -> usize {
     num_wire_types * (domain_size + 1) + 2
+}
+
+/// Evaluate a public polynomial on a result in the MPC fabric
+///
+/// We can't implement this method on `DensePolynomial` because `ark-mpc`
+/// does not own that type. So instead we broker evaluation through a helper
+/// method
+fn eval_poly_on_result<C: CurveGroup>(
+    point: &ScalarResult<C>,
+    poly: DensePolynomial<C::ScalarField>,
+    fabric: &MpcFabric<C>,
+) -> ScalarResult<C> {
+    // For this we create a new gate op that resolves when the eval point is
+    // computed
+    fabric.new_gate_op(vec![point.id()], move |mut args| {
+        let point: Scalar<C> = args.pop().unwrap().into();
+        let res = poly.evaluate(&point.inner());
+
+        ResultValue::Scalar(Scalar::new(res))
+    })
 }
