@@ -5,7 +5,9 @@
 mod constraint_system;
 mod prover;
 mod snark;
+mod structs;
 
 pub use constraint_system::*;
 pub(crate) use prover::*;
 pub use snark::*;
+pub(crate) use structs::*;
