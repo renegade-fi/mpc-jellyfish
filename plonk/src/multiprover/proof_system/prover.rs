@@ -1,8 +1,13 @@
 //! A multiprover implementation of the PLONK proof system
+use core::ops::Neg;
+
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{FftField, Field, One};
 use ark_mpc::{
-    algebra::{AuthenticatedDensePoly, AuthenticatedScalarResult, Scalar, ScalarResult},
+    algebra::{
+        AuthenticatedDensePoly, AuthenticatedScalarResult, DensePolynomialResult, Scalar,
+        ScalarResult,
+    },
     MpcFabric, ResultValue,
 };
 use ark_poly::{
@@ -10,6 +15,7 @@ use ark_poly::{
     Polynomial, Radix2EvaluationDomain,
 };
 use ark_std::rand::{CryptoRng, RngCore};
+use itertools::Itertools;
 use jf_relation::constants::GATE_WIDTH;
 use jf_utils::par_utils::parallelizable_slice_iter;
 use rayon::prelude::*;
@@ -187,6 +193,117 @@ impl<E: Pairing> MpcProver<E> {
             wire_sigma_evals,
             perm_next_eval: perm_next_eval_open,
         }
+    }
+
+    /// Compute linearization polynomial (excluding the quotient part)
+    /// i.e. the first four lines in round 5 as described in the paper
+    pub(crate) fn compute_non_quotient_component_for_lin_poly(
+        &self,
+        alpha_base: &ScalarResult<E::G1>,
+        pk: &ProvingKey<E>,
+        challenges: &MpcChallenges<E::G1>,
+        online_oracles: &MpcOracles<E::G1>,
+        poly_evals: &MpcProofEvaluations<E::G1>,
+    ) -> Result<AuthenticatedDensePoly<E::G1>, PlonkError> {
+        let r_circ = self.compute_lin_poly_circuit_contribution(pk, &poly_evals.wires_evals);
+        let r_perm = self.compute_lin_poly_copy_constraint_contribution(
+            pk,
+            challenges,
+            poly_evals,
+            &online_oracles.prod_perm_poly,
+        );
+
+        let mut lin_poly = r_circ + r_perm;
+        Ok(lin_poly * alpha_base)
+    }
+
+    // Compute the Quotient part of the linearization polynomial:
+    //
+    // -Z_H(x) * [t1(X) + x^{n+2} * t2(X) + ... + x^{(num_wire_types-1)*(n+2)} *
+    // t_{num_wire_types}(X)]
+    pub(crate) fn compute_quotient_component_for_lin_poly(
+        &self,
+        domain_size: usize,
+        zeta: ScalarResult<E::G1>,
+        quot_polys: &[AuthenticatedDensePoly<E::G1>],
+    ) -> Result<AuthenticatedDensePoly<E::G1>, PlonkError> {
+        // Compute the term -Z_H(\zeta) and \zeta^{n+2}
+        let vanish_eval = zeta.pow(domain_size as u64) - Scalar::one();
+        let zeta_to_n_plus_2 = (&vanish_eval + Scalar::one()) * &zeta * &zeta;
+
+        // In this term of the linearization polynomial we take a linear combination
+        // of the split quotient polynomials, where the coefficients are powers of
+        // \zeta^{n+2}
+        let mut r_quot = quot_polys.first().ok_or(PlonkError::IndexError)?.clone();
+        let mut coeff = self.fabric.one();
+        for poly in quot_polys.iter().skip(1) {
+            coeff = coeff * &zeta_to_n_plus_2;
+            r_quot = r_quot + poly * &coeff;
+        }
+
+        Ok(&r_quot * &vanish_eval.neg())
+    }
+
+    /// Compute (aggregated) polynomial opening proofs at point `zeta` and
+    /// `zeta * domain_generator`
+    pub(crate) fn compute_opening_proofs(
+        &self,
+        ck: &CommitKey<E>,
+        pks: &[&ProvingKey<E>],
+        zeta: &ScalarResult<E::G1>,
+        v: &ScalarResult<E::G1>,
+        online_oracles: &[MpcOracles<E::G1>],
+        lin_poly: &AuthenticatedDensePoly<E::G1>,
+    ) -> Result<(MultiproverKzgCommitment<E>, MultiproverKzgCommitment<E>), PlonkError> {
+        if pks.is_empty() || pks.len() != online_oracles.len() {
+            return Err(SnarkError::ParameterError(
+                "inconsistent pks/online oracles when computing opening proofs".to_string(),
+            )
+            .into());
+        }
+
+        // Combine all polynomials in a random linear combination parameterized by `v`
+        let mut batched_poly = lin_poly.clone();
+        let mut coeff = v.clone();
+
+        // Loop over proving instances, for now we only prove a single statement at a
+        // time in a multiprover context, but we mimic the code shape for
+        // readability and extension
+        for (pk, oracles) in pks.iter().zip(online_oracles.iter()) {
+            // Accumulate all wiring polynomials in the linear combination
+            for poly in oracles.wire_polys.iter() {
+                batched_poly = batched_poly + poly * &coeff;
+                coeff = &coeff * v;
+            }
+
+            // Accumulate all the permutation polynomials (except the last one)
+            // into the linear combination. The last one is
+            // implicitly included in the linearization
+            for poly in pk.sigmas.iter().take(pk.sigmas.len() - 1) {
+                batched_poly = batched_poly + mul_poly_result(poly.clone(), &coeff, &self.fabric);
+                coeff = coeff * v;
+            }
+        }
+
+        // Divide by X - \zeta
+        let divisor = DensePolynomialResult::from_coeffs(vec![-zeta.clone(), self.fabric.one()]);
+        let witness_poly = batched_poly / &divisor;
+
+        let commitment = MultiproverKZG::commit(ck, &witness_poly).map_err(PlonkError::PCSError)?;
+
+        // Combine the permutation polynomials of the proving instances
+        let mut coeff = v.clone();
+        let mut batched_poly = online_oracles[0].prod_perm_poly.clone();
+        for oracles in online_oracles.iter().skip(1) {
+            batched_poly = batched_poly + oracles.prod_perm_poly.clone() * &coeff;
+            coeff = &coeff * v;
+        }
+
+        // Divide by X - \zeta
+        let witness_poly = batched_poly / &divisor;
+        let shifted_commitment = MultiproverKZG::commit(ck, &witness_poly)?;
+
+        Ok((commitment, shifted_commitment))
     }
 }
 
@@ -537,6 +654,86 @@ impl<E: Pairing> MpcProver<E> {
 
         Ok(split_quot_polys)
     }
+
+    // Compute the circuit part of the linearization polynomial
+    fn compute_lin_poly_circuit_contribution(
+        &self,
+        pk: &ProvingKey<E>,
+        w_evals: &[ScalarResult<E::G1>],
+    ) -> DensePolynomialResult<E::G1> {
+        // The selectors in order: q_lc, q_mul, q_hash, q_o, q_c, q_ecc
+        let q_lc = &pk.selectors[..GATE_WIDTH];
+        let q_mul = &pk.selectors[GATE_WIDTH..GATE_WIDTH + 2];
+        let q_hash = &pk.selectors[GATE_WIDTH + 2..2 * GATE_WIDTH + 2];
+        let q_o = &pk.selectors[2 * GATE_WIDTH + 2];
+        let q_c = &pk.selectors[2 * GATE_WIDTH + 3];
+        let q_ecc = &pk.selectors[2 * GATE_WIDTH + 4];
+
+        // Note we don't need to compute the constant term of the polynomial.
+        mul_poly_result(q_lc[0].clone(), &w_evals[0], &self.fabric)
+            + mul_poly_result(q_lc[1].clone(), &w_evals[1], &self.fabric)
+            + mul_poly_result(q_lc[2].clone(), &w_evals[2], &self.fabric)
+            + mul_poly_result(q_lc[3].clone(), &w_evals[3], &self.fabric)
+            + mul_poly_result(q_mul[0].clone(), &(&w_evals[0] * &w_evals[1]), &self.fabric)
+            + mul_poly_result(q_mul[1].clone(), &(&w_evals[2] * &w_evals[3]), &self.fabric)
+            + mul_poly_result(q_hash[0].clone(), &w_evals[0].pow(5), &self.fabric)
+            + mul_poly_result(q_hash[1].clone(), &w_evals[1].pow(5), &self.fabric)
+            + mul_poly_result(q_hash[2].clone(), &w_evals[2].pow(5), &self.fabric)
+            + mul_poly_result(q_hash[3].clone(), &w_evals[3].pow(5), &self.fabric)
+            + mul_poly_result(
+                q_ecc.clone(),
+                &(&w_evals[0] * &w_evals[1] * &w_evals[2] * &w_evals[3] * &w_evals[4]),
+                &self.fabric,
+            )
+            + mul_poly_result(q_o.clone(), &(-&w_evals[4]), &self.fabric)
+            + q_c.clone()
+    }
+
+    /// Compute the wire permutation part of the linearization polynomial
+    ///
+    /// Here we linearize with respect to the polynomial z(X) -- representing
+    /// the partial evaluations of the grand product -- and S_{num_wires}(X) --
+    /// the permutation polynomial of the last wire
+    fn compute_lin_poly_copy_constraint_contribution(
+        &self,
+        pk: &ProvingKey<E>,
+        challenges: &MpcChallenges<E::G1>,
+        poly_evals: &MpcProofEvaluations<E::G1>,
+        prod_perm_poly: &AuthenticatedDensePoly<E::G1>,
+    ) -> AuthenticatedDensePoly<E::G1> {
+        let dividend = challenges.zeta.pow(pk.domain_size() as u64) - Scalar::one();
+        let divisor = Scalar::from(pk.domain_size() as u32) * (&challenges.zeta - Scalar::one());
+        let lagrange_1_eval = dividend * divisor.inverse();
+
+        // Compute the coefficient of z(X)
+        let coeff = poly_evals.wires_evals.iter().enumerate().fold(
+            challenges.alpha.clone(),
+            |acc, (j, wire_eval)| {
+                acc * (wire_eval
+                    + &challenges.beta * Scalar::new(pk.vk.k[j]) * &challenges.zeta
+                    + &challenges.gamma)
+            },
+        ) + challenges.alpha.pow(2) * lagrange_1_eval;
+        let mut r_perm = &coeff * prod_perm_poly;
+
+        // Compute the coefficient of the last sigma wire permutation polynomial
+        let num_wire_types = poly_evals.wires_evals.len();
+        let coeff = -poly_evals
+            .wires_evals
+            .iter()
+            .take(num_wire_types - 1)
+            .zip(poly_evals.wire_sigma_evals.iter())
+            .fold(
+                // We multiply beta here to isolate the S_{num_wires}(X) term as a formal
+                // indeterminate
+                &challenges.alpha * &challenges.beta * &poly_evals.perm_next_eval,
+                |acc, (wire_eval, sigma_eval)| {
+                    acc * (wire_eval + &challenges.beta * sigma_eval + &challenges.gamma)
+                },
+            );
+
+        r_perm + mul_poly_result(pk.sigmas[num_wire_types - 1].clone(), &coeff, &self.fabric)
+    }
 }
 
 // -----------
@@ -589,4 +786,26 @@ fn eval_poly_on_result<C: CurveGroup>(
 
         ResultValue::Scalar(Scalar::new(res))
     })
+}
+
+/// Multiplies a polynomial by a `ScalarResult`
+pub fn mul_poly_result<C: CurveGroup>(
+    poly: DensePolynomial<C::ScalarField>,
+    scaling_factor: &ScalarResult<C>,
+    fabric: &MpcFabric<C>,
+) -> DensePolynomialResult<C> {
+    // Allocate a gate to scale each coefficient individually
+    let arity = poly.coeffs.len();
+    let coeffs = fabric.new_batch_gate_op(vec![scaling_factor.id()], arity, move |mut args| {
+        let scaling_factor: Scalar<C> = args.pop().unwrap().into();
+
+        poly.coeffs
+            .into_iter()
+            .map(Scalar::new)
+            .map(|c| c * scaling_factor)
+            .map(ResultValue::Scalar)
+            .collect_vec()
+    });
+
+    DensePolynomialResult::from_coeffs(coeffs)
 }
