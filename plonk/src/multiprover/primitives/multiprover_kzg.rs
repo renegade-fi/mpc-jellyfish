@@ -11,9 +11,12 @@ use core::{
 };
 
 use ark_ec::{pairing::Pairing, AffineRepr};
-use ark_mpc::algebra::{
-    AuthenticatedDensePoly, AuthenticatedPointOpenResult, AuthenticatedPointResult,
-    AuthenticatedScalarResult, CurvePoint, DensePolynomialResult, ScalarResult,
+use ark_mpc::{
+    algebra::{
+        AuthenticatedDensePoly, AuthenticatedPointOpenResult, AuthenticatedPointResult,
+        AuthenticatedScalarResult, CurvePoint, DensePolynomialResult, ScalarResult,
+    },
+    ResultId,
 };
 use futures::{ready, Future, FutureExt};
 use jf_primitives::pcs::prelude::{
@@ -44,6 +47,14 @@ pub struct MultiproverKzgCommitment<E: Pairing> {
 pub struct MultiproverKzgCommitmentOpening<E: Pairing> {
     /// The result of opening the underlying commitment
     pub opening: AuthenticatedPointOpenResult<E::G1>,
+}
+
+impl<E: Pairing> MultiproverKzgCommitmentOpening<E> {
+    /// Get the ID of the underlying opening value as allocated in the MPC
+    /// fabric
+    pub fn id(&self) -> ResultId {
+        self.opening.value.id()
+    }
 }
 
 impl<E: Pairing> MultiproverKzgCommitment<E> {

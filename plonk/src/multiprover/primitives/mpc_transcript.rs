@@ -5,18 +5,29 @@
 
 use std::sync::{Arc, Mutex};
 
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ec::{
+    pairing::Pairing,
+    short_weierstrass::{Affine, SWCurveConfig},
+};
 use ark_mpc::{
-    algebra::{Scalar, ScalarResult},
+    algebra::{CurvePoint, Scalar, ScalarResult},
     MpcFabric, ResultId, ResultValue,
 };
+use itertools::Itertools;
+use jf_primitives::pcs::prelude::Commitment;
 
-use crate::transcript::{PlonkTranscript, SolidityTranscript};
+use crate::{
+    multiprover::proof_system::MpcProofEvaluations,
+    proof_system::structs::{ProofEvaluations, VerifyingKey},
+    transcript::{PlonkTranscript, SolidityTranscript},
+};
+
+use super::MultiproverKzgCommitmentOpening;
 
 /// The MPC transcript, implements the same functionality as the
 /// `SolidityTranscript` in an async manner evaluated by the MPC fabric's
 /// executor
-pub struct MpcTranscript<C: CurveGroup> {
+pub struct MpcTranscript<E: Pairing> {
     /// The base transcript that the MPC transcript effectively orders accesses
     /// to in a fabric's computation graph
     transcript: Arc<Mutex<SolidityTranscript>>,
@@ -27,12 +38,14 @@ pub struct MpcTranscript<C: CurveGroup> {
     /// the parties of the MPC
     latest_op_id: ResultId,
     /// The underlying fabric the MPC runs on
-    fabric: MpcFabric<C>,
+    fabric: MpcFabric<E::G1>,
 }
 
-impl<C: CurveGroup> MpcTranscript<C> {
+impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>>>
+    MpcTranscript<E>
+{
     /// Constructor
-    pub fn new(label: &'static [u8], fabric: MpcFabric<C>) -> Self {
+    pub fn new(label: &'static [u8], fabric: MpcFabric<E::G1>) -> Self {
         let base_transcript = Arc::new(Mutex::new(
             <SolidityTranscript as PlonkTranscript<()>>::new(label),
         ));
@@ -43,46 +56,151 @@ impl<C: CurveGroup> MpcTranscript<C> {
         }
     }
 
+    /// Append the verification key and the public input to the transcript.
+    pub fn append_vk_and_pub_input(
+        &mut self,
+        vk: VerifyingKey<E>,
+        pub_input: &[ScalarResult<E::G1>],
+    ) {
+        let transcript_ref = self.transcript.clone();
+        let mut ids = pub_input.iter().map(|r| r.id()).collect_vec();
+        ids.push(self.latest_op_id);
+
+        let n = pub_input.len();
+        let res_id: ScalarResult<E::G1> = self.fabric.new_gate_op(ids, move |mut args| {
+            args.truncate(n);
+            let inputs = args
+                .into_iter()
+                .map(Scalar::from)
+                .map(|x| x.inner())
+                .collect_vec();
+
+            let mut locked_transcript = transcript_ref.lock().unwrap();
+            locked_transcript
+                .append_vk_and_pub_input::<E, P>(&vk, &inputs)
+                .unwrap();
+            // Dummy result
+            ResultValue::Scalar(Scalar::zero())
+        });
+
+        self.latest_op_id = res_id.op_ids()[0];
+    }
+
     /// Append a message to the transcript
     pub fn append_message(&mut self, label: &'static [u8], msg: &[u8]) {
         let transcript_ref = self.transcript.clone();
         let msg_clone = msg.to_vec();
-        let res: ScalarResult<C> = self
-            .fabric
-            .new_gate_op(vec![self.latest_op_id], move |_args| {
-                let mut locked_transcript = transcript_ref.lock().unwrap();
-                <SolidityTranscript as PlonkTranscript<()>>::append_message(
-                    &mut locked_transcript,
-                    label,
-                    &msg_clone,
-                )
+        let res: ScalarResult<E::G1> =
+            self.fabric
+                .new_gate_op(vec![self.latest_op_id], move |_args| {
+                    let mut locked_transcript = transcript_ref.lock().unwrap();
+                    <SolidityTranscript as PlonkTranscript<()>>::append_message(
+                        &mut locked_transcript,
+                        label,
+                        &msg_clone,
+                    )
+                    .unwrap();
+
+                    // Return a dummy result, this is unused
+                    ResultValue::Scalar(Scalar::zero())
+                });
+
+        self.latest_op_id = res.op_ids()[0];
+    }
+
+    /// Append a slice of commitments to the transcript
+    pub fn append_commitments(
+        &mut self,
+        label: &'static [u8],
+        comms: &[MultiproverKzgCommitmentOpening<E>],
+    ) {
+        for comm in comms.iter() {
+            self.append_commitment(label, comm);
+        }
+    }
+
+    /// Append a single commitment to the transcript
+    pub fn append_commitment(
+        &mut self,
+        label: &'static [u8],
+        comm: &MultiproverKzgCommitmentOpening<E>,
+    ) {
+        let transcript_ref = self.transcript.clone();
+        let ids = vec![comm.id(), self.latest_op_id];
+
+        let res: ScalarResult<E::G1> = self.fabric.new_gate_op(ids, move |args| {
+            let comm: CurvePoint<E::G1> = args.first().unwrap().into();
+            let mut locked_transcript = transcript_ref.lock().unwrap();
+
+            locked_transcript
+                .append_commitment(label, &Commitment::<E>(comm.inner().into()))
                 .unwrap();
 
-                // Return a dummy result, this is unused
-                ResultValue::Scalar(Scalar::zero())
-            });
+            // Dummy result
+            ResultValue::Scalar(Scalar::zero())
+        });
+        self.latest_op_id = res.op_ids()[0];
+    }
 
+    /// Append a proof evaluation to the transcript
+    pub fn append_proof_evaluations(&mut self, evals: MpcProofEvaluations<E::G1>) {
+        let n_wire_evals = evals.wires_evals.len();
+        let mut ids = evals.wires_evals.iter().map(|r| r.id()).collect_vec();
+
+        let n_sigma_evals = evals.wire_sigma_evals.len();
+        ids.extend(evals.wire_sigma_evals.iter().map(|r| r.id()));
+
+        ids.push(evals.perm_next_eval.id());
+        ids.push(self.latest_op_id);
+
+        let transcript_ref = self.transcript.clone();
+        let res: ScalarResult<E::G1> = self.fabric.new_gate_op(ids, move |mut args| {
+            let mut locked_transcript = transcript_ref.lock().unwrap();
+
+            let wires_evals = args
+                .drain(..n_wire_evals)
+                .map(Scalar::from)
+                .map(|x| x.inner())
+                .collect_vec();
+
+            let wire_sigma_evals = args
+                .drain(..n_sigma_evals)
+                .map(Scalar::from)
+                .map(|x| x.inner())
+                .collect_vec();
+
+            let perm_next_eval = args.first().map(Scalar::from).map(|x| x.inner()).unwrap();
+            <SolidityTranscript as PlonkTranscript<E::BaseField>>::append_proof_evaluations::<E>(
+                &mut locked_transcript,
+                &ProofEvaluations {
+                    wires_evals,
+                    wire_sigma_evals,
+                    perm_next_eval,
+                },
+            )
+            .unwrap();
+
+            // Dummy result
+            ResultValue::Scalar(Scalar::zero())
+        });
         self.latest_op_id = res.op_ids()[0];
     }
 
     /// Generate a challenge for the current transcript, and append it
     ///
     /// Returns a result to the challenge
-    pub fn get_and_append_challenge<E: Pairing<ScalarField = C::ScalarField>>(
-        &mut self,
-        label: &'static [u8],
-    ) -> ScalarResult<C> {
+    pub fn get_and_append_challenge(&mut self, label: &'static [u8]) -> ScalarResult<E::G1> {
         let transcript_ref = self.transcript.clone();
-        let res: ScalarResult<C> = self
-            .fabric
-            .new_gate_op(vec![self.latest_op_id], move |_args| {
-                let mut locked_transcript = transcript_ref.lock().unwrap();
-                let challenge: C::ScalarField = locked_transcript
-                    .get_and_append_challenge::<E>(label)
-                    .unwrap();
+        let res: ScalarResult<E::G1> =
+            self.fabric
+                .new_gate_op(vec![self.latest_op_id], move |_args| {
+                    let mut locked_transcript = transcript_ref.lock().unwrap();
+                    let challenge: E::ScalarField = locked_transcript
+                        .get_and_append_challenge::<E>(label)
+                        .unwrap();
 
-                ResultValue::Scalar(Scalar::new(challenge))
-            });
+                    ResultValue::Scalar(Scalar::new(challenge))
+                });
 
         self.latest_op_id = res.op_ids()[0];
         res
@@ -167,24 +285,20 @@ mod test {
             let ops = ops.clone();
             async move {
                 // Build a transcript and apply the operations
-                let mut transcript = MpcTranscript::new(b"test", fabric);
+                let mut transcript = MpcTranscript::<ark_bn254::Bn254>::new(b"test", fabric);
                 for op in ops.iter() {
                     match op {
                         TranscriptOp::AppendMessage(label, msg) => {
                             transcript.append_message(label, msg);
                         },
                         TranscriptOp::GetAndAppendChallenge(label) => {
-                            transcript
-                                .get_and_append_challenge::<ark_bn254::Bn254>(label)
-                                .await;
+                            transcript.get_and_append_challenge(label).await;
                         },
                     };
                 }
 
                 // Squeeze a final challenge
-                transcript
-                    .get_and_append_challenge::<ark_bn254::Bn254>(b"final")
-                    .await
+                transcript.get_and_append_challenge(b"final").await
             }
         })
         .await;
