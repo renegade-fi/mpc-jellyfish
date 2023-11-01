@@ -23,8 +23,6 @@ use jf_relation::{
     },
     GateId, Variable, WireId,
 };
-use jf_utils::par_utils::parallelizable_slice_iter;
-use rayon::prelude::*;
 
 // --------------------
 // | Traits and Types |
@@ -1029,7 +1027,9 @@ impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
         }
 
         // Order: (lc, mul, hash, o, c, ecc) as specified in spec
-        let selector_polys = parallelizable_slice_iter(&self.all_selectors())
+        let selector_polys = self
+            .all_selectors()
+            .iter()
             .map(|selector| DensePolynomial::from_coefficients_vec(domain.ifft(selector)))
             .collect();
         Ok(selector_polys)
@@ -1043,14 +1043,13 @@ impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
         let n = domain.size();
         let extended_perm = self.compute_extended_permutation()?;
 
-        let extended_perm_polys: Vec<DensePolynomial<C::ScalarField>> =
-            parallelizable_slice_iter(&(0..self.num_wire_types).collect::<Vec<_>>()) // current par_utils only support slice iterator, not range iterator.
-                .map(|i| {
-                    DensePolynomial::from_coefficients_vec(
-                        domain.ifft(&extended_perm[i * n..(i + 1) * n]),
-                    )
-                })
-                .collect();
+        let extended_perm_polys: Vec<DensePolynomial<C::ScalarField>> = (0..self.num_wire_types)
+            .map(|i| {
+                DensePolynomial::from_coefficients_vec(
+                    domain.ifft(&extended_perm[i * n..(i + 1) * n]),
+                )
+            })
+            .collect();
 
         Ok(extended_perm_polys)
     }
@@ -1114,22 +1113,23 @@ impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
         }
 
         let witness = &self.witness;
-        let wire_polys: Vec<AuthenticatedDensePoly<C>> =
-            parallelizable_slice_iter(&self.wire_variables)
-                .take(self.num_wire_types())
-                .map(|wire_vars| {
-                    let wire_vec: Vec<AuthenticatedScalarResult<C>> = wire_vars
-                        .iter()
-                        .map(|&var| witness[var].clone())
-                        .collect_vec();
+        let wire_polys: Vec<AuthenticatedDensePoly<C>> = self
+            .wire_variables
+            .iter()
+            .take(self.num_wire_types())
+            .map(|wire_vars| {
+                let wire_vec: Vec<AuthenticatedScalarResult<C>> = wire_vars
+                    .iter()
+                    .map(|&var| witness[var].clone())
+                    .collect_vec();
 
-                    let coeffs = AuthenticatedScalarResult::ifft::<
-                        Radix2EvaluationDomain<C::ScalarField>,
-                    >(&wire_vec);
+                let coeffs = AuthenticatedScalarResult::ifft::<
+                    Radix2EvaluationDomain<C::ScalarField>,
+                >(&wire_vec);
 
-                    AuthenticatedDensePoly::from_coeffs(coeffs)
-                })
-                .collect();
+                AuthenticatedDensePoly::from_coeffs(coeffs)
+            })
+            .collect();
 
         assert_eq!(wire_polys.len(), self.num_wire_types());
         Ok(wire_polys)

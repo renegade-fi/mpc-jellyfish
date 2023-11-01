@@ -67,7 +67,7 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
 
         // --- Round 1 --- //
         let ((wires_poly_comms, wire_polys), pi_poly) =
-            prover.run_1st_round(prng, &proving_key.commit_key, circuit)?;
+            prover.run_1st_round(&proving_key.commit_key, circuit)?;
 
         online_oracles.wire_polys = wire_polys;
         online_oracles.pub_input_poly = pi_poly;
