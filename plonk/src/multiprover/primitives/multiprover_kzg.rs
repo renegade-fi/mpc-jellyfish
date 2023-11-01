@@ -33,7 +33,7 @@ pub struct MultiproverKZG<E: Pairing> {
 }
 
 /// A commitment to the shared polynomial
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MultiproverKzgCommitment<E: Pairing> {
     /// The underlying commitment, an element of the curve group
     pub commitment: AuthenticatedPointResult<E::G1>,
@@ -43,7 +43,7 @@ pub struct MultiproverKzgCommitment<E: Pairing> {
 ///
 /// Wrapping the type in this way allows us to implement `Future` and resolve
 /// this opening to a standard, single-prover KZG commitment
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MultiproverKzgCommitmentOpening<E: Pairing> {
     /// The result of opening the underlying commitment
     pub opening: AuthenticatedPointOpenResult<E::G1>,

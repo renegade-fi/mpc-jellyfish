@@ -143,7 +143,7 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
     }
 
     /// Append a proof evaluation to the transcript
-    pub fn append_proof_evaluations(&mut self, evals: MpcProofEvaluations<E::G1>) {
+    pub fn append_proof_evaluations(&mut self, evals: &MpcProofEvaluations<E::G1>) {
         let n_wire_evals = evals.wires_evals.len();
         let mut ids = evals.wires_evals.iter().map(|r| r.id()).collect_vec();
 

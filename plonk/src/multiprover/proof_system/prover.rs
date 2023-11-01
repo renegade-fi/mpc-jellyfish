@@ -104,15 +104,15 @@ impl<E: Pairing> MpcProver<E> {
         &self,
         prng: &mut R,
         ck: &CommitKey<E>,
-        cs: &C,
+        circuit: &C,
     ) -> Result<(MpcCommitmentsAndPolys<E>, AuthenticatedDensePoly<E::G1>), PlonkError> {
-        let wire_polys: Vec<AuthenticatedDensePoly<E::G1>> = cs
+        let wire_polys: Vec<AuthenticatedDensePoly<E::G1>> = circuit
             .compute_wire_polynomials()?
             .into_iter()
             .map(|poly| self.mask_polynomial(&poly, 1))
             .collect();
         let wires_poly_comms = MultiproverKZG::batch_commit(ck, &wire_polys)?;
-        let pub_input_poly = cs.compute_pub_input_polynomial()?;
+        let pub_input_poly = circuit.compute_pub_input_polynomial()?;
 
         Ok(((wires_poly_comms, wire_polys), pub_input_poly))
     }
@@ -141,9 +141,9 @@ impl<E: Pairing> MpcProver<E> {
         &self,
         prng: &mut R,
         ck: &CommitKey<E>,
-        pks: &[&ProvingKey<E>],
+        pks: &ProvingKey<E>,
         challenges: &MpcChallenges<E::G1>,
-        online_oracles: &[MpcOracles<E::G1>],
+        online_oracles: &MpcOracles<E::G1>,
         num_wire_types: usize,
     ) -> Result<MpcCommitmentsAndPolys<E>, PlonkError> {
         let quot_poly =
@@ -249,40 +249,28 @@ impl<E: Pairing> MpcProver<E> {
     pub(crate) fn compute_opening_proofs(
         &self,
         ck: &CommitKey<E>,
-        pks: &[&ProvingKey<E>],
+        pk: &ProvingKey<E>,
         zeta: &ScalarResult<E::G1>,
         v: &ScalarResult<E::G1>,
-        online_oracles: &[MpcOracles<E::G1>],
+        online_oracles: &MpcOracles<E::G1>,
         lin_poly: &AuthenticatedDensePoly<E::G1>,
     ) -> Result<(MultiproverKzgCommitment<E>, MultiproverKzgCommitment<E>), PlonkError> {
-        if pks.is_empty() || pks.len() != online_oracles.len() {
-            return Err(SnarkError::ParameterError(
-                "inconsistent pks/online oracles when computing opening proofs".to_string(),
-            )
-            .into());
-        }
-
         // Combine all polynomials in a random linear combination parameterized by `v`
         let mut batched_poly = lin_poly.clone();
         let mut coeff = v.clone();
 
-        // Loop over proving instances, for now we only prove a single statement at a
-        // time in a multiprover context, but we mimic the code shape for
-        // readability and extension
-        for (pk, oracles) in pks.iter().zip(online_oracles.iter()) {
-            // Accumulate all wiring polynomials in the linear combination
-            for poly in oracles.wire_polys.iter() {
-                batched_poly = batched_poly + poly * &coeff;
-                coeff = &coeff * v;
-            }
+        // Accumulate all wiring polynomials in the linear combination
+        for poly in online_oracles.wire_polys.iter() {
+            batched_poly = batched_poly + poly * &coeff;
+            coeff = &coeff * v;
+        }
 
-            // Accumulate all the permutation polynomials (except the last one)
-            // into the linear combination. The last one is
-            // implicitly included in the linearization
-            for poly in pk.sigmas.iter().take(pk.sigmas.len() - 1) {
-                batched_poly = batched_poly + mul_poly_result(poly.clone(), &coeff, &self.fabric);
-                coeff = coeff * v;
-            }
+        // Accumulate all the permutation polynomials (except the last one)
+        // into the linear combination. The last one is
+        // implicitly included in the linearization
+        for poly in pk.sigmas.iter().take(pk.sigmas.len() - 1) {
+            batched_poly = batched_poly + mul_poly_result(poly.clone(), &coeff, &self.fabric);
+            coeff = coeff * v;
         }
 
         // Divide by X - \zeta
@@ -293,11 +281,7 @@ impl<E: Pairing> MpcProver<E> {
 
         // Combine the permutation polynomials of the proving instances
         let mut coeff = v.clone();
-        let mut batched_poly = online_oracles[0].prod_perm_poly.clone();
-        for oracles in online_oracles.iter().skip(1) {
-            batched_poly = batched_poly + oracles.prod_perm_poly.clone() * &coeff;
-            coeff = &coeff * v;
-        }
+        let mut batched_poly = &online_oracles.prod_perm_poly;
 
         // Divide by X - \zeta
         let witness_poly = batched_poly / &divisor;
@@ -335,16 +319,10 @@ impl<E: Pairing> MpcProver<E> {
     fn compute_quotient_polynomial(
         &self,
         challenges: &MpcChallenges<E::G1>,
-        pks: &[&ProvingKey<E>],
-        online_oracles: &[MpcOracles<E::G1>],
+        pk: &ProvingKey<E>,
+        online_oracles: &MpcOracles<E::G1>,
         num_wire_types: usize,
     ) -> Result<AuthenticatedDensePoly<E::G1>, PlonkError> {
-        if pks.is_empty() || pks.len() != online_oracles.len() {
-            return Err(PlonkError::SnarkError(SnarkError::ParameterError(
-                "inconsistent pks/online oracles when computing quotient polys".to_string(),
-            )));
-        }
-
         let n = self.domain.size();
         let m = self.quot_domain.size();
         let domain_size_ratio = m / n;
@@ -382,82 +360,79 @@ impl<E: Pairing> MpcProver<E> {
             .get_coset(E::ScalarField::GENERATOR)
             .unwrap();
 
-        // Enumerate proving instances
-        for (oracles, pk) in online_oracles.iter().zip(pks.iter()) {
-            // Compute evaluations of the selectors, permutations, and wiring polynomials
-            let selectors_coset_fft: Vec<Vec<E::ScalarField>> =
-                parallelizable_slice_iter(&pk.selectors)
-                    .map(|poly| coset.fft(poly.coeffs()))
-                    .collect();
-
-            let sigmas_coset_fft: Vec<Vec<E::ScalarField>> = parallelizable_slice_iter(&pk.sigmas)
+        // Compute evaluations of the selectors, permutations, and wiring polynomials
+        let selectors_coset_fft: Vec<Vec<E::ScalarField>> =
+            parallelizable_slice_iter(&pk.selectors)
                 .map(|poly| coset.fft(poly.coeffs()))
                 .collect();
 
-            let wire_polys_coset_fft: Vec<Vec<AuthenticatedScalarResult<E::G1>>> = oracles
-                .wire_polys
-                .iter()
-                .map(|poly| AuthenticatedScalarResult::fft_with_domain(&poly.coeffs, coset))
+        let sigmas_coset_fft: Vec<Vec<E::ScalarField>> = parallelizable_slice_iter(&pk.sigmas)
+            .map(|poly| coset.fft(poly.coeffs()))
+            .collect();
+
+        let wire_polys_coset_fft: Vec<Vec<AuthenticatedScalarResult<E::G1>>> = online_oracles
+            .wire_polys
+            .iter()
+            .map(|poly| AuthenticatedScalarResult::fft_with_domain(&poly.coeffs, coset))
+            .collect();
+
+        // Compute the evaluations of the z(x) polynomials representing partial products
+        // of the larger grand product that argues copy constraints
+        let prod_perm_poly_coset_fft = AuthenticatedScalarResult::fft_with_domain(
+            &online_oracles.prod_perm_poly.coeffs,
+            coset,
+        );
+        let pub_input_poly_coset_fft = AuthenticatedScalarResult::fft_with_domain(
+            &online_oracles.pub_input_poly.coeffs,
+            coset,
+        );
+
+        // Compute coset evaluations of the quotient polynomial following the identity
+        // in the Plonk paper
+        let quot_poly_coset_evals: Vec<AuthenticatedScalarResult<E::G1>> =
+            parallelizable_slice_iter(&(0..m).collect::<Vec<_>>())
+                .map(|&i| {
+                    // The evaluations of the wiring polynomials at this index
+                    let w: Vec<AuthenticatedScalarResult<E::G1>> = (0..num_wire_types)
+                        .map(|j| wire_polys_coset_fft[j][i].clone())
+                        .collect();
+
+                    // The contribution of the gate constraints to the current quotient
+                    // evaluation
+                    let t_circ = Self::compute_quotient_circuit_contribution(
+                        i,
+                        &w,
+                        &pub_input_poly_coset_fft[i],
+                        &selectors_coset_fft,
+                    );
+
+                    // The terms that enforce the copy constraint, the first checks that each
+                    // individual index in the grand product is
+                    // consistent with the permutation. The second term checks
+                    // the grand product
+                    let (t_perm_1, t_perm_2) = Self::compute_quotient_copy_constraint_contribution(
+                        i,
+                        self.quot_domain.element(i) * E::ScalarField::GENERATOR,
+                        pk,
+                        &w,
+                        &prod_perm_poly_coset_fft[i],
+                        &prod_perm_poly_coset_fft[(i + domain_size_ratio) % m],
+                        challenges,
+                        &sigmas_coset_fft,
+                    );
+
+                    let mut t1 = t_circ + t_perm_1;
+                    let mut t2 = t_perm_2;
+
+                    t1 * z_h_inv[i % domain_size_ratio] + t2
+                })
                 .collect();
 
-            // Compute the evaluations of the z(x) polynomials representing partial products
-            // of the larger grand product that argues copy constraints
-            let prod_perm_poly_coset_fft =
-                AuthenticatedScalarResult::fft_with_domain(&oracles.prod_perm_poly.coeffs, coset);
-            let pub_input_poly_coset_fft =
-                AuthenticatedScalarResult::fft_with_domain(&oracles.pub_input_poly.coeffs, coset);
-
-            // Compute coset evaluations of the quotient polynomial following the identity
-            // in the Plonk paper
-            let quot_poly_coset_evals: Vec<AuthenticatedScalarResult<E::G1>> =
-                parallelizable_slice_iter(&(0..m).collect::<Vec<_>>())
-                    .map(|&i| {
-                        // The evaluations of the wiring polynomials at this index
-                        let w: Vec<AuthenticatedScalarResult<E::G1>> = (0..num_wire_types)
-                            .map(|j| wire_polys_coset_fft[j][i].clone())
-                            .collect();
-
-                        // The contribution of the gate constraints to the current quotient
-                        // evaluation
-                        let t_circ = Self::compute_quotient_circuit_contribution(
-                            i,
-                            &w,
-                            &pub_input_poly_coset_fft[i],
-                            &selectors_coset_fft,
-                        );
-
-                        // The terms that enforce the copy constraint, the first checks that each
-                        // individual index in the grand product is
-                        // consistent with the permutation. The second term checks
-                        // the grand product
-                        let (t_perm_1, t_perm_2) =
-                            Self::compute_quotient_copy_constraint_contribution(
-                                i,
-                                self.quot_domain.element(i) * E::ScalarField::GENERATOR,
-                                pk,
-                                &w,
-                                &prod_perm_poly_coset_fft[i],
-                                &prod_perm_poly_coset_fft[(i + domain_size_ratio) % m],
-                                challenges,
-                                &sigmas_coset_fft,
-                            );
-
-                        let mut t1 = t_circ + t_perm_1;
-                        let mut t2 = t_perm_2;
-
-                        t1 * z_h_inv[i % domain_size_ratio] + t2
-                    })
-                    .collect();
-
-            for (a, b) in quot_poly_coset_evals_sum
-                .iter_mut()
-                .zip(quot_poly_coset_evals.iter())
-            {
-                *a = &*a + &alpha_base * b;
-            }
-
-            // update the random combiner for aggregating multiple proving instances
-            alpha_base = alpha_base * &alpha_3;
+        for (a, b) in quot_poly_coset_evals_sum
+            .iter_mut()
+            .zip(quot_poly_coset_evals.iter())
+        {
+            *a = &*a + &alpha_base * b;
         }
 
         // Compute the coefficient form of the quotient polynomial
