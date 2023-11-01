@@ -687,6 +687,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     fn num_vars(&self) -> usize {
         self.num_vars
     }
+
     fn num_inputs(&self) -> usize {
         self.pub_input_gate_ids.len()
     }
