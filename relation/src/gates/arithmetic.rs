@@ -50,7 +50,7 @@ where
 
 /// Adding a variable by a constant.
 #[derive(Debug, Clone)]
-pub struct ConstantAdditionGate<F: Field>(pub(crate) F);
+pub struct ConstantAdditionGate<F: Field>(pub F);
 
 impl<F> Gate<F> for ConstantAdditionGate<F>
 where
@@ -111,7 +111,7 @@ where
 /// A mul constant gate.
 /// Multiply the first variable with the constant.
 #[derive(Debug, Clone)]
-pub struct ConstantMultiplicationGate<F>(pub(crate) F);
+pub struct ConstantMultiplicationGate<F>(pub F);
 
 impl<F> Gate<F> for ConstantMultiplicationGate<F>
 where

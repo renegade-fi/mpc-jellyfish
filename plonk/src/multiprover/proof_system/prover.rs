@@ -38,7 +38,7 @@ use super::{MpcArithmetization, MpcOracles};
 
 /// A type alias for a bundle of commitments and polynomials
 /// TODO: Remove this lint allowance
-#[allow(unused, type_alias_bounds)]
+#[allow(type_alias_bounds)]
 type MpcCommitmentsAndPolys<E: Pairing> = (
     Vec<MultiproverKzgCommitment<E>>,
     Vec<AuthenticatedDensePoly<E::G1>>,
@@ -100,9 +100,8 @@ impl<E: Pairing> MpcProver<E> {
     /// 2. Compute public input polynomial.
     /// Return the wire witness polynomials and their commitments,
     /// also return the public input polynomial.
-    pub(crate) fn run_1st_round<C: MpcArithmetization<E::G1>, R: CryptoRng + RngCore>(
+    pub(crate) fn run_1st_round<C: MpcArithmetization<E::G1>>(
         &self,
-        prng: &mut R,
         ck: &CommitKey<E>,
         circuit: &C,
     ) -> Result<(MpcCommitmentsAndPolys<E>, AuthenticatedDensePoly<E::G1>), PlonkError> {
@@ -783,4 +782,196 @@ pub fn mul_poly_result<C: CurveGroup>(
     });
 
     DensePolynomialResult::from_coeffs(coeffs)
+}
+
+#[cfg(test)]
+mod test {
+
+    use ark_ec::pairing::Pairing;
+    use ark_ff::{One, Zero};
+    use ark_mpc::{
+        algebra::Scalar, beaver::ZeroBeaverSource,
+        test_helpers::execute_mock_mpc_with_beaver_source, MpcFabric, PARTY0, PARTY1,
+    };
+    use futures::prelude::*;
+    use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
+    use rand::{thread_rng, CryptoRng, RngCore};
+
+    use crate::{
+        multiprover::proof_system::{MpcCircuit, MpcPlonkCircuit},
+        proof_system::{
+            prover::Prover,
+            structs::{ProvingKey, VerifyingKey},
+            PlonkKzgSnark, UniversalSNARK,
+        },
+    };
+
+    use super::MpcProver;
+
+    /// The curve used for testing
+    pub type TestCurve = ark_bn254::Bn254;
+    /// The curve group used for testing
+    pub type TestGroup = <TestCurve as Pairing>::G1;
+    /// The scalar field of the test curve
+    pub type TestScalar = <TestCurve as Pairing>::ScalarField;
+
+    /// The max degree of the circuits used for testing
+    pub const MAX_DEGREE_TESTING: usize = 1024;
+
+    // -----------
+    // | Helpers |
+    // -----------
+
+    /// The `MockRng` is used to keep randomness consistent between the single
+    /// and multi-provers
+    ///
+    /// It always returns zero and fills all bytes with zeros
+    struct MockRng;
+    impl CryptoRng for MockRng {}
+    impl RngCore for MockRng {
+        fn fill_bytes(&mut self, dest: &mut [u8]) {
+            dest.iter_mut().for_each(|b| *b = 0);
+        }
+
+        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+            self.fill_bytes(dest);
+            Ok(())
+        }
+
+        fn next_u32(&mut self) -> u32 {
+            0
+        }
+
+        fn next_u64(&mut self) -> u64 {
+            0
+        }
+    }
+
+    /// Setup commitment keys, proving and verification keys for the snark
+    fn setup_snark<C: Arithmetization<TestScalar>>(
+        circuit: &C,
+    ) -> (ProvingKey<TestCurve>, VerifyingKey<TestCurve>) {
+        let mut rng = thread_rng();
+        let srs =
+            PlonkKzgSnark::<TestCurve>::universal_setup_for_testing(MAX_DEGREE_TESTING, &mut rng)
+                .unwrap();
+
+        PlonkKzgSnark::<TestCurve>::preprocess(&srs, circuit).unwrap()
+    }
+
+    /// Generate the testing circuit in a singleprover context
+    fn test_singleprover_circuit(witness: Scalar<TestGroup>) -> PlonkCircuit<TestScalar> {
+        let mut circuit = PlonkCircuit::new_turbo_plonk();
+
+        let mut res = circuit.create_variable(witness.inner()).unwrap();
+        for _ in 0..10 {
+            res = circuit.add_constant(res, &TestScalar::one()).unwrap();
+            res = circuit.mul(res, res).unwrap();
+        }
+
+        // Multiply by zero
+        let zero = circuit.mul_constant(res, &TestScalar::zero()).unwrap();
+        circuit.enforce_equal(zero, circuit.zero()).unwrap();
+
+        circuit.finalize_for_arithmetization().unwrap();
+        circuit
+    }
+
+    /// Generate the testing circuit in a multiprover context
+    fn test_multiprover_circuit(
+        witness: Scalar<TestGroup>,
+        fabric: &MpcFabric<TestGroup>,
+    ) -> MpcPlonkCircuit<TestGroup> {
+        let mut circuit = MpcPlonkCircuit::new(fabric.clone());
+
+        let shared_witness = fabric.share_scalar(witness, PARTY0 /* sender */);
+        let mut res = circuit.create_variable(shared_witness).unwrap();
+
+        // Each loop is (res + 1) * (res + 1)
+        for _ in 0..10 {
+            res = circuit.add_constant(res, &Scalar::one()).unwrap();
+            res = circuit.mul(res, res).unwrap();
+        }
+
+        // Multiply by zero
+        let zero = circuit.mul_constant(res, &Scalar::zero()).unwrap();
+        circuit.enforce_equal(zero, circuit.zero()).unwrap();
+
+        circuit.finalize_for_arithmetization().unwrap();
+        circuit
+    }
+
+    /// Execute an MPC with a `ZeroBeaverSource`
+    ///
+    /// We do this to zero out any proof-randomization that is done during the
+    /// MPC so that proofs between single and multiprover are directly
+    /// comparable
+    async fn execute_deterministic_mpc<T, S, F>(f: F) -> T
+    where
+        T: Send + 'static,
+        S: Future<Output = T> + Send + 'static,
+        F: FnMut(MpcFabric<TestGroup>) -> S,
+    {
+        execute_mock_mpc_with_beaver_source(
+            f,
+            ZeroBeaverSource::new(PARTY0),
+            ZeroBeaverSource::new(PARTY1),
+        )
+        .await
+        .0
+    }
+
+    // ---------
+    // | Tests |
+    // ---------
+
+    /// Tests equivalence with the single-prover on the first round of the PIOP
+    #[tokio::test]
+    async fn test_first_round() {
+        let mut rng = MockRng;
+        let witness = Scalar::random(&mut thread_rng());
+
+        let singleprover_circuit = test_singleprover_circuit(witness);
+        let (pk, _) = setup_snark(&singleprover_circuit);
+
+        let domain_size = pk.domain_size();
+        let num_wire_types = singleprover_circuit.num_wire_types();
+
+        let singleprover_prover = Prover::new(domain_size, num_wire_types).unwrap();
+        let ((expected_wire_comms, expected_wire_polys), expected_pub_poly) = singleprover_prover
+            .run_1st_round(&mut rng, &pk.commit_key, &singleprover_circuit)
+            .unwrap();
+
+        let ((wire_comms, wire_polys), pub_poly) = execute_deterministic_mpc(|fabric| {
+            let commit_key = pk.commit_key.clone();
+            async move {
+                let multiprover_circuit = test_multiprover_circuit(witness, &fabric);
+                let prover = MpcProver::new(domain_size, num_wire_types, fabric).unwrap();
+
+                // Run the first round
+                let ((wire_comms, wire_polys), pub_poly) = prover
+                    .run_1st_round(&commit_key, &multiprover_circuit)
+                    .unwrap();
+
+                // Open each of the values
+                let wire_comms_open = stream::iter(wire_comms)
+                    .then(|comm| async move { comm.open_authenticated().await.unwrap() })
+                    .collect::<Vec<_>>();
+                let wire_polys_open = stream::iter(wire_polys)
+                    .then(|poly| poly.open())
+                    .collect::<Vec<_>>();
+                let pub_poly = pub_poly.open();
+
+                (
+                    (wire_comms_open.await, wire_polys_open.await),
+                    pub_poly.await,
+                )
+            }
+        })
+        .await;
+
+        assert_eq!(wire_comms, expected_wire_comms);
+        assert_eq!(wire_polys, expected_wire_polys);
+        assert_eq!(pub_poly, expected_pub_poly);
+    }
 }
