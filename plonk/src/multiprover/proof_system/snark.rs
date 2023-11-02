@@ -67,7 +67,7 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
 
         // --- Round 1 --- //
         let ((wires_poly_comms, wire_polys), pi_poly) =
-            prover.run_1st_round(&proving_key.commit_key, circuit)?;
+            prover.run_1st_round(&proving_key.commit_key, circuit, true /* mask */)?;
 
         online_oracles.wire_polys = wire_polys;
         online_oracles.pub_input_poly = pi_poly;
@@ -87,8 +87,12 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         challenges.beta = transcript.get_and_append_challenge(b"beta");
         challenges.gamma = transcript.get_and_append_challenge(b"gamma");
 
-        let (prod_perm_poly_comm, prod_perm_poly) =
-            prover.run_2nd_round(&proving_key.commit_key, circuit, &challenges)?;
+        let (prod_perm_poly_comm, prod_perm_poly) = prover.run_2nd_round(
+            &proving_key.commit_key,
+            circuit,
+            &challenges,
+            true, // mask
+        )?;
         online_oracles.prod_perm_poly = prod_perm_poly;
 
         let prod_perm_poly_comm_open = prod_perm_poly_comm.open_authenticated();

@@ -1079,7 +1079,8 @@ impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
 
                 let (perm_i, perm_j) = self.wire_permutation[i * n + j];
                 b = b
-                    * (tmp + beta + Scalar::new(self.extended_id_permutation[perm_i * n + perm_j]));
+                    * (&tmp
+                        + beta * Scalar::new(self.extended_id_permutation[perm_i * n + perm_j]));
             }
 
             numerators.push(a);

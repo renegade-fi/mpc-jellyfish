@@ -100,15 +100,19 @@ impl<E: Pairing> MpcProver<E> {
     /// 2. Compute public input polynomial.
     /// Return the wire witness polynomials and their commitments,
     /// also return the public input polynomial.
+    ///
+    /// `mask` indicates whether to mask the wire polynomials, we do not mask in
+    /// some tests to make proofs deterministic so that they are comparable
     pub(crate) fn run_1st_round<C: MpcArithmetization<E::G1>>(
         &self,
         ck: &CommitKey<E>,
         circuit: &C,
+        mask: bool,
     ) -> Result<(MpcCommitmentsAndPolys<E>, AuthenticatedDensePoly<E::G1>), PlonkError> {
         let wire_polys: Vec<AuthenticatedDensePoly<E::G1>> = circuit
             .compute_wire_polynomials()?
             .into_iter()
-            .map(|poly| self.mask_polynomial(&poly, 1))
+            .map(|poly| self.mask_polynomial(&poly, 1 /* hiding_bound */, !mask))
             .collect();
         let wires_poly_comms = MultiproverKZG::batch_commit(ck, &wire_polys)?;
         let pub_input_poly = circuit.compute_pub_input_polynomial()?;
@@ -118,15 +122,20 @@ impl<E: Pairing> MpcProver<E> {
 
     /// Round 2: Compute and commit the permutation grand product polynomial
     /// Return the grand product polynomial and its commitment
+    ///
+    /// The `mask` parameter indicates whether to mask the polynomial, we do not
+    /// mask in some tests to make proofs deterministic
     pub(crate) fn run_2nd_round<C: MpcArithmetization<E::G1>>(
         &self,
         ck: &CommitKey<E>,
         cs: &C,
         challenges: &MpcChallenges<E::G1>,
+        mask: bool,
     ) -> Result<(MultiproverKzgCommitment<E>, AuthenticatedDensePoly<E::G1>), PlonkError> {
         let prod_perm_poly = self.mask_polynomial(
             &cs.compute_prod_permutation_polynomial(&challenges.beta, &challenges.gamma)?,
             2, // hiding_degree
+            !mask,
         );
         let prod_perm_comm = MultiproverKZG::commit(ck, &prod_perm_poly)?;
 
@@ -296,11 +305,27 @@ impl<E: Pairing> MpcProver<E> {
 impl<E: Pairing> MpcProver<E> {
     /// Mask the polynomial by adding a random polynomial of degree
     /// `hiding_bound` to it
+    ///
+    /// We optionally allow the operation to be disabled for testing purposes
     fn mask_polynomial(
         &self,
         poly: &AuthenticatedDensePoly<E::G1>,
         hiding_bound: usize,
+        disabled: bool,
     ) -> AuthenticatedDensePoly<E::G1> {
+        #[cfg(not(test))]
+        {
+            if disabled {
+                panic!("cannot disable proof randomization outside of tests")
+            }
+        }
+        #[cfg(test)]
+        {
+            if disabled {
+                return poly.clone();
+            }
+        }
+
         let mask = mul_by_vanishing_poly(
             &AuthenticatedDensePoly::random(hiding_bound, &self.fabric),
             &self.domain,
@@ -790,18 +815,20 @@ mod test {
     use ark_ec::pairing::Pairing;
     use ark_ff::{One, Zero};
     use ark_mpc::{
-        algebra::Scalar, beaver::ZeroBeaverSource,
-        test_helpers::execute_mock_mpc_with_beaver_source, MpcFabric, PARTY0, PARTY1,
+        algebra::Scalar,
+        beaver::ZeroBeaverSource,
+        test_helpers::{execute_mock_mpc, execute_mock_mpc_with_beaver_source},
+        MpcFabric, PARTY0, PARTY1,
     };
     use futures::prelude::*;
     use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
-    use rand::{thread_rng, CryptoRng, RngCore};
+    use rand::thread_rng;
 
     use crate::{
-        multiprover::proof_system::{MpcCircuit, MpcPlonkCircuit},
+        multiprover::proof_system::{MpcChallenges, MpcCircuit, MpcPlonkCircuit},
         proof_system::{
             prover::Prover,
-            structs::{ProvingKey, VerifyingKey},
+            structs::{Challenges, ProvingKey, VerifyingKey},
             PlonkKzgSnark, UniversalSNARK,
         },
     };
@@ -818,35 +845,6 @@ mod test {
     /// The max degree of the circuits used for testing
     pub const MAX_DEGREE_TESTING: usize = 1024;
 
-    // -----------
-    // | Helpers |
-    // -----------
-
-    /// The `MockRng` is used to keep randomness consistent between the single
-    /// and multi-provers
-    ///
-    /// It always returns zero and fills all bytes with zeros
-    struct MockRng;
-    impl CryptoRng for MockRng {}
-    impl RngCore for MockRng {
-        fn fill_bytes(&mut self, dest: &mut [u8]) {
-            dest.iter_mut().for_each(|b| *b = 0);
-        }
-
-        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-            self.fill_bytes(dest);
-            Ok(())
-        }
-
-        fn next_u32(&mut self) -> u32 {
-            0
-        }
-
-        fn next_u64(&mut self) -> u64 {
-            0
-        }
-    }
-
     /// Setup commitment keys, proving and verification keys for the snark
     fn setup_snark<C: Arithmetization<TestScalar>>(
         circuit: &C,
@@ -857,6 +855,34 @@ mod test {
                 .unwrap();
 
         PlonkKzgSnark::<TestCurve>::preprocess(&srs, circuit).unwrap()
+    }
+
+    /// Get a randomized set of challenges
+    fn randomized_challenges() -> Challenges<TestScalar> {
+        let mut rng = thread_rng();
+        Challenges {
+            alpha: Scalar::<TestGroup>::random(&mut rng).inner(),
+            beta: Scalar::<TestGroup>::random(&mut rng).inner(),
+            gamma: Scalar::<TestGroup>::random(&mut rng).inner(),
+            zeta: Scalar::<TestGroup>::random(&mut rng).inner(),
+            v: Scalar::<TestGroup>::random(&mut rng).inner(),
+            u: Scalar::<TestGroup>::random(&mut rng).inner(),
+            tau: Scalar::<TestGroup>::random(&mut rng).inner(),
+        }
+    }
+
+    /// Allocate challenges in an MPC fabric
+    fn allocate_challenges(
+        challenges: &Challenges<TestScalar>,
+        fabric: &MpcFabric<TestGroup>,
+    ) -> MpcChallenges<TestGroup> {
+        MpcChallenges {
+            alpha: fabric.share_plaintext(Scalar::new(challenges.alpha), PARTY0),
+            beta: fabric.share_plaintext(Scalar::new(challenges.beta), PARTY0),
+            gamma: fabric.share_plaintext(Scalar::new(challenges.gamma), PARTY0),
+            zeta: fabric.share_plaintext(Scalar::new(challenges.zeta), PARTY0),
+            v: fabric.share_plaintext(Scalar::new(challenges.v), PARTY0),
+        }
     }
 
     /// Generate the testing circuit in a singleprover context
@@ -928,8 +954,8 @@ mod test {
     /// Tests equivalence with the single-prover on the first round of the PIOP
     #[tokio::test]
     async fn test_first_round() {
-        let mut rng = MockRng;
-        let witness = Scalar::random(&mut thread_rng());
+        let mut rng = thread_rng();
+        let witness = Scalar::random(&mut rng);
 
         let singleprover_circuit = test_singleprover_circuit(witness);
         let (pk, _) = setup_snark(&singleprover_circuit);
@@ -939,7 +965,12 @@ mod test {
 
         let singleprover_prover = Prover::new(domain_size, num_wire_types).unwrap();
         let ((expected_wire_comms, expected_wire_polys), expected_pub_poly) = singleprover_prover
-            .run_1st_round(&mut rng, &pk.commit_key, &singleprover_circuit)
+            .run_1st_round(
+                &mut rng,
+                &pk.commit_key,
+                &singleprover_circuit,
+                false, // mask
+            )
             .unwrap();
 
         let ((wire_comms, wire_polys), pub_poly) = execute_deterministic_mpc(|fabric| {
@@ -950,7 +981,7 @@ mod test {
 
                 // Run the first round
                 let ((wire_comms, wire_polys), pub_poly) = prover
-                    .run_1st_round(&commit_key, &multiprover_circuit)
+                    .run_1st_round(&commit_key, &multiprover_circuit, false /* mask */)
                     .unwrap();
 
                 // Open each of the values
@@ -958,13 +989,13 @@ mod test {
                     .then(|comm| async move { comm.open_authenticated().await.unwrap() })
                     .collect::<Vec<_>>();
                 let wire_polys_open = stream::iter(wire_polys)
-                    .then(|poly| poly.open())
+                    .then(|poly| async move { poly.open_authenticated().await.unwrap() })
                     .collect::<Vec<_>>();
-                let pub_poly = pub_poly.open();
+                let pub_poly = pub_poly.open_authenticated();
 
                 (
                     (wire_comms_open.await, wire_polys_open.await),
-                    pub_poly.await,
+                    pub_poly.await.unwrap(),
                 )
             }
         })
@@ -973,5 +1004,60 @@ mod test {
         assert_eq!(wire_comms, expected_wire_comms);
         assert_eq!(wire_polys, expected_wire_polys);
         assert_eq!(pub_poly, expected_pub_poly);
+    }
+
+    #[tokio::test]
+    async fn test_second_round() {
+        let mut rng = thread_rng();
+        let witness = Scalar::random(&mut rng);
+
+        let singleprover_circuit = test_singleprover_circuit(witness);
+        let (pk, _) = setup_snark(&singleprover_circuit);
+
+        let domain_size = pk.domain_size();
+        let num_wire_types = singleprover_circuit.num_wire_types();
+
+        // Compute the result in a single-prover setup
+        let singleprover_prover = Prover::new(domain_size, num_wire_types).unwrap();
+        let challenges = randomized_challenges();
+        let (expected_perm_commit, expected_perm_poly) = singleprover_prover
+            .run_2nd_round(
+                &mut rng,
+                &pk.commit_key,
+                &singleprover_circuit,
+                &challenges,
+                false, // mask
+            )
+            .unwrap();
+
+        // Compute the result in an MPC
+        let ((perm_commit, perm_poly), _) = execute_mock_mpc(|fabric| {
+            let pk = pk.clone();
+            async move {
+                let challenges = allocate_challenges(&challenges, &fabric);
+                let multiprover_circuit = test_multiprover_circuit(witness, &fabric);
+                let prover = MpcProver::new(domain_size, num_wire_types, fabric.clone()).unwrap();
+
+                // Run the second round
+                let (perm_commit, perm_poly) = prover
+                    .run_2nd_round(
+                        &pk.commit_key,
+                        &multiprover_circuit,
+                        &challenges,
+                        false, // mask
+                    )
+                    .unwrap();
+
+                // Open the results
+                (
+                    perm_commit.open_authenticated().await.unwrap(),
+                    perm_poly.open().await,
+                )
+            }
+        })
+        .await;
+
+        assert_eq!(perm_commit, expected_perm_commit);
+        assert_eq!(perm_poly, expected_perm_poly);
     }
 }
