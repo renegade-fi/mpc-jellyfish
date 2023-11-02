@@ -245,8 +245,12 @@ where
         // Round 1
         let mut wires_poly_comms_vec = vec![];
         for i in 0..circuits.len() {
-            let ((wires_poly_comms, wire_polys), pi_poly) =
-                prover.run_1st_round(prng, &prove_keys[i].commit_key, circuits[i])?;
+            let ((wires_poly_comms, wire_polys), pi_poly) = prover.run_1st_round(
+                prng,
+                &prove_keys[i].commit_key,
+                circuits[i],
+                true, // mask
+            )?;
             online_oracles[i].wire_polys = wire_polys;
             online_oracles[i].pub_inp_poly = pi_poly;
             transcript.append_commitments(b"witness_poly_comms", &wires_poly_comms)?;
@@ -268,6 +272,7 @@ where
                         &prove_keys[i].commit_key,
                         circuits[i],
                         challenges.tau,
+                        true, // mask
                     )?;
                 online_oracles[i].plookup_oracles.h_polys = h_polys;
                 transcript.append_commitments(b"h_poly_comms", &h_poly_comms)?;
@@ -285,8 +290,13 @@ where
         challenges.gamma = transcript.get_and_append_challenge::<E>(b"gamma")?;
         let mut prod_perm_poly_comms_vec = vec![];
         for i in 0..circuits.len() {
-            let (prod_perm_poly_comm, prod_perm_poly) =
-                prover.run_2nd_round(prng, &prove_keys[i].commit_key, circuits[i], &challenges)?;
+            let (prod_perm_poly_comm, prod_perm_poly) = prover.run_2nd_round(
+                prng,
+                &prove_keys[i].commit_key,
+                circuits[i],
+                &challenges,
+                true, // mask
+            )?;
             online_oracles[i].prod_perm_poly = prod_perm_poly;
             transcript.append_commitment(b"perm_poly_comms", &prod_perm_poly_comm)?;
             prod_perm_poly_comms_vec.push(prod_perm_poly_comm);
@@ -304,6 +314,7 @@ where
                     &challenges,
                     merged_table_list[i].as_ref(),
                     sorted_vec_list[i].as_ref(),
+                    true, // mask
                 )?;
                 online_oracles[i].plookup_oracles.prod_lookup_poly = prod_lookup_poly;
                 transcript.append_commitment(b"plookup_poly_comms", &prod_lookup_poly_comm)?;

@@ -71,16 +71,20 @@ impl<E: Pairing> Prover<E> {
     /// 2. Compute public input polynomial.
     /// Return the wire witness polynomials and their commitments,
     /// also return the public input polynomial.
+    ///
+    /// We allow the `mask` flag to indicate whether to mask the polynomials
+    /// We sometimes disable this flag in tests to make the proof deterministic
     pub(crate) fn run_1st_round<C: Arithmetization<E::ScalarField>, R: CryptoRng + RngCore>(
         &self,
         prng: &mut R,
         ck: &CommitKey<E>,
         cs: &C,
+        mask: bool,
     ) -> Result<(CommitmentsAndPolys<E>, DensePolynomial<E::ScalarField>), PlonkError> {
         let wire_polys: Vec<DensePolynomial<E::ScalarField>> = cs
             .compute_wire_polynomials()?
             .into_iter()
-            .map(|poly| self.mask_polynomial(prng, poly, 1))
+            .map(|poly| self.mask_polynomial(prng, poly, 1, !mask))
             .collect();
         let wires_poly_comms = UnivariateKzgPCS::batch_commit(ck, &wire_polys)?;
         let pub_input_poly = cs.compute_pub_input_polynomial()?;
@@ -92,6 +96,9 @@ impl<E: Pairing> Prover<E> {
     /// (merged) witnesses in lookup gates. Return the sorted vector, the
     /// polynomials and their commitments, as well as the merged lookup table.
     /// `cs` is guaranteed to support lookup.
+    ///
+    /// We allow the `mask` flag to indicate whether to mask the polynomials
+    /// We sometimes disable this flag in tests to make the proof deterministic
     #[allow(clippy::type_complexity)]
     pub(crate) fn run_plookup_1st_round<
         C: Arithmetization<E::ScalarField>,
@@ -102,6 +109,7 @@ impl<E: Pairing> Prover<E> {
         ck: &CommitKey<E>,
         cs: &C,
         tau: E::ScalarField,
+        mask: bool,
     ) -> Result<
         (
             CommitmentsAndPolys<E>,
@@ -113,8 +121,8 @@ impl<E: Pairing> Prover<E> {
         let merged_lookup_table = cs.compute_merged_lookup_table(tau)?;
         let (sorted_vec, h_1_poly, h_2_poly) =
             cs.compute_lookup_sorted_vec_polynomials(tau, &merged_lookup_table)?;
-        let h_1_poly = self.mask_polynomial(prng, h_1_poly, 2);
-        let h_2_poly = self.mask_polynomial(prng, h_2_poly, 2);
+        let h_1_poly = self.mask_polynomial(prng, h_1_poly, 2, !mask);
+        let h_2_poly = self.mask_polynomial(prng, h_2_poly, 2, !mask);
         let h_polys = vec![h_1_poly, h_2_poly];
         let h_poly_comms = UnivariateKzgPCS::batch_commit(ck, &h_polys)?;
         Ok(((h_poly_comms, h_polys), sorted_vec, merged_lookup_table))
@@ -122,17 +130,22 @@ impl<E: Pairing> Prover<E> {
 
     /// Round 2: Compute and commit the permutation grand product polynomial.
     /// Return the grand product polynomial and its commitment.
+    ///
+    /// We allow the `mask` flag to indicate whether to mask the polynomials
+    /// We sometimes disable this flag in tests to make the proof deterministic
     pub(crate) fn run_2nd_round<C: Arithmetization<E::ScalarField>, R: CryptoRng + RngCore>(
         &self,
         prng: &mut R,
         ck: &CommitKey<E>,
         cs: &C,
         challenges: &Challenges<E::ScalarField>,
+        mask: bool,
     ) -> Result<(Commitment<E>, DensePolynomial<E::ScalarField>), PlonkError> {
         let prod_perm_poly = self.mask_polynomial(
             prng,
             cs.compute_prod_permutation_polynomial(&challenges.beta, &challenges.gamma)?,
             2,
+            !mask,
         );
         let prod_perm_comm = UnivariateKzgPCS::commit(ck, &prod_perm_poly)?;
         Ok((prod_perm_comm, prod_perm_poly))
@@ -141,6 +154,10 @@ impl<E: Pairing> Prover<E> {
     /// Round 2.5 (Plookup): Compute and commit the Plookup grand product
     /// polynomial. Return the grand product polynomial and its commitment.
     /// `cs` is guaranteed to support lookup
+    ///
+    /// We allow the `mask` flag to indicate whether to mask the polynomials
+    /// We sometimes disable this flag in tests to make the proof deterministic
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn run_plookup_2nd_round<
         C: Arithmetization<E::ScalarField>,
         R: CryptoRng + RngCore,
@@ -152,6 +169,7 @@ impl<E: Pairing> Prover<E> {
         challenges: &Challenges<E::ScalarField>,
         merged_lookup_table: Option<&Vec<E::ScalarField>>,
         sorted_vec: Option<&Vec<E::ScalarField>>,
+        mask: bool,
     ) -> Result<(Commitment<E>, DensePolynomial<E::ScalarField>), PlonkError> {
         if sorted_vec.is_none() {
             return Err(
@@ -169,6 +187,7 @@ impl<E: Pairing> Prover<E> {
                 sorted_vec.unwrap(),
             )?,
             2,
+            !mask,
         );
         let prod_lookup_comm = UnivariateKzgPCS::commit(ck, &prod_lookup_poly)?;
         Ok((prod_lookup_comm, prod_lookup_poly))
@@ -459,7 +478,21 @@ impl<E: Pairing> Prover<E> {
         prng: &mut R,
         poly: DensePolynomial<E::ScalarField>,
         hiding_bound: usize,
+        disabled: bool,
     ) -> DensePolynomial<E::ScalarField> {
+        #[cfg(not(test))]
+        {
+            if disabled {
+                panic!("cannot disable proof randomization outside of tests")
+            }
+        }
+        #[cfg(test)]
+        {
+            if disabled {
+                return poly;
+            }
+        }
+
         let mask_poly =
             DensePolynomial::rand(hiding_bound, prng).mul_by_vanishing_poly(self.domain);
         mask_poly + poly
