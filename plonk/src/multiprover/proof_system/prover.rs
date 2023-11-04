@@ -281,17 +281,16 @@ impl<E: Pairing> MpcProver<E> {
         }
 
         // Divide by X - \zeta
-        let divisor = DensePolynomialResult::from_coeffs(vec![-zeta.clone(), self.fabric.one()]);
+        let divisor = DensePolynomialResult::from_coeffs(vec![-zeta, self.fabric.one()]);
         let witness_poly = batched_poly / &divisor;
 
         let commitment = MultiproverKZG::commit(ck, &witness_poly).map_err(PlonkError::PCSError)?;
 
-        // Combine the permutation polynomials of the proving instances
-        let mut coeff = v.clone();
-        let mut batched_poly = &online_oracles.prod_perm_poly;
+        // Divide by X - \omega * \zeta
+        let gen = Scalar::new(self.domain.group_gen);
+        let divisor = DensePolynomialResult::from_coeffs(vec![-zeta * gen, self.fabric.one()]);
+        let witness_poly = &online_oracles.prod_perm_poly / &divisor;
 
-        // Divide by X - \zeta
-        let witness_poly = batched_poly / &divisor;
         let shifted_commitment = MultiproverKZG::commit(ck, &witness_poly)?;
 
         Ok((commitment, shifted_commitment))
@@ -299,8 +298,6 @@ impl<E: Pairing> MpcProver<E> {
 }
 
 /// Private helper methods
-/// TODO: Remove this lint allowance
-#[allow(unused)]
 impl<E: Pairing> MpcProver<E> {
     /// Mask the polynomial by adding a random polynomial of degree
     /// `hiding_bound` to it
@@ -374,8 +371,7 @@ impl<E: Pairing> MpcProver<E> {
 
         // Compute coset evaluations of the quotient polynomial
         let mut quot_poly_coset_evals_sum = self.fabric.zeros_authenticated(m);
-        let mut alpha_base = self.fabric.one();
-        let alpha_3 = challenges.alpha.pow(3);
+        let alpha_base = self.fabric.one();
 
         // The coset we use to compute the quotient polynomial
         let coset = self
@@ -446,8 +442,8 @@ impl<E: Pairing> MpcProver<E> {
                     &sigmas_coset_fft,
                 );
 
-                let mut t1 = t_circ + t_perm_1;
-                let mut t2 = t_perm_2;
+                let t1 = t_circ + t_perm_1;
+                let t2 = t_perm_2;
 
                 t1 * z_h_inv[i % domain_size_ratio] + t2
             })
@@ -633,9 +629,8 @@ impl<E: Pairing> MpcProver<E> {
 
         split_quot_polys
             .iter_mut()
-            .enumerate()
             .take(num_wire_types - 1)
-            .for_each(|(i, poly)| {
+            .for_each(|poly| {
                 poly.coeffs[0] = &poly.coeffs[0] - &last_randomizer;
                 assert_eq!(poly.degree(), n + 1);
 
@@ -711,7 +706,7 @@ impl<E: Pairing> MpcProver<E> {
                     + &challenges.gamma)
             },
         ) + challenges.alpha.pow(2) * lagrange_1_eval;
-        let mut r_perm = &coeff * prod_perm_poly;
+        let r_perm = &coeff * prod_perm_poly;
 
         // Compute the coefficient of the last sigma wire permutation polynomial
         let num_wire_types = poly_evals.wires_evals.len();
@@ -822,7 +817,7 @@ mod test {
         test_helpers::{execute_mock_mpc, execute_mock_mpc_with_beaver_source},
         MpcFabric, PARTY0, PARTY1,
     };
-    use ark_poly::{univariate::DensePolynomial, Evaluations};
+    use ark_poly::univariate::DensePolynomial;
     use futures::{future::join_all, prelude::*};
     use itertools::Itertools;
     use jf_primitives::pcs::prelude::Commitment;
@@ -1006,6 +1001,8 @@ mod test {
         /// The split quotient polynomials, used in the PIOP but not
         /// appended to the oracles
         split_quot_polys: Vec<DensePolynomial<TestScalar>>,
+        /// The linearization polynomial created in the fourth round
+        lin_poly: DensePolynomial<TestScalar>,
         /// The challenges used in the PIOP
         challenges: Challenges<TestScalar>,
         /// The proving key
@@ -1035,6 +1032,7 @@ mod test {
                 pk,
                 oracles: Default::default(),
                 split_quot_polys: Default::default(),
+                lin_poly: Default::default(),
                 challenges: randomized_challenges(),
             }
         }
@@ -1105,10 +1103,8 @@ mod test {
 
     /// Run the fourth round of a single-prover circuit
     ///
-    /// Returns polynomial evaluations and the linearization polynomial
-    fn run_fourth_round(
-        params: &mut TestParams,
-    ) -> (ProofEvaluations<TestScalar>, DensePolynomial<TestScalar>) {
+    /// Returns polynomial evaluations
+    fn run_fourth_round(params: &mut TestParams) -> ProofEvaluations<TestScalar> {
         let evals = params.prover.compute_evaluations(
             &params.pk,
             &params.challenges,
@@ -1133,8 +1129,26 @@ mod test {
                 None, // plookup_evals
             )
             .unwrap();
+        params.lin_poly = lin_poly;
 
-        (evals, lin_poly)
+        evals
+    }
+
+    /// Run the fifth round of a single-prover circuit
+    ///
+    /// Returns the commitments to the opening and shifted opening polynomials
+    fn run_fifth_round(params: &mut TestParams) -> (Commitment<TestCurve>, Commitment<TestCurve>) {
+        params
+            .prover
+            .compute_opening_proofs(
+                &params.pk.commit_key,
+                &[&params.pk],
+                &params.challenges.zeta,
+                &params.challenges.v,
+                &[params.oracles.clone()],
+                &params.lin_poly,
+            )
+            .unwrap()
     }
 
     // ---------
@@ -1283,7 +1297,7 @@ mod test {
         run_first_round(true /* mask */, &mut params);
         run_second_round(true /* mask */, &mut params);
         run_third_round(false /* mask */, &mut params);
-        let (expected_evals, expected_lin) = run_fourth_round(&mut params);
+        let expected_evals = run_fourth_round(&mut params);
 
         // Compute the result in an MPC
         let ((evals, lin_poly), _) = execute_mock_mpc(|fabric| {
@@ -1336,6 +1350,56 @@ mod test {
         .await;
 
         assert_eq!(evals, expected_evals);
-        assert_eq!(lin_poly, expected_lin);
+        assert_eq!(lin_poly, params.lin_poly);
+    }
+
+    /// Test the fifth round of the PIOP
+    #[tokio::test]
+    async fn test_fifth_round() {
+        let mut params = TestParams::new();
+        let domain_size = params.pk.domain_size();
+        let num_wire_types = params.circuit.num_wire_types();
+
+        // Compute the result in a single-prover setup
+        run_first_round(true /* mask */, &mut params);
+        run_second_round(true /* mask */, &mut params);
+        run_third_round(false /* mask */, &mut params);
+        run_fourth_round(&mut params);
+        let (expected_open, expected_shift) = run_fifth_round(&mut params);
+
+        // Compute the result in an MPC
+        let ((open, shifted_open), _) = execute_mock_mpc(|fabric| {
+            let pk = params.pk.clone();
+            let oracles = params.oracles.clone();
+            let lin_poly = params.lin_poly.clone();
+
+            async move {
+                let challenges = allocate_challenges(&params.challenges, &fabric);
+                let oracles = allocate_oracles(&oracles, &fabric);
+                let prover = MpcProver::new(domain_size, num_wire_types, fabric.clone()).unwrap();
+
+                // Run the fifth round
+                let (open, shifted_open) = prover
+                    .compute_opening_proofs(
+                        &pk.commit_key,
+                        &pk,
+                        &challenges.zeta,
+                        &challenges.v,
+                        &oracles,
+                        &allocate_poly(&lin_poly, &fabric),
+                    )
+                    .unwrap();
+
+                // Open the values
+                (
+                    open.open_authenticated().await.unwrap(),
+                    shifted_open.open_authenticated().await.unwrap(),
+                )
+            }
+        })
+        .await;
+
+        assert_eq!(open, expected_open);
+        assert_eq!(shifted_open, expected_shift);
     }
 }
