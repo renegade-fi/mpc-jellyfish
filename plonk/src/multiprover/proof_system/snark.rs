@@ -185,6 +185,144 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn test_prove_simple_circuit() {}
+    use ark_mpc::{
+        algebra::{AuthenticatedScalarResult, Scalar},
+        test_helpers::execute_mock_mpc,
+        MpcFabric,
+    };
+    use futures::future::join_all;
+    use itertools::Itertools;
+    use jf_relation::PlonkType;
+    use rand::{thread_rng, Rng};
+
+    use crate::{
+        errors::PlonkError,
+        multiprover::proof_system::{
+            test::{setup_snark, test_multiprover_circuit, test_singleprover_circuit, TestGroup},
+            MpcCircuit, MpcPlonkCircuit,
+        },
+        proof_system::{snark::test::gen_circuit_for_test, PlonkKzgSnark},
+        transcript::SolidityTranscript,
+    };
+
+    use super::MultiproverPlonkKzgSnark;
+
+    // -----------
+    // | Helpers |
+    // -----------
+
+    /// A multiprover analog of the circuit used for testing the single-prover
+    /// implementation in `plonk/proof_system/snark.rs`
+    pub(crate) fn gen_multiprover_circuit_for_test(
+        m: usize,
+        a0: usize,
+        fabric: MpcFabric<TestGroup>,
+    ) -> Result<MpcPlonkCircuit<TestGroup>, PlonkError> {
+        let mut cs = MpcPlonkCircuit::new(fabric.clone());
+
+        // Create variables
+        let mut a = vec![];
+        let one = fabric.one_authenticated();
+        for i in a0..(a0 + 4 * m) {
+            let val = Scalar::from(i) * &one;
+            a.push(cs.create_variable(val)?);
+        }
+
+        let b0 = Scalar::from(m as u64 * 2) * &one;
+        let b1 = Scalar::from(a0 as u64 * 2 + m as u64 * 4 - 1) * &one;
+
+        let b = [
+            cs.create_public_variable(b0)?,
+            cs.create_public_variable(b1)?,
+        ];
+
+        let c = cs.create_public_variable(
+            (cs.witness(b[1])? + cs.witness(a[0])?) * (cs.witness(b[1])? - cs.witness(a[0])?),
+        )?;
+
+        // Create gates:
+        // 1. a0 + ... + a_{4*m-1} = b0 * b1
+        // 2. (b1 + a0) * (b1 - a0) = c
+        // 3. b0 = 2 * m
+        let mut acc = cs.zero();
+        a.iter().for_each(|&elem| acc = cs.add(acc, elem).unwrap());
+        let b_mul = cs.mul(b[0], b[1])?;
+        cs.enforce_equal(acc, b_mul)?;
+
+        let b1_plus_a0 = cs.add(b[1], a[0])?;
+        let b1_minus_a0 = cs.sub(b[1], a[0])?;
+        cs.mul_gate(b1_plus_a0, b1_minus_a0, c)?;
+        cs.enforce_constant(b[0], Scalar::from(m as u64 * 2))?;
+
+        // Finalize the circuit
+        cs.finalize_for_arithmetization()?;
+
+        Ok(cs)
+    }
+
+    // ---------
+    // | Tests |
+    // ---------
+
+    /// Tests that the proof produced by a collaborative snark correctly
+    /// verifies
+    #[tokio::test]
+    async fn test_prove_simple_circuit() {
+        let mut rng = thread_rng();
+        let witness = Scalar::random(&mut rng);
+        let circuit = test_singleprover_circuit(witness);
+
+        let (pk, vk) = setup_snark(&circuit);
+
+        let (proof, _) = execute_mock_mpc(|fabric| {
+            let pk = pk.clone();
+            async move {
+                let circuit = test_multiprover_circuit(witness, &fabric);
+                let proof = MultiproverPlonkKzgSnark::prove(&circuit, &pk, fabric).unwrap();
+
+                proof.open_authenticated().await.unwrap()
+            }
+        })
+        .await;
+
+        PlonkKzgSnark::batch_verify::<SolidityTranscript>(&[&vk], &[&[]], &[&proof], &[None])
+            .unwrap();
+    }
+
+    /// Test collaborative proving against the circuit defined in the
+    /// single-prover tests `plonk/proof_system/snark.rs`
+    #[tokio::test]
+    async fn test_complex_circuit() {
+        let mut rng = thread_rng();
+        let m = rng.gen_range(0..10);
+        let a0 = rng.gen_range(0..10);
+        let circuit = gen_circuit_for_test(m, a0, PlonkType::TurboPlonk).unwrap();
+
+        let (pk, vk) = setup_snark(&circuit);
+
+        let ((public_input, proof), _) = execute_mock_mpc(|fabric| {
+            let pk = pk.clone();
+            async move {
+                let circuit = gen_multiprover_circuit_for_test(m, a0, fabric.clone()).unwrap();
+                let input = circuit.public_input().unwrap();
+
+                let proof = MultiproverPlonkKzgSnark::prove(&circuit, &pk, fabric).unwrap();
+
+                (
+                    join_all(AuthenticatedScalarResult::open_batch(&input)).await,
+                    proof.open_authenticated().await.unwrap(),
+                )
+            }
+        })
+        .await;
+
+        let public_input = public_input.iter().map(Scalar::inner).collect_vec();
+        PlonkKzgSnark::batch_verify::<SolidityTranscript>(
+            &[&vk],
+            &[&public_input],
+            &[&proof],
+            &[None],
+        )
+        .unwrap();
+    }
 }
