@@ -334,6 +334,7 @@ where
             &challenges,
             &online_oracles,
             num_wire_types,
+            true, // mask
         )?;
         transcript.append_commitments(b"quot_poly_comms", &split_quot_poly_comms)?;
 

@@ -14,15 +14,12 @@ use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, GeneralEvaluationDomain,
     Polynomial, Radix2EvaluationDomain,
 };
-use ark_std::rand::{CryptoRng, RngCore};
 use itertools::Itertools;
 use jf_relation::constants::GATE_WIDTH;
-use jf_utils::par_utils::parallelizable_slice_iter;
-use rayon::prelude::*;
 
 use crate::{
     constants::domain_size_ratio,
-    errors::{PlonkError, SnarkError},
+    errors::PlonkError,
     multiprover::{
         primitives::{MultiproverKZG, MultiproverKzgCommitment},
         proof_system::structs::*,
@@ -145,18 +142,17 @@ impl<E: Pairing> MpcProver<E> {
     /// Round 3: Return the split quotient polynomials and their commitments
     /// Note that the first `num_wire_types`-1 split quotient polynomials
     /// have degree `domain_size`+1.
-    pub(crate) fn run_3rd_round<R: CryptoRng + RngCore>(
+    pub(crate) fn run_3rd_round(
         &self,
-        prng: &mut R,
         ck: &CommitKey<E>,
         pks: &ProvingKey<E>,
         challenges: &MpcChallenges<E::G1>,
         online_oracles: &MpcOracles<E::G1>,
         num_wire_types: usize,
     ) -> Result<MpcCommitmentsAndPolys<E>, PlonkError> {
-        let quot_poly =
+        let mut quot_poly =
             self.compute_quotient_polynomial(challenges, pks, online_oracles, num_wire_types)?;
-        let split_quot_polys = self.split_quotient_polynomial(prng, &quot_poly, num_wire_types)?;
+        let split_quot_polys = self.split_quotient_polynomial(&mut quot_poly, num_wire_types)?;
         let split_quot_poly_comms = MultiproverKZG::batch_commit(ck, &split_quot_polys)?;
 
         Ok((split_quot_poly_comms, split_quot_polys))
@@ -176,12 +172,15 @@ impl<E: Pairing> MpcProver<E> {
         online_oracles: &MpcOracles<E::G1>,
         num_wire_types: usize,
     ) -> MpcProofEvaluations<E::G1> {
-        let wires_evals: Vec<AuthenticatedScalarResult<E::G1>> =
-            parallelizable_slice_iter(&online_oracles.wire_polys)
-                .map(|poly| poly.eval(&challenges.zeta))
-                .collect();
+        let wires_evals: Vec<AuthenticatedScalarResult<E::G1>> = online_oracles
+            .wire_polys
+            .iter()
+            .map(|poly| poly.eval(&challenges.zeta))
+            .collect();
 
-        let wire_sigma_evals: Vec<ScalarResult<E::G1>> = parallelizable_slice_iter(&pk.sigmas)
+        let wire_sigma_evals: Vec<ScalarResult<E::G1>> = pk
+            .sigmas
+            .iter()
             .take(num_wire_types - 1)
             .map(|poly| eval_poly_on_result(&challenges.zeta, poly.clone(), &self.fabric))
             .collect();
@@ -385,12 +384,15 @@ impl<E: Pairing> MpcProver<E> {
             .unwrap();
 
         // Compute evaluations of the selectors, permutations, and wiring polynomials
-        let selectors_coset_fft: Vec<Vec<E::ScalarField>> =
-            parallelizable_slice_iter(&pk.selectors)
-                .map(|poly| coset.fft(poly.coeffs()))
-                .collect();
+        let selectors_coset_fft: Vec<Vec<E::ScalarField>> = pk
+            .selectors
+            .iter()
+            .map(|poly| coset.fft(poly.coeffs()))
+            .collect();
 
-        let sigmas_coset_fft: Vec<Vec<E::ScalarField>> = parallelizable_slice_iter(&pk.sigmas)
+        let sigmas_coset_fft: Vec<Vec<E::ScalarField>> = pk
+            .sigmas
+            .iter()
             .map(|poly| coset.fft(poly.coeffs()))
             .collect();
 
@@ -413,44 +415,43 @@ impl<E: Pairing> MpcProver<E> {
 
         // Compute coset evaluations of the quotient polynomial following the identity
         // in the Plonk paper
-        let quot_poly_coset_evals: Vec<AuthenticatedScalarResult<E::G1>> =
-            parallelizable_slice_iter(&(0..m).collect::<Vec<_>>())
-                .map(|&i| {
-                    // The evaluations of the wiring polynomials at this index
-                    let w: Vec<AuthenticatedScalarResult<E::G1>> = (0..num_wire_types)
-                        .map(|j| wire_polys_coset_fft[j][i].clone())
-                        .collect();
+        let quot_poly_coset_evals: Vec<AuthenticatedScalarResult<E::G1>> = (0..m)
+            .map(|i| {
+                // The evaluations of the wiring polynomials at this index
+                let w: Vec<AuthenticatedScalarResult<E::G1>> = (0..num_wire_types)
+                    .map(|j| wire_polys_coset_fft[j][i].clone())
+                    .collect();
 
-                    // The contribution of the gate constraints to the current quotient
-                    // evaluation
-                    let t_circ = Self::compute_quotient_circuit_contribution(
-                        i,
-                        &w,
-                        &pub_input_poly_coset_fft[i],
-                        &selectors_coset_fft,
-                    );
+                // The contribution of the gate constraints to the current quotient
+                // evaluation
+                let t_circ = Self::compute_quotient_circuit_contribution(
+                    i,
+                    &w,
+                    &pub_input_poly_coset_fft[i],
+                    &selectors_coset_fft,
+                );
 
-                    // The terms that enforce the copy constraint, the first checks that each
-                    // individual index in the grand product is
-                    // consistent with the permutation. The second term checks
-                    // the grand product
-                    let (t_perm_1, t_perm_2) = Self::compute_quotient_copy_constraint_contribution(
-                        i,
-                        self.quot_domain.element(i) * E::ScalarField::GENERATOR,
-                        pk,
-                        &w,
-                        &prod_perm_poly_coset_fft[i],
-                        &prod_perm_poly_coset_fft[(i + domain_size_ratio) % m],
-                        challenges,
-                        &sigmas_coset_fft,
-                    );
+                // The terms that enforce the copy constraint, the first checks that each
+                // individual index in the grand product is
+                // consistent with the permutation. The second term checks
+                // the grand product
+                let (t_perm_1, t_perm_2) = Self::compute_quotient_copy_constraint_contribution(
+                    i,
+                    self.quot_domain.element(i) * E::ScalarField::GENERATOR,
+                    pk,
+                    &w,
+                    &prod_perm_poly_coset_fft[i],
+                    &prod_perm_poly_coset_fft[(i + domain_size_ratio) % m],
+                    challenges,
+                    &sigmas_coset_fft,
+                );
 
-                    let mut t1 = t_circ + t_perm_1;
-                    let mut t2 = t_perm_2;
+                let mut t1 = t_circ + t_perm_1;
+                let mut t2 = t_perm_2;
 
-                    t1 * z_h_inv[i % domain_size_ratio] + t2
-                })
-                .collect();
+                t1 * z_h_inv[i % domain_size_ratio] + t2
+            })
+            .collect();
 
         for (a, b) in quot_poly_coset_evals_sum
             .iter_mut()
@@ -589,38 +590,35 @@ impl<E: Pairing> MpcProver<E> {
     /// NOTE: we have a step polynomial of X^(n+2) instead of X^n as in the
     /// GWC19 paper to achieve better balance among degrees of all splitting
     /// polynomials (especially the highest-degree/last one)
-    fn split_quotient_polynomial<R: CryptoRng + RngCore>(
+    fn split_quotient_polynomial(
         &self,
-        prng: &mut R,
-        quot_poly: &AuthenticatedDensePoly<E::G1>,
+        quot_poly: &mut AuthenticatedDensePoly<E::G1>,
         num_wire_types: usize,
     ) -> Result<Vec<AuthenticatedDensePoly<E::G1>>, PlonkError> {
         let expected_degree = quotient_polynomial_degree(self.domain.size(), num_wire_types);
-        if quot_poly.degree() != expected_degree {
-            return Err(PlonkError::SnarkError(SnarkError::WrongQuotientPolyDegree(
-                quot_poly.degree(),
-                expected_degree,
-            )));
-        }
+        // We cannot truncate leading zeros like the single-prover implementation
+        // because the coeffs of the polynomial are masked. Instead, we truncate the
+        // degree to the expected degree, which is the effectual change of
+        // truncating leading zeros *in this case*
+        quot_poly.coeffs.truncate(expected_degree + 1);
         let n = self.domain.size();
 
         // Compute the splitting polynomials t'_i(X) s.t. t(X) =
         // \sum_{i=0}^{num_wire_types} X^{i*(n+2)} * t'_i(X)
         // Here we effectively just divide the input polynomial into
         // chunks of degree n + 1 contiguous coefficients
-        let mut split_quot_polys: Vec<AuthenticatedDensePoly<E::G1>> =
-            parallelizable_slice_iter(&(0..num_wire_types).collect::<Vec<_>>())
-                .map(|&i| {
-                    let end = if i < num_wire_types - 1 {
-                        (i + 1) * (n + 2)
-                    } else {
-                        quot_poly.degree() + 1
-                    };
+        let mut split_quot_polys: Vec<AuthenticatedDensePoly<E::G1>> = (0..num_wire_types)
+            .map(|i| {
+                let end = if i < num_wire_types - 1 {
+                    (i + 1) * (n + 2)
+                } else {
+                    quot_poly.degree() + 1
+                };
 
-                    // Degree-(n+1) polynomial has n + 2 coefficients.
-                    AuthenticatedDensePoly::from_coeffs(quot_poly.coeffs[i * (n + 2)..end].to_vec())
-                })
-                .collect();
+                // Degree-(n+1) polynomial has n + 2 coefficients.
+                AuthenticatedDensePoly::from_coeffs(quot_poly.coeffs[i * (n + 2)..end].to_vec())
+            })
+            .collect();
 
         // Mask splitting polynomials t_i(X), for i in {0..num_wire_types} such that
         // their sum telescopes without boundaries
@@ -815,20 +813,23 @@ mod test {
     use ark_ec::pairing::Pairing;
     use ark_ff::{One, Zero};
     use ark_mpc::{
-        algebra::Scalar,
+        algebra::{AuthenticatedDensePoly, Scalar},
         beaver::ZeroBeaverSource,
         test_helpers::{execute_mock_mpc, execute_mock_mpc_with_beaver_source},
         MpcFabric, PARTY0, PARTY1,
     };
+    use ark_poly::univariate::DensePolynomial;
     use futures::prelude::*;
+    use itertools::Itertools;
+    use jf_primitives::pcs::prelude::Commitment;
     use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
     use rand::thread_rng;
 
     use crate::{
-        multiprover::proof_system::{MpcChallenges, MpcCircuit, MpcPlonkCircuit},
+        multiprover::proof_system::{MpcChallenges, MpcCircuit, MpcOracles, MpcPlonkCircuit},
         proof_system::{
             prover::Prover,
-            structs::{Challenges, ProvingKey, VerifyingKey},
+            structs::{Challenges, Oracles, ProvingKey, VerifyingKey},
             PlonkKzgSnark, UniversalSNARK,
         },
     };
@@ -883,6 +884,38 @@ mod test {
             zeta: fabric.share_plaintext(Scalar::new(challenges.zeta), PARTY0),
             v: fabric.share_plaintext(Scalar::new(challenges.v), PARTY0),
         }
+    }
+
+    /// Allocate a set of oracles to get an `MpcOracles` instance
+    fn allocate_oracles(
+        oracles: &Oracles<TestScalar>,
+        fabric: &MpcFabric<TestGroup>,
+    ) -> MpcOracles<TestGroup> {
+        MpcOracles {
+            wire_polys: oracles
+                .wire_polys
+                .iter()
+                .map(|p| allocate_poly(p, fabric))
+                .collect_vec(),
+            pub_input_poly: allocate_poly(&oracles.pub_inp_poly, fabric),
+            prod_perm_poly: allocate_poly(&oracles.prod_perm_poly, fabric),
+        }
+    }
+
+    /// Allocate a `DensePolynomial` in an MPC fabric
+    fn allocate_poly(
+        poly: &DensePolynomial<TestScalar>,
+        fabric: &MpcFabric<TestGroup>,
+    ) -> AuthenticatedDensePoly<TestGroup> {
+        if poly.coeffs.is_empty() {
+            return AuthenticatedDensePoly::from_coeffs(vec![fabric.zero_authenticated()]);
+        }
+
+        let coeffs = fabric.batch_share_scalar(
+            poly.coeffs.iter().cloned().map(Scalar::new).collect(),
+            PARTY0,
+        );
+        AuthenticatedDensePoly::from_coeffs(coeffs)
     }
 
     /// Generate the testing circuit in a singleprover context
@@ -947,6 +980,121 @@ mod test {
         .0
     }
 
+    // ----------------------
+    // | PIOP Round Helpers |
+    // ----------------------
+
+    /// Encapsulates a prover, key, oracles, etc so that a single object may be
+    /// conveniently passed around
+    struct TestParams {
+        /// The circuit being tested
+        circuit: PlonkCircuit<TestScalar>,
+        /// The witness used to parameterize the circuit
+        witness: Scalar<TestGroup>,
+        /// The underlying prover
+        prover: Prover<TestCurve>,
+        /// The oracles to polynomials in the PIOP
+        oracles: Oracles<TestScalar>,
+        /// The split quotient polynomials, used in the PIOP but not
+        /// appended to the oracles
+        split_quot_polys: Vec<DensePolynomial<TestScalar>>,
+        /// The challenges used in the PIOP
+        challenges: Challenges<TestScalar>,
+        /// The proving key
+        pk: ProvingKey<TestCurve>,
+    }
+
+    impl TestParams {
+        /// Constructor
+        pub fn new() -> Self {
+            // Construct a circuit and pre-process it
+            let mut rng = thread_rng();
+            let witness = Scalar::random(&mut rng);
+
+            let circuit = test_singleprover_circuit(witness);
+            let (pk, _) = setup_snark(&circuit);
+
+            // Construct a prover for the circuit
+            let domain_size = pk.domain_size();
+            let num_wire_types = circuit.num_wire_types();
+
+            let prover = Prover::new(domain_size, num_wire_types).unwrap();
+
+            Self {
+                circuit,
+                witness,
+                prover,
+                pk,
+                oracles: Default::default(),
+                split_quot_polys: Default::default(),
+                challenges: randomized_challenges(),
+            }
+        }
+    }
+
+    /// Run the first round of a single-prover circuit
+    ///
+    /// Returns a commitment to the wire polynomials
+    fn run_first_round(mask: bool, params: &mut TestParams) -> Vec<Commitment<TestCurve>> {
+        let mut rng = thread_rng();
+        let ((wire_comms, wire_polys), pub_input_poly) = params
+            .prover
+            .run_1st_round(
+                &mut rng,
+                &params.pk.commit_key,
+                &params.circuit,
+                mask, // mask
+            )
+            .unwrap();
+
+        params.oracles.wire_polys = wire_polys;
+        params.oracles.pub_inp_poly = pub_input_poly;
+
+        wire_comms
+    }
+
+    /// Run the second round of a single-prover circuit
+    ///
+    /// Returns a commitment to the permutation polynomial
+    fn run_second_round(mask: bool, params: &mut TestParams) -> Commitment<TestCurve> {
+        let mut rng = thread_rng();
+        let (perm_commit, perm_poly) = params
+            .prover
+            .run_2nd_round(
+                &mut rng,
+                &params.pk.commit_key,
+                &params.circuit,
+                &params.challenges,
+                mask, // mask
+            )
+            .unwrap();
+
+        params.oracles.prod_perm_poly = perm_poly;
+        perm_commit
+    }
+
+    /// Run the third round of a single-prover circuit
+    ///
+    /// Returns commitments to the split quotient polynomials
+    fn run_third_round(mask: bool, params: &mut TestParams) -> Vec<Commitment<TestCurve>> {
+        let mut rng = thread_rng();
+        let (split_quot_comms, split_quot_polys) = params
+            .prover
+            .run_3rd_round(
+                &mut rng,
+                &params.pk.commit_key,
+                &[&params.pk],
+                &params.challenges,
+                &[params.oracles.clone()],
+                params.circuit.num_wire_types(),
+                mask,
+            )
+            .unwrap();
+
+        params.split_quot_polys = split_quot_polys;
+        split_quot_comms
+    }
+
     // ---------
     // | Tests |
     // ---------
@@ -954,29 +1102,19 @@ mod test {
     /// Tests equivalence with the single-prover on the first round of the PIOP
     #[tokio::test]
     async fn test_first_round() {
-        let mut rng = thread_rng();
-        let witness = Scalar::random(&mut rng);
+        // Generate a new test
+        let mut params = TestParams::new();
+        let expected_wire_comms = run_first_round(false /* mask */, &mut params);
+        let expected_wire_polys = params.oracles.wire_polys.clone();
+        let expected_pub_poly = params.oracles.pub_inp_poly.clone();
 
-        let singleprover_circuit = test_singleprover_circuit(witness);
-        let (pk, _) = setup_snark(&singleprover_circuit);
-
-        let domain_size = pk.domain_size();
-        let num_wire_types = singleprover_circuit.num_wire_types();
-
-        let singleprover_prover = Prover::new(domain_size, num_wire_types).unwrap();
-        let ((expected_wire_comms, expected_wire_polys), expected_pub_poly) = singleprover_prover
-            .run_1st_round(
-                &mut rng,
-                &pk.commit_key,
-                &singleprover_circuit,
-                false, // mask
-            )
-            .unwrap();
+        let domain_size = params.pk.domain_size();
+        let num_wire_types = params.circuit.num_wire_types();
 
         let ((wire_comms, wire_polys), pub_poly) = execute_deterministic_mpc(|fabric| {
-            let commit_key = pk.commit_key.clone();
+            let commit_key = params.pk.commit_key.clone();
             async move {
-                let multiprover_circuit = test_multiprover_circuit(witness, &fabric);
+                let multiprover_circuit = test_multiprover_circuit(params.witness, &fabric);
                 let prover = MpcProver::new(domain_size, num_wire_types, fabric).unwrap();
 
                 // Run the first round
@@ -1008,34 +1146,20 @@ mod test {
 
     #[tokio::test]
     async fn test_second_round() {
-        let mut rng = thread_rng();
-        let witness = Scalar::random(&mut rng);
-
-        let singleprover_circuit = test_singleprover_circuit(witness);
-        let (pk, _) = setup_snark(&singleprover_circuit);
-
-        let domain_size = pk.domain_size();
-        let num_wire_types = singleprover_circuit.num_wire_types();
+        let mut params = TestParams::new();
+        let domain_size = params.pk.domain_size();
+        let num_wire_types = params.circuit.num_wire_types();
 
         // Compute the result in a single-prover setup
-        let singleprover_prover = Prover::new(domain_size, num_wire_types).unwrap();
-        let challenges = randomized_challenges();
-        let (expected_perm_commit, expected_perm_poly) = singleprover_prover
-            .run_2nd_round(
-                &mut rng,
-                &pk.commit_key,
-                &singleprover_circuit,
-                &challenges,
-                false, // mask
-            )
-            .unwrap();
+        let expected_perm_commit = run_second_round(false /* mask */, &mut params);
+        let expected_perm_poly = params.oracles.prod_perm_poly.clone();
 
         // Compute the result in an MPC
         let ((perm_commit, perm_poly), _) = execute_mock_mpc(|fabric| {
-            let pk = pk.clone();
+            let pk = params.pk.clone();
             async move {
-                let challenges = allocate_challenges(&challenges, &fabric);
-                let multiprover_circuit = test_multiprover_circuit(witness, &fabric);
+                let challenges = allocate_challenges(&params.challenges, &fabric);
+                let multiprover_circuit = test_multiprover_circuit(params.witness, &fabric);
                 let prover = MpcProver::new(domain_size, num_wire_types, fabric.clone()).unwrap();
 
                 // Run the second round
@@ -1059,5 +1183,50 @@ mod test {
 
         assert_eq!(perm_commit, expected_perm_commit);
         assert_eq!(perm_poly, expected_perm_poly);
+    }
+
+    #[tokio::test]
+    async fn test_third_round() {
+        let mut params = TestParams::new();
+        let domain_size = params.pk.domain_size();
+        let num_wire_types = params.circuit.num_wire_types();
+
+        // Compute the result in a single-prover setup
+        run_first_round(true /* mask */, &mut params);
+        run_second_round(true /* mask */, &mut params);
+        let expected_quot_comms = run_third_round(false /* mask */, &mut params);
+
+        // Compute the result in an MPC
+        let (quot_comms, quot_polys) = execute_deterministic_mpc(|fabric| {
+            let pk = params.pk.clone();
+            let oracles = params.oracles.clone();
+
+            async move {
+                let challenges = allocate_challenges(&params.challenges, &fabric);
+                let oracles = allocate_oracles(&oracles, &fabric);
+                let prover = MpcProver::new(domain_size, num_wire_types, fabric.clone()).unwrap();
+
+                // Run the third round
+                let (quot_comms, quot_polys) = prover
+                    .run_3rd_round(&pk.commit_key, &pk, &challenges, &oracles, num_wire_types)
+                    .unwrap();
+
+                // Open the values
+                let comms_open = stream::iter(quot_comms)
+                    .then(|c| async move { c.open_authenticated().await.unwrap() })
+                    .collect::<Vec<_>>()
+                    .await;
+                let polys_open = stream::iter(quot_polys)
+                    .then(|p| async move { p.open_authenticated().await.unwrap() })
+                    .collect::<Vec<_>>()
+                    .await;
+
+                (comms_open, polys_open)
+            }
+        })
+        .await;
+
+        assert_eq!(quot_polys, params.split_quot_polys);
+        assert_eq!(quot_comms, expected_quot_comms);
     }
 }
