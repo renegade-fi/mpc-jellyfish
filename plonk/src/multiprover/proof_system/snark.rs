@@ -11,7 +11,6 @@ use ark_ec::{
     short_weierstrass::{Affine, SWCurveConfig},
 };
 use ark_mpc::{algebra::AuthenticatedScalarResult, MpcFabric};
-use ark_std::rand::{CryptoRng, RngCore};
 use itertools::Itertools;
 
 use crate::{
@@ -36,15 +35,13 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
     }
 
     /// Create a new multiprover proof
-    pub fn prove<R, C>(
-        prng: &mut R,
+    pub fn prove<C>(
         circuit: &C,
         proving_key: &ProvingKey<E>,
         fabric: MpcFabric<E::G1>,
     ) -> Result<CollaborativeProof<E>, PlonkError>
     where
         C: MpcArithmetization<E::G1>,
-        R: CryptoRng + RngCore,
     {
         let domain_size = circuit.eval_domain_size()?;
         let num_wire_types = circuit.num_wire_types();
@@ -101,7 +98,6 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         // --- Round 3 --- //
         challenges.alpha = transcript.get_and_append_challenge(b"alpha");
         let (split_quot_poly_comms, split_quot_polys) = prover.run_3rd_round(
-            prng,
             &proving_key.commit_key,
             proving_key,
             &challenges,

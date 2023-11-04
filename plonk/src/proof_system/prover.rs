@@ -196,6 +196,10 @@ impl<E: Pairing> Prover<E> {
     /// Round 3: Return the splitted quotient polynomials and their commitments.
     /// Note that the first `num_wire_types`-1 splitted quotient polynomials
     /// have degree `domain_size`+1.
+    ///
+    /// We allow the `mask` flag to indicate whether to mask the polynomials
+    /// We sometimes disable this flag in tests to make the proof deterministic
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn run_3rd_round<R: CryptoRng + RngCore>(
         &self,
         prng: &mut R,
@@ -204,10 +208,12 @@ impl<E: Pairing> Prover<E> {
         challenges: &Challenges<E::ScalarField>,
         online_oracles: &[Oracles<E::ScalarField>],
         num_wire_types: usize,
+        mask: bool,
     ) -> Result<CommitmentsAndPolys<E>, PlonkError> {
         let quot_poly =
             self.compute_quotient_polynomial(challenges, pks, online_oracles, num_wire_types)?;
-        let split_quot_polys = self.split_quotient_polynomial(prng, &quot_poly, num_wire_types)?;
+        let split_quot_polys =
+            self.split_quotient_polynomial(prng, &quot_poly, num_wire_types, mask)?;
         let split_quot_poly_comms = UnivariateKzgPCS::batch_commit(ck, &split_quot_polys)?;
 
         Ok((split_quot_poly_comms, split_quot_polys))
@@ -923,12 +929,22 @@ impl<E: Pairing> Prover<E> {
     /// NOTE: we have a step polynomial of X^(n+2) instead of X^n as in the
     /// GWC19 paper to achieve better balance among degrees of all splitting
     /// polynomials (especially the highest-degree/last one).
+    ///
+    /// `mask` - whether to mask the splitting polynomials
     fn split_quotient_polynomial<R: CryptoRng + RngCore>(
         &self,
         prng: &mut R,
         quot_poly: &DensePolynomial<E::ScalarField>,
         num_wire_types: usize,
+        mask: bool,
     ) -> Result<Vec<DensePolynomial<E::ScalarField>>, PlonkError> {
+        #[cfg(not(test))]
+        {
+            if !mask {
+                panic!("cannot disable proof randomization outside of tests")
+            }
+        }
+
         let expected_degree = quotient_polynomial_degree(self.domain.size(), num_wire_types);
         if quot_poly.degree() != expected_degree {
             return Err(WrongQuotientPolyDegree(quot_poly.degree(), expected_degree).into());
@@ -950,6 +966,10 @@ impl<E: Pairing> Prover<E> {
                     )
                 })
                 .collect();
+
+        if !mask {
+            return Ok(split_quot_polys);
+        }
 
         // mask splitting polynomials t_i(X), for i in {0..num_wire_types}.
         // t_i(X) = t'_i(X) - b_last_i + b_now_i * X^(n+2)
@@ -1166,7 +1186,7 @@ mod test {
         let rng = &mut test_rng();
         let bad_quot_poly = DensePolynomial::<E::ScalarField>::rand(25, rng);
         assert!(prover
-            .split_quotient_polynomial(rng, &bad_quot_poly, GATE_WIDTH + 1)
+            .split_quotient_polynomial(rng, &bad_quot_poly, GATE_WIDTH + 1, true /* mask */)
             .is_err());
         Ok(())
     }
