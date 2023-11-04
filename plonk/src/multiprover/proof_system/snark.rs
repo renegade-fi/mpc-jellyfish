@@ -121,7 +121,7 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         // Compute the linearization polynomial
         let mut lin_poly = prover.compute_quotient_component_for_lin_poly(
             domain_size,
-            challenges.zeta.clone(),
+            &challenges.zeta,
             &split_quot_polys,
         )?;
 
@@ -132,7 +132,7 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
                 &challenges,
                 &online_oracles,
                 &poly_evals,
-            )?;
+            );
 
         // --- Round 5 --- //
         challenges.v = transcript.get_and_append_challenge(b"v");

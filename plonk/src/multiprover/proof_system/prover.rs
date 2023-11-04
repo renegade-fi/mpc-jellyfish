@@ -211,7 +211,7 @@ impl<E: Pairing> MpcProver<E> {
         challenges: &MpcChallenges<E::G1>,
         online_oracles: &MpcOracles<E::G1>,
         poly_evals: &MpcProofEvaluations<E::G1>,
-    ) -> Result<AuthenticatedDensePoly<E::G1>, PlonkError> {
+    ) -> AuthenticatedDensePoly<E::G1> {
         let r_circ = self.compute_lin_poly_circuit_contribution(pk, &poly_evals.wires_evals);
         let r_perm = self.compute_lin_poly_copy_constraint_contribution(
             pk,
@@ -221,7 +221,7 @@ impl<E: Pairing> MpcProver<E> {
         );
 
         let mut lin_poly = r_circ + r_perm;
-        Ok(lin_poly * alpha_base)
+        lin_poly * alpha_base
     }
 
     // Compute the Quotient part of the linearization polynomial:
@@ -231,12 +231,12 @@ impl<E: Pairing> MpcProver<E> {
     pub(crate) fn compute_quotient_component_for_lin_poly(
         &self,
         domain_size: usize,
-        zeta: ScalarResult<E::G1>,
+        zeta: &ScalarResult<E::G1>,
         quot_polys: &[AuthenticatedDensePoly<E::G1>],
     ) -> Result<AuthenticatedDensePoly<E::G1>, PlonkError> {
         // Compute the term -Z_H(\zeta) and \zeta^{n+2}
         let vanish_eval = zeta.pow(domain_size as u64) - Scalar::one();
-        let zeta_to_n_plus_2 = (&vanish_eval + Scalar::one()) * &zeta * &zeta;
+        let zeta_to_n_plus_2 = (&vanish_eval + Scalar::one()) * zeta * zeta;
 
         // In this term of the linearization polynomial we take a linear combination
         // of the split quotient polynomials, where the coefficients are powers of
@@ -791,6 +791,10 @@ pub fn mul_poly_result<C: CurveGroup>(
     scaling_factor: &ScalarResult<C>,
     fabric: &MpcFabric<C>,
 ) -> DensePolynomialResult<C> {
+    if poly.coeffs.is_empty() {
+        return DensePolynomialResult::from_coeffs(vec![fabric.zero()]);
+    }
+
     // Allocate a gate to scale each coefficient individually
     let arity = poly.coeffs.len();
     let coeffs = fabric.new_batch_gate_op(vec![scaling_factor.id()], arity, move |mut args| {
@@ -818,8 +822,8 @@ mod test {
         test_helpers::{execute_mock_mpc, execute_mock_mpc_with_beaver_source},
         MpcFabric, PARTY0, PARTY1,
     };
-    use ark_poly::univariate::DensePolynomial;
-    use futures::prelude::*;
+    use ark_poly::{univariate::DensePolynomial, Evaluations};
+    use futures::{future::join_all, prelude::*};
     use itertools::Itertools;
     use jf_primitives::pcs::prelude::Commitment;
     use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
@@ -829,7 +833,7 @@ mod test {
         multiprover::proof_system::{MpcChallenges, MpcCircuit, MpcOracles, MpcPlonkCircuit},
         proof_system::{
             prover::Prover,
-            structs::{Challenges, Oracles, ProvingKey, VerifyingKey},
+            structs::{Challenges, Oracles, ProofEvaluations, ProvingKey, VerifyingKey},
             PlonkKzgSnark, UniversalSNARK,
         },
     };
@@ -892,14 +896,18 @@ mod test {
         fabric: &MpcFabric<TestGroup>,
     ) -> MpcOracles<TestGroup> {
         MpcOracles {
-            wire_polys: oracles
-                .wire_polys
-                .iter()
-                .map(|p| allocate_poly(p, fabric))
-                .collect_vec(),
+            wire_polys: allocate_polys(&oracles.wire_polys, fabric),
             pub_input_poly: allocate_poly(&oracles.pub_inp_poly, fabric),
             prod_perm_poly: allocate_poly(&oracles.prod_perm_poly, fabric),
         }
+    }
+
+    /// Allocate a group of `DensePolynomial` in an MPC fabric
+    fn allocate_polys(
+        polys: &[DensePolynomial<TestScalar>],
+        fabric: &MpcFabric<TestGroup>,
+    ) -> Vec<AuthenticatedDensePoly<TestGroup>> {
+        polys.iter().map(|p| allocate_poly(p, fabric)).collect_vec()
     }
 
     /// Allocate a `DensePolynomial` in an MPC fabric
@@ -1095,6 +1103,40 @@ mod test {
         split_quot_comms
     }
 
+    /// Run the fourth round of a single-prover circuit
+    ///
+    /// Returns polynomial evaluations and the linearization polynomial
+    fn run_fourth_round(
+        params: &mut TestParams,
+    ) -> (ProofEvaluations<TestScalar>, DensePolynomial<TestScalar>) {
+        let evals = params.prover.compute_evaluations(
+            &params.pk,
+            &params.challenges,
+            &params.oracles,
+            params.circuit.num_wire_types(),
+        );
+
+        let mut lin_poly = Prover::<TestCurve>::compute_quotient_component_for_lin_poly(
+            params.circuit.eval_domain_size().unwrap(),
+            params.challenges.zeta,
+            &params.split_quot_polys,
+        )
+        .unwrap();
+        lin_poly += &params
+            .prover
+            .compute_non_quotient_component_for_lin_poly(
+                TestScalar::one(),
+                &params.pk,
+                &params.challenges,
+                &params.oracles,
+                &evals,
+                None, // plookup_evals
+            )
+            .unwrap();
+
+        (evals, lin_poly)
+    }
+
     // ---------
     // | Tests |
     // ---------
@@ -1228,5 +1270,72 @@ mod test {
 
         assert_eq!(quot_polys, params.split_quot_polys);
         assert_eq!(quot_comms, expected_quot_comms);
+    }
+
+    /// Test the fourth round of the PIOP
+    #[tokio::test]
+    async fn test_fourth_round() {
+        let mut params = TestParams::new();
+        let domain_size = params.pk.domain_size();
+        let num_wire_types = params.circuit.num_wire_types();
+
+        // Compute the result in a single-prover setup
+        run_first_round(true /* mask */, &mut params);
+        run_second_round(true /* mask */, &mut params);
+        run_third_round(false /* mask */, &mut params);
+        let (expected_evals, expected_lin) = run_fourth_round(&mut params);
+
+        // Compute the result in an MPC
+        let ((evals, lin_poly), _) = execute_mock_mpc(|fabric| {
+            let pk = params.pk.clone();
+            let oracles = params.oracles.clone();
+            let quot_polys = params.split_quot_polys.clone();
+
+            async move {
+                let challenges = allocate_challenges(&params.challenges, &fabric);
+                let oracles = allocate_oracles(&oracles, &fabric);
+                let prover = MpcProver::new(domain_size, num_wire_types, fabric.clone()).unwrap();
+
+                // Run the fourth round
+                let evals = prover.compute_evaluations(&pk, &challenges, &oracles, num_wire_types);
+                let mut lin_poly = prover
+                    .compute_quotient_component_for_lin_poly(
+                        domain_size,
+                        &challenges.zeta,
+                        &allocate_polys(&quot_polys, &fabric),
+                    )
+                    .unwrap();
+                lin_poly = lin_poly
+                    + prover.compute_non_quotient_component_for_lin_poly(
+                        &fabric.one(),
+                        &pk,
+                        &challenges,
+                        &oracles,
+                        &evals,
+                    );
+
+                // Open the values
+                (
+                    ProofEvaluations {
+                        wires_evals: join_all(evals.wires_evals)
+                            .await
+                            .iter()
+                            .map(Scalar::inner)
+                            .collect_vec(),
+                        wire_sigma_evals: join_all(evals.wire_sigma_evals)
+                            .await
+                            .iter()
+                            .map(Scalar::inner)
+                            .collect_vec(),
+                        perm_next_eval: evals.perm_next_eval.await.inner(),
+                    },
+                    lin_poly.open_authenticated().await.unwrap(),
+                )
+            }
+        })
+        .await;
+
+        assert_eq!(evals, expected_evals);
+        assert_eq!(lin_poly, expected_lin);
     }
 }
