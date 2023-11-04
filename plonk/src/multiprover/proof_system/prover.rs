@@ -807,7 +807,7 @@ pub fn mul_poly_result<C: CurveGroup>(
 }
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
 
     use ark_ec::pairing::Pairing;
     use ark_ff::{One, Zero};
@@ -846,7 +846,7 @@ mod test {
     pub const MAX_DEGREE_TESTING: usize = 1024;
 
     /// Setup commitment keys, proving and verification keys for the snark
-    fn setup_snark<C: Arithmetization<TestScalar>>(
+    pub(crate) fn setup_snark<C: Arithmetization<TestScalar>>(
         circuit: &C,
     ) -> (ProvingKey<TestCurve>, VerifyingKey<TestCurve>) {
         let mut rng = thread_rng();
@@ -922,7 +922,9 @@ mod test {
     }
 
     /// Generate the testing circuit in a singleprover context
-    fn test_singleprover_circuit(witness: Scalar<TestGroup>) -> PlonkCircuit<TestScalar> {
+    pub(crate) fn test_singleprover_circuit(
+        witness: Scalar<TestGroup>,
+    ) -> PlonkCircuit<TestScalar> {
         let mut circuit = PlonkCircuit::new_turbo_plonk();
 
         let mut res = circuit.create_variable(witness.inner()).unwrap();
@@ -940,7 +942,7 @@ mod test {
     }
 
     /// Generate the testing circuit in a multiprover context
-    fn test_multiprover_circuit(
+    pub(crate) fn test_multiprover_circuit(
         witness: Scalar<TestGroup>,
         fabric: &MpcFabric<TestGroup>,
     ) -> MpcPlonkCircuit<TestGroup> {
