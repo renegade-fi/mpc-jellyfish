@@ -6,6 +6,8 @@
 
 //! Implementation of arithmetic gates
 
+#![allow(missing_docs)]
+
 use super::Gate;
 use crate::constants::{GATE_WIDTH, N_MUL_SELECTORS};
 use ark_ff::Field;
@@ -205,10 +207,10 @@ impl<F: Field> Gate<F> for FifthRootGate {
 /// A deg-2 polynomial gate
 #[derive(Clone)]
 pub struct QuadPolyGate<F: Field> {
-    pub(crate) q_lc: [F; GATE_WIDTH],
-    pub(crate) q_mul: [F; N_MUL_SELECTORS],
-    pub(crate) q_o: F,
-    pub(crate) q_c: F,
+    pub q_lc: [F; GATE_WIDTH],
+    pub q_mul: [F; N_MUL_SELECTORS],
+    pub q_o: F,
+    pub q_c: F,
 }
 impl<F> Gate<F> for QuadPolyGate<F>
 where
@@ -234,7 +236,7 @@ where
 /// A linear combination gate
 #[derive(Clone)]
 pub struct LinCombGate<F: Field> {
-    pub(crate) coeffs: [F; GATE_WIDTH],
+    pub coeffs: [F; GATE_WIDTH],
 }
 impl<F> Gate<F> for LinCombGate<F>
 where
@@ -254,7 +256,7 @@ where
 /// A multiplication-then-addition gate
 #[derive(Clone)]
 pub struct MulAddGate<F: Field> {
-    pub(crate) coeffs: [F; N_MUL_SELECTORS],
+    pub coeffs: [F; N_MUL_SELECTORS],
 }
 impl<F> Gate<F> for MulAddGate<F>
 where

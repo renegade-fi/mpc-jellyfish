@@ -1,6 +1,6 @@
 [package]
-name = "jf-plonk"
-description = "UltraPlonk implementation"
+name = "mpc-plonk"
+description = "UltraPlonk implementation over an MPC field"
 # can change back to version.workspace = true after the following issue is fixed:
 # https://github.com/DevinR528/cargo-sort/issues/47
 version = { workspace = true }

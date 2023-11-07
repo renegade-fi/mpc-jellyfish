@@ -19,13 +19,13 @@ use ark_ec::{
 use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsConfig, Fr};
 use ark_ff::PrimeField;
 use ark_std::{rand::SeedableRng, UniformRand};
-use jf_plonk::{
+use jf_relation::{gadgets::ecc::TEPoint, Arithmetization, Circuit, PlonkCircuit};
+use jf_utils::fr_to_fq;
+use mpc_plonk::{
     errors::PlonkError,
     proof_system::{PlonkKzgSnark, UniversalSNARK},
     transcript::StandardTranscript,
 };
-use jf_relation::{gadgets::ecc::TEPoint, Arithmetization, Circuit, PlonkCircuit};
-use jf_utils::fr_to_fq;
 use rand_chacha::ChaCha20Rng;
 
 // The following example proves knowledge of exponent.

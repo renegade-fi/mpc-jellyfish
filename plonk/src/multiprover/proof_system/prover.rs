@@ -953,12 +953,12 @@ pub(crate) mod test {
 
         // Each loop is (res + 1) * (res + 1)
         for _ in 0..10 {
-            res = circuit.add_constant(res, &Scalar::one()).unwrap();
+            res = circuit.add_constant(res, &TestScalar::one()).unwrap();
             res = circuit.mul(res, res).unwrap();
         }
 
         // Multiply by zero
-        let zero = circuit.mul_constant(res, &Scalar::zero()).unwrap();
+        let zero = circuit.mul_constant(res, &TestScalar::zero()).unwrap();
         circuit.enforce_equal(zero, circuit.zero()).unwrap();
 
         circuit.finalize_for_arithmetization().unwrap();

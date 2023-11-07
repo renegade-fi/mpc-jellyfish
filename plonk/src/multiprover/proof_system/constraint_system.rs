@@ -28,21 +28,16 @@ use jf_relation::{
 // | Traits and Types |
 // --------------------
 
-/// The variable type in an MPC constraint system
-///
-/// This represents an index into the wire assignments as flattened out
-/// canonically
-pub type MpcVariable = usize;
 /// A variable of boolean type
-pub struct MpcBoolVar(usize);
+pub struct BoolVar(usize);
 
-impl From<MpcBoolVar> for MpcVariable {
-    fn from(value: MpcBoolVar) -> Self {
+impl From<BoolVar> for Variable {
+    fn from(value: BoolVar) -> Self {
         value.0
     }
 }
 
-impl MpcBoolVar {
+impl BoolVar {
     /// Create a new boolean variable from a variable index
     ///
     /// Do not constrain the underlying value to be boolean
@@ -86,13 +81,13 @@ pub trait MpcCircuit<C: CurveGroup> {
 
     /// Create a constant variable in the circuit, returning the index of the
     /// variable
-    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<MpcVariable, CircuitError>;
+    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<Variable, CircuitError>;
 
     /// Add a variable to the circuit; returns the index of the variable
     fn create_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcVariable, CircuitError>;
+    ) -> Result<Variable, CircuitError>;
 
     /// Add a bool variable to the circuit; return the index of the variable.
     ///
@@ -105,100 +100,81 @@ pub trait MpcCircuit<C: CurveGroup> {
     fn create_boolean_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcBoolVar, CircuitError> {
+    ) -> Result<BoolVar, CircuitError> {
         let var = self.create_variable(val)?;
         self.enforce_bool(var)?;
-        Ok(MpcBoolVar(var))
+        Ok(BoolVar(var))
     }
 
     /// Add a public input variable; return the index of the variable.
     fn create_public_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcVariable, CircuitError>;
+    ) -> Result<Variable, CircuitError>;
 
     /// Set a variable to a public variable
-    fn set_variable_public(&mut self, var: MpcVariable) -> Result<(), CircuitError>;
+    fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError>;
 
     /// Return a default variable with value zero.
-    fn zero(&self) -> MpcVariable;
+    fn zero(&self) -> Variable;
 
     /// Return a default variable with value one.
-    fn one(&self) -> MpcVariable;
+    fn one(&self) -> Variable;
 
     /// Return a default variable with value `false` (namely zero).
-    fn false_var(&self) -> MpcBoolVar {
-        MpcBoolVar::new_unchecked(self.zero())
+    fn false_var(&self) -> BoolVar {
+        BoolVar::new_unchecked(self.zero())
     }
 
     /// Return a default variable with value `true` (namely one).
-    fn true_var(&self) -> MpcBoolVar {
-        MpcBoolVar::new_unchecked(self.one())
+    fn true_var(&self) -> BoolVar {
+        BoolVar::new_unchecked(self.one())
     }
 
     /// Return the witness value of variable `idx`.
     /// Return error if the input variable is invalid.
-    fn witness(&self, idx: MpcVariable) -> Result<AuthenticatedScalarResult<C>, CircuitError>;
+    fn witness(&self, idx: Variable) -> Result<AuthenticatedScalarResult<C>, CircuitError>;
 
     /// Common gates that should be implemented in any constraint systems.
     ///
     /// Constrain a variable to a constant.
     /// Return error if `var` is an invalid variable.
-    fn enforce_constant(
-        &mut self,
-        var: MpcVariable,
-        constant: Scalar<C>,
-    ) -> Result<(), CircuitError>;
+    fn enforce_constant(&mut self, var: Variable, constant: Scalar<C>) -> Result<(), CircuitError>;
 
     /// Constrain variable `c` to the addition of `a` and `b`.
     /// Return error if the input variables are invalid.
-    fn add_gate(
-        &mut self,
-        a: MpcVariable,
-        b: MpcVariable,
-        c: MpcVariable,
-    ) -> Result<(), CircuitError>;
+    fn add_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError>;
 
     /// Obtain a variable representing an addition.
     /// Return the index of the variable.
     /// Return error if the input variables are invalid.
-    fn add(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError>;
+    fn add(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError>;
 
     /// Constrain variable `c` to the subtraction of `a` and `b`.
     /// Return error if the input variables are invalid.
-    fn sub_gate(
-        &mut self,
-        a: MpcVariable,
-        b: MpcVariable,
-        c: MpcVariable,
-    ) -> Result<(), CircuitError>;
+    fn sub_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError>;
 
     /// Obtain a variable representing a subtraction.
     /// Return the index of the variable.
     /// Return error if the input variables are invalid.
-    fn sub(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError>;
+    fn sub(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError>;
 
     /// Constrain variable `c` to the multiplication of `a` and `b`.
     /// Return error if the input variables are invalid.
-    fn mul_gate(
-        &mut self,
-        a: MpcVariable,
-        b: MpcVariable,
-        c: MpcVariable,
-    ) -> Result<(), CircuitError>;
+    fn mul_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError>;
 
     /// Obtain a variable representing a multiplication.
     /// Return the index of the variable.
     /// Return error if the input variables are invalid.
-    fn mul(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError>;
+    fn mul(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError>;
 
     /// Constrain a variable to a bool.
     /// Return error if the input is invalid.
-    fn enforce_bool(&mut self, a: MpcVariable) -> Result<(), CircuitError>;
+    fn enforce_bool(&mut self, a: Variable) -> Result<(), CircuitError>;
 
     /// Constrain two variables to have the same value.
     /// Return error if the input variables are invalid.
-    fn enforce_equal(&mut self, a: MpcVariable, b: MpcVariable) -> Result<(), CircuitError>;
+    fn enforce_equal(&mut self, a: Variable, b: Variable) -> Result<(), CircuitError>;
 
     /// Pad the circuit with n dummy gates
     fn pad_gates(&mut self, n: usize);
@@ -269,7 +245,7 @@ where
     /// The gate of each constraint
     gates: Vec<Box<dyn Gate<C::ScalarField>>>,
     /// The map from arithmetic gate wires to variables
-    wire_variables: [Vec<MpcVariable>; GATE_WIDTH + 2],
+    wire_variables: [Vec<Variable>; GATE_WIDTH + 2],
     /// The IO gates for the list of public input variables
     pub_input_gate_ids: Vec<GateId>,
     /// The assignment of the witness variables
@@ -338,7 +314,7 @@ where
     /// Insert an algebraic gate
     pub fn insert_gate(
         &mut self,
-        wire_vars: &[MpcVariable; GATE_WIDTH + 1],
+        wire_vars: &[Variable; GATE_WIDTH + 1],
         gate: Box<dyn Gate<C::ScalarField>>,
     ) -> Result<(), CircuitError> {
         self.check_finalize_flag(false)?;
@@ -389,9 +365,9 @@ where
     pub(crate) fn create_boolean_variable_unchecked(
         &mut self,
         a: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcBoolVar, CircuitError> {
+    ) -> Result<BoolVar, CircuitError> {
         let var = self.create_variable(a)?;
-        Ok(MpcBoolVar::new_unchecked(var))
+        Ok(BoolVar::new_unchecked(var))
     }
 }
 
@@ -756,14 +732,14 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     }
 
     #[cfg(not(feature = "test_apis"))]
-    fn check_circuit_satisfiability(
+    async fn check_circuit_satisfiability(
         &self,
-        public_input: &[AuthenticatedScalarResult<C>],
+        _public_input: &[AuthenticatedScalarResult<C>],
     ) -> Result<(), CircuitError> {
-        panic("`check_circuit_satisfiability` should not be called outside of tests, this method leaks privacy")
+        panic!("`check_circuit_satisfiability` should not be called outside of tests, this method leaks privacy")
     }
 
-    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<MpcVariable, CircuitError> {
+    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<Variable, CircuitError> {
         let authenticated_val = self.fabric.one_authenticated() * val;
         let var = self.create_variable(authenticated_val)?;
         self.enforce_constant(var, val)?;
@@ -774,7 +750,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     fn create_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcVariable, CircuitError> {
+    ) -> Result<Variable, CircuitError> {
         self.check_finalize_flag(false)?;
         self.witness.push(val);
         self.num_vars += 1;
@@ -785,14 +761,14 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     fn create_public_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-    ) -> Result<MpcVariable, CircuitError> {
+    ) -> Result<Variable, CircuitError> {
         let var = self.create_variable(val)?;
         self.set_variable_public(var)?;
 
         Ok(var)
     }
 
-    fn set_variable_public(&mut self, var: MpcVariable) -> Result<(), CircuitError> {
+    fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError> {
         self.check_finalize_flag(false)?;
         self.pub_input_gate_ids.push(self.num_gates());
 
@@ -802,25 +778,21 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn zero(&self) -> MpcVariable {
+    fn zero(&self) -> Variable {
         0
     }
 
-    fn one(&self) -> MpcVariable {
+    fn one(&self) -> Variable {
         1
     }
 
-    fn witness(&self, idx: MpcVariable) -> Result<AuthenticatedScalarResult<C>, CircuitError> {
+    fn witness(&self, idx: Variable) -> Result<AuthenticatedScalarResult<C>, CircuitError> {
         self.check_var_bound(idx)?;
 
         Ok(self.witness[idx].clone())
     }
 
-    fn enforce_constant(
-        &mut self,
-        var: MpcVariable,
-        constant: Scalar<C>,
-    ) -> Result<(), CircuitError> {
+    fn enforce_constant(&mut self, var: Variable, constant: Scalar<C>) -> Result<(), CircuitError> {
         self.check_var_bound(var)?;
 
         let wire_vars = &[0, 0, 0, 0, var];
@@ -828,12 +800,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn add_gate(
-        &mut self,
-        a: MpcVariable,
-        b: MpcVariable,
-        c: MpcVariable,
-    ) -> Result<(), CircuitError> {
+    fn add_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
         self.check_var_bound(c)?;
@@ -843,7 +810,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn add(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError> {
+    fn add(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
 
@@ -854,12 +821,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(c)
     }
 
-    fn sub_gate(
-        &mut self,
-        a: MpcVariable,
-        b: MpcVariable,
-        c: MpcVariable,
-    ) -> Result<(), CircuitError> {
+    fn sub_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
         self.check_var_bound(c)?;
@@ -869,7 +831,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn sub(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError> {
+    fn sub(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
 
@@ -880,12 +842,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(c)
     }
 
-    fn mul_gate(
-        &mut self,
-        a: MpcVariable,
-        b: MpcVariable,
-        c: MpcVariable,
-    ) -> Result<(), CircuitError> {
+    fn mul_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
         self.check_var_bound(c)?;
@@ -895,7 +852,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn mul(&mut self, a: MpcVariable, b: MpcVariable) -> Result<MpcVariable, CircuitError> {
+    fn mul(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
 
@@ -906,7 +863,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(c)
     }
 
-    fn enforce_bool(&mut self, a: MpcVariable) -> Result<(), CircuitError> {
+    fn enforce_bool(&mut self, a: Variable) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
 
         let wire_vars = &[a, a, 0, 0, a];
@@ -914,7 +871,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn enforce_equal(&mut self, a: MpcVariable, b: MpcVariable) -> Result<(), CircuitError> {
+    fn enforce_equal(&mut self, a: Variable, b: Variable) -> Result<(), CircuitError> {
         self.check_var_bound(a)?;
         self.check_var_bound(b)?;
 

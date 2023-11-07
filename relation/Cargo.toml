@@ -1,5 +1,5 @@
 [package]
-name = "jf-relation"
+name = "mpc-relation"
 description = "Jellyfish constraint system for PLONK"
 version = { workspace = true }
 authors = { workspace = true }
