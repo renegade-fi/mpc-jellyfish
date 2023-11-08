@@ -8,7 +8,7 @@ use crate::{elgamal, signatures::schnorr};
 use ark_ec::{twisted_edwards::TECurveConfig as Config, CurveGroup};
 use ark_ff::PrimeField;
 use ark_std::vec::Vec;
-use jf_relation::Variable;
+use mpc_relation::Variable;
 
 impl<F, P> From<&schnorr::VerKey<P>> for (F, F)
 where

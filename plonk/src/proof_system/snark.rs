@@ -37,10 +37,10 @@ use jf_primitives::{
     pcs::{prelude::UnivariateKzgPCS, PolynomialCommitmentScheme, StructuredReferenceString},
     rescue::RescueParameter,
 };
-use jf_relation::{
+use jf_utils::par_utils::parallelizable_slice_iter;
+use mpc_relation::{
     constants::compute_coset_representatives, gadgets::ecc::SWToTEConParam, Arithmetization,
 };
-use jf_utils::par_utils::parallelizable_slice_iter;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -688,11 +688,11 @@ pub mod test {
         },
         rescue::RescueParameter,
     };
-    use jf_relation::{
+    use jf_utils::test_rng;
+    use mpc_relation::{
         constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam, Arithmetization, Circuit,
         MergeableCircuitType, PlonkCircuit,
     };
-    use jf_utils::test_rng;
 
     // Different `m`s lead to different circuits.
     // Different `a0`s lead to different witness values.

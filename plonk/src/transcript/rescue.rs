@@ -20,8 +20,8 @@ use jf_primitives::{
     pcs::prelude::Commitment,
     rescue::{RescueParameter, STATE_SIZE},
 };
-use jf_relation::gadgets::ecc::{SWToTEConParam, TEPoint};
 use jf_utils::{bytes_to_field_elements, field_switching, fq_to_fr_with_mask};
+use mpc_relation::gadgets::ecc::{SWToTEConParam, TEPoint};
 
 /// Transcript with rescue hash function.
 ///

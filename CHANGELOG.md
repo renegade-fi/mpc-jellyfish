@@ -69,8 +69,8 @@ and follow [semantic versioning](https://semver.org/) for our releases.
 - [#107](https://github.com/EspressoSystems/jellyfish/pull/107) (`jf-primitives`) Updated `crypto_box` from `0.7.1` to `0.8.1`
 - [#110](https://github.com/EspressoSystems/jellyfish/pull/110) (workspace) Reorganized codebase structure
   - Remove `jf-rescue` crate, rescue hash function now resides in `jf-primitives/rescue`.
-  - Plonk constraint system definition and concrete constructions now live in a standalone crate `jf-relation`.
-    - Basic and customized circuit gates are defined in `jf-relation`.
+  - Plonk constraint system definition and concrete constructions now live in a standalone crate `mpc-relation`.
+    - Basic and customized circuit gates are defined in `mpc-relation`.
     - Customized/advanced circuit implementations are located in their own crates.
       - Plonk verifier related gadgets, `transcript` and `plonk-verifier` are now in `jf-plonk/circuit`.
       - Primitive gadgets, including `commitment`, `el gamal` etc. remains in `jf-primitives/circuit`.
@@ -116,13 +116,13 @@ and follow [semantic versioning](https://semver.org/) for our releases.
 
 - [#76](https://github.com/EspressoSystems/jellyfish/pull/76) (`jf-plonk`) Splitting polynomials are masked to ensure zero-knowledge of Plonk
   - Now `PlonkKzgSnark` use our own KZG10 implementation.
-- [#115](https://github.com/EspressoSystems/jellyfish/pull/115) (`jf-relation`) Fix a bug in `logic_or` gate
+- [#115](https://github.com/EspressoSystems/jellyfish/pull/115) (`mpc-relation`) Fix a bug in `logic_or` gate
 
 ### Added
 
 - [#85](https://github.com/EspressoSystems/jellyfish/pull/85), [#87](https://github.com/EspressoSystems/jellyfish/pull/87) (all) Added `no_std` compliance
 - [#116](https://github.com/EspressoSystems/jellyfish/pull/116) (`jf-primitives`) Introduced new `PolynomialCommitmentScheme` trait
-- [#117](https://github.com/EspressoSystems/jellyfish/pull/117) (`jf-relation`) Added gadgets for comparison with constant values
+- [#117](https://github.com/EspressoSystems/jellyfish/pull/117) (`mpc-relation`) Added gadgets for comparison with constant values
 - [#176](https://github.com/EspressoSystems/jellyfish/pull/176) (`jf-primitives`) Added implementation for light weight merkle tree -- an append-only merkle tree who only keeps its frontier.
 - [#167](https://github.com/EspressoSystems/jellyfish/pull/167) (`jf-primitives`) Add `DigestGadget` associated type to `MerkleTreeGadget`.
 
@@ -133,7 +133,7 @@ and follow [semantic versioning](https://semver.org/) for our releases.
 - [#113](https://github.com/EspressoSystems/jellyfish/pull/113) (`jf-plonk`) Corrected error type for `PlonkVerifier` gadgets
 - [#162](https://github.com/EspressoSystems/jellyfish/pull/162) (`jf-utils`) Renamed `#serde(with="field_elem")` to `#serde(with="canonical")`
 - [#177](https://github.com/EspressoSystems/jellyfish/pull/177) (`jf-primitives`) Refactor multilinear PCS opening.
-- [#197](https://github.com/EspressoSystems/jellyfish/pull/197) (`jf-relation`) Added `no_std` attribute.
+- [#197](https://github.com/EspressoSystems/jellyfish/pull/197) (`mpc-relation`) Added `no_std` attribute.
 
 ### Removed
 

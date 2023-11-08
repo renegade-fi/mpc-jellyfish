@@ -7,7 +7,7 @@
 //! Circuit implementation of a PRF.
 
 use crate::rescue::RescueParameter;
-use jf_relation::{errors::CircuitError, PlonkCircuit, Variable};
+use mpc_relation::{errors::CircuitError, PlonkCircuit, Variable};
 
 use super::rescue::RescueNativeGadget;
 
@@ -40,7 +40,7 @@ mod tests {
     use ark_ed_on_bn254::Fq as FqEd254;
     use ark_ff::UniformRand;
     use ark_std::vec::Vec;
-    use jf_relation::{Circuit, PlonkCircuit, Variable};
+    use mpc_relation::{Circuit, PlonkCircuit, Variable};
 
     macro_rules! test_prf_circuit {
         ($base_field:tt) => {

@@ -3,7 +3,7 @@
 //! These gadgets are largely copied from the single-prover implementation
 use core::cmp::Ordering;
 
-use jf_relation::errors::CircuitError;
+use mpc_relation::errors::CircuitError;
 
 pub mod arithmetic;
 

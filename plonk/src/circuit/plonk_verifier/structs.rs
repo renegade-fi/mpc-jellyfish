@@ -6,7 +6,7 @@
 
 use ark_ff::PrimeField;
 use ark_std::vec::Vec;
-use jf_relation::{
+use mpc_relation::{
     errors::CircuitError,
     gadgets::{
         ecc::PointVariable,

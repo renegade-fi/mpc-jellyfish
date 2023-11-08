@@ -36,7 +36,8 @@ use jf_primitives::{
     },
     rescue::RescueParameter,
 };
-use jf_relation::{
+use jf_utils::{field_switching, fq_to_fr, fr_to_fq};
+use mpc_relation::{
     constants::{compute_coset_representatives, GATE_WIDTH, N_TURBO_PLONK_SELECTORS},
     gadgets::{
         ecc::{SWToTEConParam, TEPoint},
@@ -44,7 +45,6 @@ use jf_relation::{
     },
     PlonkCircuit,
 };
-use jf_utils::{field_switching, fq_to_fr, fr_to_fq};
 use tagged_base64::tagged;
 
 /// Universal StructuredReferenceString

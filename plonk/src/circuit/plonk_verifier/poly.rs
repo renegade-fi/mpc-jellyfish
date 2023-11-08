@@ -10,13 +10,13 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{format, string::ToString, vec, vec::Vec, One};
-use jf_relation::{
+use jf_utils::field_switching;
+use mpc_relation::{
     constants::GATE_WIDTH,
     errors::{CircuitError, CircuitError::ParameterError},
     gadgets::ultraplonk::mod_arith::{FpElem, FpElemVar},
     PlonkCircuit,
 };
-use jf_utils::field_switching;
 
 /// This helper function generate the variables for the following data
 /// - Circuit evaluation of vanishing polynomial at point `zeta` i.e., output =
@@ -737,8 +737,8 @@ mod test {
     use ark_ff::Field;
     use ark_poly::Radix2EvaluationDomain;
     use ark_std::{One, UniformRand};
-    use jf_relation::Circuit;
     use jf_utils::{field_switching, test_rng};
+    use mpc_relation::Circuit;
 
     const RANGE_BIT_LEN_FOR_TEST: usize = 16;
 

@@ -11,7 +11,7 @@ use crate::{
     utils::pad_with,
 };
 use ark_std::vec;
-use jf_relation::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
+use mpc_relation::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
 
 use super::rescue::RescueNativeGadget;
 
@@ -53,7 +53,7 @@ mod tests {
     use ark_ff::UniformRand;
     use ark_std::vec::Vec;
     use itertools::Itertools;
-    use jf_relation::{Circuit, PlonkCircuit, Variable};
+    use mpc_relation::{Circuit, PlonkCircuit, Variable};
 
     const TEST_INPUT_LEN: usize = 10;
     const TEST_INPUT_LEN_PLUS_ONE: usize = 10 + 1;

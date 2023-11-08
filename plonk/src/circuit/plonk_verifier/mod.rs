@@ -14,7 +14,7 @@ use ark_ec::{
 use ark_ff::{BigInteger, PrimeField};
 use ark_std::{format, string::ToString, vec, vec::Vec};
 use jf_primitives::rescue::RescueParameter;
-use jf_relation::{
+use mpc_relation::{
     errors::{CircuitError, CircuitError::ParameterError},
     gadgets::{
         ecc::{MultiScalarMultiplicationCircuit, PointVariable, SWToTEConParam, TEPoint},
@@ -333,11 +333,11 @@ mod test {
     use ark_ec::{short_weierstrass::SWCurveConfig, twisted_edwards::TECurveConfig, CurveGroup};
     use ark_std::{vec, UniformRand};
     use jf_primitives::rescue::RescueParameter;
-    use jf_relation::{
+    use jf_utils::{field_switching, test_rng};
+    use mpc_relation::{
         gadgets::{ecc::TEPoint, test_utils::test_variable_independence_for_circuit},
         Circuit, MergeableCircuitType,
     };
-    use jf_utils::{field_switching, test_rng};
 
     const RANGE_BIT_LEN_FOR_TEST: usize = 16;
 

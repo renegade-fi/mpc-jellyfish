@@ -28,7 +28,7 @@ use ark_poly::Radix2EvaluationDomain;
 use ark_std::vec::Vec;
 use hashbrown::HashMap;
 use jf_primitives::{pcs::prelude::Commitment, rescue::RescueParameter};
-use jf_relation::gadgets::ecc::SWToTEConParam;
+use mpc_relation::gadgets::ecc::SWToTEConParam;
 
 /// A wrapper of crate::proof_system::structs::Challenges
 #[derive(Debug, Default, PartialEq, Clone, Copy)]

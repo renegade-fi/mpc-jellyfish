@@ -14,7 +14,7 @@ use ark_poly::{
 use async_trait::async_trait;
 use futures::future;
 use itertools::Itertools;
-use jf_relation::{
+use mpc_relation::{
     constants::{compute_coset_representatives, GATE_WIDTH, N_MUL_SELECTORS},
     errors::CircuitError,
     gates::{

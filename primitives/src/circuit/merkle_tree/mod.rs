@@ -8,7 +8,7 @@
 //! RescueMerkleTree and RescueSparseMerkleTree.
 
 use ark_ff::PrimeField;
-use jf_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
+use mpc_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
 
 mod universal_merkle_tree;
 use ark_std::{string::ToString, vec::Vec};
@@ -32,7 +32,7 @@ use super::rescue::RescueNativeGadget;
 /// ```
 /// use ark_bls12_377::Fq;
 /// use jf_primitives::circuit::merkle_tree::MerkleTreeGadget;
-/// use jf_relation::{Circuit, PlonkCircuit};
+/// use mpc_relation::{Circuit, PlonkCircuit};
 /// use jf_primitives::merkle_tree::{prelude::RescueMerkleTree, MerkleTreeScheme, MerkleCommitment};
 ///
 /// let mut circuit = PlonkCircuit::<Fq>::new_turbo_plonk();
@@ -117,7 +117,7 @@ where
 /// ```
 /// use ark_bls12_377::Fq;
 /// use jf_primitives::circuit::merkle_tree::{MerkleTreeGadget, UniversalMerkleTreeGadget};
-/// use jf_relation::{Circuit, PlonkCircuit};
+/// use mpc_relation::{Circuit, PlonkCircuit};
 /// use jf_primitives::merkle_tree::{MerkleTreeScheme, MerkleCommitment, UniversalMerkleTreeScheme,
 ///     prelude::RescueSparseMerkleTree};
 /// use hashbrown::HashMap;
@@ -457,7 +457,7 @@ mod test {
     use ark_ed_on_bls12_381_bandersnatch::Fq as FqEd381b;
     use ark_ed_on_bn254::Fq as FqEd254;
     use ark_std::{boxed::Box, vec::Vec};
-    use jf_relation::{Circuit, PlonkCircuit, Variable};
+    use mpc_relation::{Circuit, PlonkCircuit, Variable};
 
     #[test]
     fn test_permute() {

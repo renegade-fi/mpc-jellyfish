@@ -15,7 +15,7 @@ use jf_primitives::{
     circuit::rescue::RescueNativeGadget,
     rescue::{RescueParameter, STATE_SIZE},
 };
-use jf_relation::{
+use mpc_relation::{
     errors::CircuitError::{self, ParameterError},
     gadgets::{
         ecc::{PointVariable, SWToTEConParam},
@@ -232,8 +232,8 @@ mod tests {
     };
     use ark_std::{format, UniformRand};
     use jf_primitives::pcs::prelude::{Commitment, UnivariateVerifierParam};
-    use jf_relation::gadgets::ecc::TEPoint;
     use jf_utils::{bytes_to_field_elements, field_switching, test_rng};
+    use mpc_relation::gadgets::ecc::TEPoint;
 
     const RANGE_BIT_LEN_FOR_TEST: usize = 16;
     #[test]

@@ -19,12 +19,12 @@ use ark_ec::{
 };
 use ark_ff::PrimeField;
 use ark_std::{vec, vec::Vec};
-use jf_relation::{
+use jf_utils::fr_to_fq;
+use mpc_relation::{
     errors::CircuitError,
     gadgets::ecc::{PointVariable, TEPoint},
     BoolVar, Circuit, PlonkCircuit, Variable,
 };
-use jf_utils::fr_to_fq;
 
 #[derive(Debug, Clone)]
 /// Signature verification key variable
@@ -203,7 +203,7 @@ mod tests {
     use ark_ed_on_bls12_381::EdwardsConfig as Param381;
     use ark_ed_on_bls12_381_bandersnatch::EdwardsConfig as Param381b;
     use ark_ed_on_bn254::EdwardsConfig as Param254;
-    use jf_relation::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
+    use mpc_relation::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
 
     #[test]
     fn test_dsa_circuit() -> Result<(), CircuitError> {

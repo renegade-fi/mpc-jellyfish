@@ -22,8 +22,8 @@ use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{format, vec, vec::Vec};
 use core::ops::Neg;
 use jf_primitives::{pcs::prelude::Commitment, rescue::RescueParameter};
-use jf_relation::{constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam};
 use jf_utils::multi_pairing;
+use mpc_relation::{constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam};
 
 /// (Aggregated) polynomial commitment evaluation info.
 /// * `u` - a random combiner that was used to combine evaluations at point

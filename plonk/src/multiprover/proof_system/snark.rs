@@ -192,7 +192,7 @@ mod tests {
     };
     use futures::future::join_all;
     use itertools::Itertools;
-    use jf_relation::PlonkType;
+    use mpc_relation::PlonkType;
     use rand::{thread_rng, Rng};
 
     use crate::{

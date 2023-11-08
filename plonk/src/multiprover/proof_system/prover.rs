@@ -15,7 +15,7 @@ use ark_poly::{
     Polynomial, Radix2EvaluationDomain,
 };
 use itertools::Itertools;
-use jf_relation::constants::GATE_WIDTH;
+use mpc_relation::constants::GATE_WIDTH;
 
 use crate::{
     constants::domain_size_ratio,
@@ -821,7 +821,7 @@ pub(crate) mod test {
     use futures::{future::join_all, prelude::*};
     use itertools::Itertools;
     use jf_primitives::pcs::prelude::Commitment;
-    use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
+    use mpc_relation::{Arithmetization, Circuit, PlonkCircuit};
     use rand::thread_rng;
 
     use crate::{

@@ -18,7 +18,8 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_std::{format, vec::Vec};
 use jf_primitives::rescue::RescueParameter;
-use jf_relation::{
+use jf_utils::{bytes_to_field_elements, field_switching};
+use mpc_relation::{
     errors::{CircuitError, CircuitError::ParameterError},
     gadgets::{
         ecc::{PointVariable, SWToTEConParam},
@@ -26,7 +27,6 @@ use jf_relation::{
     },
     Circuit, PlonkCircuit,
 };
-use jf_utils::{bytes_to_field_elements, field_switching};
 
 /// Aggregate polynomial commitments into a single commitment (in the
 /// ScalarsAndBases form). Useful in batch opening.
@@ -463,8 +463,8 @@ mod test {
     use ark_ec::{short_weierstrass::SWCurveConfig, twisted_edwards::TECurveConfig};
     use ark_std::{vec, UniformRand};
     use jf_primitives::rescue::RescueParameter;
-    use jf_relation::{Circuit, MergeableCircuitType};
     use jf_utils::{field_switching, test_rng};
+    use mpc_relation::{Circuit, MergeableCircuitType};
 
     const RANGE_BIT_LEN_FOR_TEST: usize = 16;
     #[test]

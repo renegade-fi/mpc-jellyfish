@@ -15,7 +15,7 @@ use crate::{
     rescue::RescueParameter,
 };
 use ark_std::vec::Vec;
-use jf_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
+use mpc_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
 
 type SparseMerkleTree<F> = RescueSparseMerkleTree<BigUint, F>;
 use num_bigint::BigUint;
@@ -132,7 +132,7 @@ mod test {
     use ark_ed_on_bls12_381_bandersnatch::Fq as FqEd381b;
     use ark_ed_on_bn254::Fq as FqEd254;
     use hashbrown::HashMap;
-    use jf_relation::{Circuit, PlonkCircuit};
+    use mpc_relation::{Circuit, PlonkCircuit};
     use num_bigint::BigUint;
 
     type SparseMerkleTree<F> = RescueSparseMerkleTree<BigUint, F>;

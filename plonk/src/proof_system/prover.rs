@@ -31,8 +31,8 @@ use jf_primitives::pcs::{
     prelude::{Commitment, UnivariateKzgPCS},
     PolynomialCommitmentScheme,
 };
-use jf_relation::{constants::GATE_WIDTH, Arithmetization};
 use jf_utils::par_utils::parallelizable_slice_iter;
+use mpc_relation::{constants::GATE_WIDTH, Arithmetization};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 

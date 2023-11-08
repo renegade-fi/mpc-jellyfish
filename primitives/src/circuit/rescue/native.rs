@@ -10,13 +10,13 @@ use crate::rescue::{
 use ark_ff::PrimeField;
 use ark_std::{boxed::Box, format, string::ToString, vec, vec::Vec};
 use itertools::Itertools;
-use jf_relation::{
+use jf_utils::compute_len_to_next_multiple;
+use mpc_relation::{
     constants::GATE_WIDTH,
     errors::{CircuitError, CircuitError::ParameterError},
     gates::{FifthRootGate, Gate},
     Circuit, PlonkCircuit, Variable,
 };
-use jf_utils::compute_len_to_next_multiple;
 
 use super::{PermutationGadget, RescueGadget, SpongeStateVar};
 
@@ -542,7 +542,7 @@ mod tests {
     use ark_ff::{FftField, PrimeField};
     use ark_std::{vec, vec::Vec};
     use itertools::Itertools;
-    use jf_relation::{Circuit, PlonkCircuit, Variable};
+    use mpc_relation::{Circuit, PlonkCircuit, Variable};
 
     fn gen_state_matrix_constant<F: PrimeField>(
     ) -> (RescueVector<F>, RescueMatrix<F>, RescueVector<F>) {

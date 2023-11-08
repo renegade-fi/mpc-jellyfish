@@ -22,7 +22,7 @@ pub mod multiprover;
 pub mod proof_system;
 pub mod transcript;
 
-pub use jf_relation::PlonkType;
+pub use mpc_relation::PlonkType;
 
 #[cfg(feature = "test_apis")]
 pub mod testing_apis;

@@ -3,7 +3,7 @@
 use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_mpc::algebra::{AuthenticatedScalarResult, Scalar};
-use jf_relation::{
+use mpc_relation::{
     constants::{GATE_WIDTH, N_MUL_SELECTORS},
     errors::CircuitError,
     gates::{
