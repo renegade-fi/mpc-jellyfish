@@ -10,4 +10,4 @@ mod structs;
 pub use constraint_system::*;
 pub(crate) use prover::*;
 pub use snark::*;
-pub(crate) use structs::*;
+pub use structs::*;
