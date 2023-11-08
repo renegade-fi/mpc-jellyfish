@@ -31,7 +31,7 @@ pub(crate) struct MpcOracles<C: CurveGroup> {
 /// We hold handles to incomplete computations (transcript evaluations) instead
 /// of the underlying values, as per the MPC framework's standard
 #[derive(Debug)]
-pub struct MpcChallenges<C: CurveGroup> {
+pub(crate) struct MpcChallenges<C: CurveGroup> {
     /// The parameterization of the random linear combination of gate, copy, and
     /// grand product polynomials
     pub alpha: ScalarResult<C>,
