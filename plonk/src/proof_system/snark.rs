@@ -40,6 +40,7 @@ use jf_primitives::{
 use jf_utils::par_utils::parallelizable_slice_iter;
 use mpc_relation::{
     constants::compute_coset_representatives, gadgets::ecc::SWToTEConParam, Arithmetization,
+    ConstraintSystem,
 };
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -691,7 +692,7 @@ pub mod test {
     use jf_utils::test_rng;
     use mpc_relation::{
         constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam, Arithmetization, Circuit,
-        MergeableCircuitType, PlonkCircuit,
+        ConstraintSystem, MergeableCircuitType, PlonkCircuit,
     };
 
     // Different `m`s lead to different circuits.

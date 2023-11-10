@@ -20,7 +20,7 @@ use mpc_relation::{
         ecc::{MultiScalarMultiplicationCircuit, PointVariable, SWToTEConParam, TEPoint},
         ultraplonk::mod_arith::{FpElem, FpElemVar},
     },
-    Circuit, PlonkCircuit, Variable,
+    ConstraintSystem, PlonkCircuit, Variable,
 };
 
 mod gadgets;

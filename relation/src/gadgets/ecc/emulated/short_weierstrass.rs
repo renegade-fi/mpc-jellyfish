@@ -9,7 +9,7 @@
 use crate::{
     errors::CircuitError,
     gadgets::{from_emulated_field, EmulatedVariable, EmulationConfig, SerializableEmulatedStruct},
-    BoolVar, Circuit, PlonkCircuit,
+    BoolVar, Circuit, ConstraintSystem, PlonkCircuit,
 };
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ff::PrimeField;

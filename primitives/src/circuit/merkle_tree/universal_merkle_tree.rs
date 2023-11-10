@@ -15,7 +15,9 @@ use crate::{
     rescue::RescueParameter,
 };
 use ark_std::vec::Vec;
-use mpc_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
+use mpc_relation::{
+    errors::CircuitError, BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable,
+};
 
 type SparseMerkleTree<F> = RescueSparseMerkleTree<BigUint, F>;
 use num_bigint::BigUint;

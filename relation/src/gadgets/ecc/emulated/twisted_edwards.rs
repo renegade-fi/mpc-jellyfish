@@ -9,7 +9,7 @@
 use crate::{
     errors::CircuitError,
     gadgets::{ecc::TEPoint, EmulatedVariable, EmulationConfig},
-    BoolVar, Circuit, PlonkCircuit,
+    BoolVar, ConstraintSystem, PlonkCircuit,
 };
 use ark_ff::PrimeField;
 

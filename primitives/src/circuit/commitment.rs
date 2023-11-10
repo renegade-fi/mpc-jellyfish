@@ -11,7 +11,7 @@ use crate::{
     utils::pad_with,
 };
 use ark_std::vec;
-use mpc_relation::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
+use mpc_relation::{errors::CircuitError, ConstraintSystem, PlonkCircuit, Variable};
 
 use super::rescue::RescueNativeGadget;
 

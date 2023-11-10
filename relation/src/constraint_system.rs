@@ -70,7 +70,7 @@ pub enum MergeableCircuitType {
 }
 
 /// An interface for Plonk constraint systems.
-pub trait Circuit<F: Field> {
+pub trait Circuit<F: Field>: ConstraintSystem<F> {
     /// The number of constraints.
     fn num_gates(&self) -> usize;
 
@@ -120,6 +120,16 @@ pub trait Circuit<F: Field> {
     /// Set a variable to a public variable
     fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError>;
 
+    /// Return the witness value of variable `idx`.
+    /// Return error if the input variable is invalid.
+    fn witness(&self, idx: Variable) -> Result<F, CircuitError>;
+}
+
+/// An interface to add gates to a circuit that generalizes across wiring
+/// implementations
+///
+/// Effectively abstracts the variable-centric gate interface
+pub trait ConstraintSystem<F: Field> {
     /// Return a default variable with value zero.
     fn zero(&self) -> Variable;
 
@@ -135,10 +145,6 @@ pub trait Circuit<F: Field> {
     fn true_var(&self) -> BoolVar {
         BoolVar::new_unchecked(self.one())
     }
-
-    /// Return the witness value of variable `idx`.
-    /// Return error if the input variable is invalid.
-    fn witness(&self, idx: Variable) -> Result<F, CircuitError>;
 
     /// Common gates that should be implemented in any constraint systems.
     ///
@@ -678,6 +684,13 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         Ok(())
     }
 
+    fn witness(&self, idx: Variable) -> Result<F, CircuitError> {
+        self.check_var_bound(idx)?;
+        Ok(self.witness[idx])
+    }
+}
+
+impl<F: FftField> ConstraintSystem<F> for PlonkCircuit<F> {
     /// Default zero variable
     fn zero(&self) -> Variable {
         0
@@ -686,11 +699,6 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
     /// Default one variable
     fn one(&self) -> Variable {
         1
-    }
-
-    fn witness(&self, idx: Variable) -> Result<F, CircuitError> {
-        self.check_var_bound(idx)?;
-        Ok(self.witness[idx])
     }
 
     fn enforce_constant(&mut self, var: Variable, constant: F) -> Result<(), CircuitError> {
@@ -1690,7 +1698,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use super::{Arithmetization, Circuit, PlonkCircuit};
+    use super::{Arithmetization, Circuit, ConstraintSystem, PlonkCircuit};
     use crate::{constants::compute_coset_representatives, errors::CircuitError};
     use ark_bls12_377::Fq as Fq377;
     use ark_ed_on_bls12_377::Fq as FqEd377;

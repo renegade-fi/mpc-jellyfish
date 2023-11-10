@@ -8,7 +8,7 @@
 //! useful for rescue hash function.
 
 use super::mod_arith::{FpElem, FpElemVar};
-use crate::{errors::CircuitError, Circuit, PlonkCircuit};
+use crate::{errors::CircuitError, ConstraintSystem, PlonkCircuit};
 use ark_ff::{BigInteger, PrimeField};
 use ark_std::{format, vec::Vec};
 

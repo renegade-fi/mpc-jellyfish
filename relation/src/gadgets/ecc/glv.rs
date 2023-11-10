@@ -7,7 +7,7 @@
 use crate::{
     errors::CircuitError,
     gadgets::ecc::{MultiScalarMultiplicationCircuit, PointVariable},
-    BoolVar, Circuit, PlonkCircuit, Variable,
+    BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable,
 };
 use ark_ec::{
     twisted_edwards::{Projective, TECurveConfig},

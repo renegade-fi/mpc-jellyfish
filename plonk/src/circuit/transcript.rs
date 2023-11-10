@@ -21,7 +21,7 @@ use mpc_relation::{
         ecc::{PointVariable, SWToTEConParam},
         ultraplonk::mod_arith::FpElemVar,
     },
-    Circuit, PlonkCircuit, Variable,
+    ConstraintSystem, PlonkCircuit, Variable,
 };
 
 /// Struct of variables representing a Rescue transcript type, including
@@ -233,7 +233,7 @@ mod tests {
     use ark_std::{format, UniformRand};
     use jf_primitives::pcs::prelude::{Commitment, UnivariateVerifierParam};
     use jf_utils::{bytes_to_field_elements, field_switching, test_rng};
-    use mpc_relation::gadgets::ecc::TEPoint;
+    use mpc_relation::{gadgets::ecc::TEPoint, Circuit};
 
     const RANGE_BIT_LEN_FOR_TEST: usize = 16;
     #[test]

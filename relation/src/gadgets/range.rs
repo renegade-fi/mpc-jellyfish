@@ -8,7 +8,8 @@
 
 use super::utils::next_multiple;
 use crate::{
-    constants::GATE_WIDTH, errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable,
+    constants::GATE_WIDTH, errors::CircuitError, BoolVar, Circuit, ConstraintSystem, PlonkCircuit,
+    Variable,
 };
 use ark_ff::{BigInteger, PrimeField};
 use ark_std::{format, string::ToString, vec::Vec};
