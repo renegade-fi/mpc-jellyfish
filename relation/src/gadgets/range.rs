@@ -6,10 +6,9 @@
 
 //! Implemtation of circuit lookup related gadgets
 
-use super::utils::next_multiple;
 use crate::{
-    constants::GATE_WIDTH, errors::CircuitError, BoolVar, Circuit, ConstraintSystem, PlonkCircuit,
-    Variable,
+    constants::GATE_WIDTH, errors::CircuitError, next_multiple, BoolVar, Circuit, ConstraintSystem,
+    PlonkCircuit, Variable,
 };
 use ark_ff::{BigInteger, PrimeField};
 use ark_std::{format, string::ToString, vec::Vec};
