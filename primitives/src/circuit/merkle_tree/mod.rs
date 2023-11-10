@@ -8,7 +8,9 @@
 //! RescueMerkleTree and RescueSparseMerkleTree.
 
 use ark_ff::PrimeField;
-use mpc_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
+use mpc_relation::{
+    errors::CircuitError, BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable,
+};
 
 mod universal_merkle_tree;
 use ark_std::{string::ToString, vec::Vec};

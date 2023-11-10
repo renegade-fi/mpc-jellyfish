@@ -7,7 +7,7 @@
 //! This module implements multi-scalar-multiplication circuits.
 
 use super::{PointVariable, TEPoint};
-use crate::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
+use crate::{errors::CircuitError, Circuit, ConstraintSystem, PlonkCircuit, Variable};
 use ark_ec::{
     twisted_edwards::{Projective, TECurveConfig as Config},
     CurveConfig,

@@ -19,7 +19,7 @@ use jf_utils::{compute_len_to_next_multiple, field_switching};
 use mpc_relation::{
     errors::CircuitError::{self, ParameterError},
     gadgets::ultraplonk::mod_arith::{FpElem, FpElemVar},
-    Circuit, PlonkCircuit,
+    ConstraintSystem, PlonkCircuit,
 };
 
 use super::{PermutationGadget, RescueGadget, SpongeStateVar};

@@ -94,6 +94,8 @@ mod test {
     use ark_std::rand::Rng;
     use jf_utils::test_rng;
 
+    use crate::ConstraintSystem;
+
     const RANGE_BIT_LEN_FOR_TEST: usize = 8;
     const RANGE_SIZE_FOR_TEST: usize = 256;
 

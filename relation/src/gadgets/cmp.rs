@@ -6,7 +6,7 @@
 
 //! Comparison gadgets for circuit
 
-use crate::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
+use crate::{errors::CircuitError, BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable};
 use ark_ff::{BigInteger, PrimeField};
 
 impl<F: PrimeField> PlonkCircuit<F> {

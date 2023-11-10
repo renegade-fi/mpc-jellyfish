@@ -23,7 +23,7 @@ use jf_utils::fr_to_fq;
 use mpc_relation::{
     errors::CircuitError,
     gadgets::ecc::{PointVariable, TEPoint},
-    BoolVar, Circuit, PlonkCircuit, Variable,
+    BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable,
 };
 
 #[derive(Debug, Clone)]

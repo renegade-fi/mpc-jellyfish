@@ -10,7 +10,7 @@ use mpc_relation::{
         ConstantAdditionGate, ConstantMultiplicationGate, FifthRootGate, LinCombGate, MulAddGate,
         QuadPolyGate,
     },
-    Variable,
+    ConstraintSystem, Variable,
 };
 
 use crate::multiprover::proof_system::{MpcCircuit, MpcPlonkCircuit};

@@ -192,7 +192,7 @@ mod tests {
     };
     use futures::future::join_all;
     use itertools::Itertools;
-    use mpc_relation::PlonkType;
+    use mpc_relation::{ConstraintSystem, PlonkType};
     use rand::{thread_rng, Rng};
 
     use crate::{
@@ -252,7 +252,7 @@ mod tests {
         let b1_plus_a0 = cs.add(b[1], a[0])?;
         let b1_minus_a0 = cs.sub(b[1], a[0])?;
         cs.mul_gate(b1_plus_a0, b1_minus_a0, c)?;
-        cs.enforce_constant(b[0], Scalar::from(m as u64 * 2))?;
+        cs.enforce_constant(b[0], (m as u64 * 2).into())?;
 
         // Finalize the circuit
         cs.finalize_for_arithmetization()?;

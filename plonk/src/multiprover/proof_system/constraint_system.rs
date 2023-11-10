@@ -2,7 +2,7 @@
 //! MPC-enabled arithmetic
 
 use ark_ec::CurveGroup;
-use ark_ff::{FftField, Zero};
+use ark_ff::{FftField, One, Zero};
 use ark_mpc::{
     algebra::{AuthenticatedDensePoly, AuthenticatedScalarResult, Scalar, ScalarResult},
     gadgets::prefix_product,
@@ -21,7 +21,7 @@ use mpc_relation::{
         AdditionGate, BoolGate, ConstantGate, EqualityGate, Gate, IoGate, MultiplicationGate,
         PaddingGate, SubtractionGate,
     },
-    GateId, Variable, WireId,
+    ConstraintSystem, GateId, Variable, WireId,
 };
 
 // --------------------
@@ -52,7 +52,7 @@ impl BoolVar {
 /// This is largely a re-implementation of the existing `Circuit` trait, made to
 /// work over a secret shared field
 #[async_trait]
-pub trait MpcCircuit<C: CurveGroup> {
+pub trait MpcCircuit<C: CurveGroup>: ConstraintSystem<C::ScalarField> {
     /// The number of constraints
     fn num_gates(&self) -> usize;
 
@@ -115,69 +115,9 @@ pub trait MpcCircuit<C: CurveGroup> {
     /// Set a variable to a public variable
     fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError>;
 
-    /// Return a default variable with value zero.
-    fn zero(&self) -> Variable;
-
-    /// Return a default variable with value one.
-    fn one(&self) -> Variable;
-
-    /// Return a default variable with value `false` (namely zero).
-    fn false_var(&self) -> BoolVar {
-        BoolVar::new_unchecked(self.zero())
-    }
-
-    /// Return a default variable with value `true` (namely one).
-    fn true_var(&self) -> BoolVar {
-        BoolVar::new_unchecked(self.one())
-    }
-
     /// Return the witness value of variable `idx`.
     /// Return error if the input variable is invalid.
     fn witness(&self, idx: Variable) -> Result<AuthenticatedScalarResult<C>, CircuitError>;
-
-    /// Common gates that should be implemented in any constraint systems.
-    ///
-    /// Constrain a variable to a constant.
-    /// Return error if `var` is an invalid variable.
-    fn enforce_constant(&mut self, var: Variable, constant: Scalar<C>) -> Result<(), CircuitError>;
-
-    /// Constrain variable `c` to the addition of `a` and `b`.
-    /// Return error if the input variables are invalid.
-    fn add_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError>;
-
-    /// Obtain a variable representing an addition.
-    /// Return the index of the variable.
-    /// Return error if the input variables are invalid.
-    fn add(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError>;
-
-    /// Constrain variable `c` to the subtraction of `a` and `b`.
-    /// Return error if the input variables are invalid.
-    fn sub_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError>;
-
-    /// Obtain a variable representing a subtraction.
-    /// Return the index of the variable.
-    /// Return error if the input variables are invalid.
-    fn sub(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError>;
-
-    /// Constrain variable `c` to the multiplication of `a` and `b`.
-    /// Return error if the input variables are invalid.
-    fn mul_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError>;
-
-    /// Obtain a variable representing a multiplication.
-    /// Return the index of the variable.
-    /// Return error if the input variables are invalid.
-    fn mul(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError>;
-
-    /// Constrain a variable to a bool.
-    /// Return error if the input is invalid.
-    fn enforce_bool(&mut self, a: Variable) -> Result<(), CircuitError>;
-
-    /// Constrain two variables to have the same value.
-    /// Return error if the input variables are invalid.
-    fn enforce_equal(&mut self, a: Variable, b: Variable) -> Result<(), CircuitError>;
-
-    /// Pad the circuit with n dummy gates
-    fn pad_gates(&mut self, n: usize);
 }
 
 /// An abstraction shimming the `Circuit` abstraction and the PIOP based
@@ -305,8 +245,8 @@ where
             fabric,
         };
 
-        circuit.enforce_constant(0, Scalar::zero()).unwrap();
-        circuit.enforce_constant(1, Scalar::one()).unwrap();
+        circuit.enforce_constant(0, C::ScalarField::zero()).unwrap();
+        circuit.enforce_constant(1, C::ScalarField::one()).unwrap();
 
         circuit
     }
@@ -742,7 +682,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<Variable, CircuitError> {
         let authenticated_val = self.fabric.one_authenticated() * val;
         let var = self.create_variable(authenticated_val)?;
-        self.enforce_constant(var, val)?;
+        self.enforce_constant(var, val.inner())?;
 
         Ok(var)
     }
@@ -778,6 +718,14 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
+    fn witness(&self, idx: Variable) -> Result<AuthenticatedScalarResult<C>, CircuitError> {
+        self.check_var_bound(idx)?;
+
+        Ok(self.witness[idx].clone())
+    }
+}
+
+impl<C: CurveGroup> ConstraintSystem<C::ScalarField> for MpcPlonkCircuit<C> {
     fn zero(&self) -> Variable {
         0
     }
@@ -786,17 +734,19 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         1
     }
 
-    fn witness(&self, idx: Variable) -> Result<AuthenticatedScalarResult<C>, CircuitError> {
-        self.check_var_bound(idx)?;
-
-        Ok(self.witness[idx].clone())
+    fn support_lookup(&self) -> bool {
+        false
     }
 
-    fn enforce_constant(&mut self, var: Variable, constant: Scalar<C>) -> Result<(), CircuitError> {
+    fn enforce_constant(
+        &mut self,
+        var: Variable,
+        constant: C::ScalarField,
+    ) -> Result<(), CircuitError> {
         self.check_var_bound(var)?;
 
         let wire_vars = &[0, 0, 0, 0, var];
-        self.insert_gate(wire_vars, Box::new(ConstantGate(constant.inner())))?;
+        self.insert_gate(wire_vars, Box::new(ConstantGate(constant)))?;
         Ok(())
     }
 

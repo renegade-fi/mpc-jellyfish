@@ -21,7 +21,7 @@ use jf_utils::compute_len_to_next_multiple;
 use mpc_relation::{
     errors::CircuitError,
     gadgets::ecc::{PointVariable, TEPoint},
-    Circuit, PlonkCircuit, Variable,
+    Circuit, ConstraintSystem, PlonkCircuit, Variable,
 };
 
 /// Variables holding an encryption key.

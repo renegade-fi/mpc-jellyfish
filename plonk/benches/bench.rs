@@ -19,7 +19,7 @@ use mpc_plonk::{
     transcript::StandardTranscript,
     PlonkType,
 };
-use mpc_relation::{Circuit, PlonkCircuit};
+use mpc_relation::{ConstraintSystem, PlonkCircuit};
 use std::time::Instant;
 
 const NUM_REPETITIONS: usize = 10;

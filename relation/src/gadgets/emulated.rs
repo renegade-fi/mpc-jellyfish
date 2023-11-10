@@ -12,7 +12,7 @@
 //! componenet, with modulus 2^T, will be divided into limbs each with B bits
 //! where 2^{2B} < p.
 
-use crate::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
+use crate::{errors::CircuitError, BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable};
 use ark_ff::PrimeField;
 use ark_std::{string::ToString, vec, vec::Vec, One, Zero};
 use core::marker::PhantomData;
