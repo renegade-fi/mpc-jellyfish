@@ -20,9 +20,6 @@ pub use emulated::*;
 pub use logic::*;
 pub use range::*;
 
-// Helper functions
-mod utils;
-
 /// Utils for test
 pub mod test_utils {
     use crate::{errors::CircuitError, Arithmetization, Circuit, PlonkCircuit};

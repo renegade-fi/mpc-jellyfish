@@ -29,4 +29,4 @@ macro_rules! scalar {
         Scalar::new($x)
     };
 }
-pub(self) use scalar;
+pub(crate) use scalar;

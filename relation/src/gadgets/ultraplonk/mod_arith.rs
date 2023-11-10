@@ -8,8 +8,7 @@
 use crate::{
     constants::GATE_WIDTH,
     errors::CircuitError::{self, ParameterError},
-    gadgets::utils::next_multiple,
-    Circuit, ConstraintSystem, PlonkCircuit, Variable,
+    next_multiple, Circuit, ConstraintSystem, PlonkCircuit, Variable,
 };
 use ark_ff::PrimeField;
 use ark_std::{format, string::ToString, vec, vec::Vec};
