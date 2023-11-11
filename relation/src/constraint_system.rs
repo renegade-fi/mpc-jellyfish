@@ -216,6 +216,31 @@ pub trait ConstraintSystem<F: Field> {
         q_muls: &[F; N_MUL_SELECTORS],
     ) -> Result<Variable, CircuitError>;
 
+    /// Add two values with coefficients `a` and `b`, i.e. `a * x + b * y`
+    fn add_with_coeffs(
+        &mut self,
+        x: Variable,
+        y: Variable,
+        a: &F,
+        b: &F,
+    ) -> Result<Variable, CircuitError> {
+        let one = self.one();
+        self.mul_add(&[x, one, y, one], &[*a, *b])
+    }
+
+    /// Multiply two values with an added coefficient `c`
+    ///
+    /// I.e. for variables x, y and constant c we compute c * x * y
+    fn mul_with_coeff(
+        &mut self,
+        a: Variable,
+        b: Variable,
+        c: &F,
+    ) -> Result<Variable, CircuitError> {
+        let zero = self.zero();
+        self.mul_add(&[a, b, zero, zero], &[*c, F::zero()])
+    }
+
     /// Obtain a variable representing the sum of a list of variables.
     /// Return error if variables are invalid.
     fn sum(&mut self, elems: &[Variable]) -> Result<Variable, CircuitError>;
@@ -958,7 +983,7 @@ impl<F: FftField> ConstraintSystem<F> for PlonkCircuit<F> {
         };
 
         // pad to ("next multiple of 3" + 1) in length
-        let mut padded: Vec<Variable> = elems.to_owned();
+        let mut padded: Vec<Variable> = elems.to_vec();
         let rate = GATE_WIDTH - 1; // rate at which each lc add
         let padded_len = next_multiple(elems.len() - 1, rate)? + 1;
         padded.resize(padded_len, self.zero());
