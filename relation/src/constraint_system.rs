@@ -261,6 +261,9 @@ pub trait ConstraintSystem<F: Field> {
     /// Return error if the input variable is invalid
     fn mul_constant(&mut self, input_var: Variable, elem: &F) -> Result<Variable, CircuitError>;
 
+    /// Takes the input to the fifth power
+    fn pow5(&mut self, x: Variable) -> Result<Variable, CircuitError>;
+
     // ---------------
     // | Constraints |
     // ---------------
@@ -1056,6 +1059,16 @@ impl<F: FftField> ConstraintSystem<F> for PlonkCircuit<F> {
         self.mul_constant_gate(input_var, *elem, output_var)?;
 
         Ok(output_var)
+    }
+
+    fn pow5(&mut self, x: Variable) -> Result<Variable, CircuitError> {
+        let val = self.witness(x)?;
+        let res = val.pow([5]);
+        let res_var = self.create_variable(res)?;
+
+        let wire_vars = &[x, 0, 0, 0, res_var];
+        self.insert_gate(wire_vars, Box::new(FifthRootGate))?;
+        Ok(res_var)
     }
 }
 
