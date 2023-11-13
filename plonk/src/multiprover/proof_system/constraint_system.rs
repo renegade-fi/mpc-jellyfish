@@ -19,8 +19,8 @@ use mpc_relation::{
     errors::CircuitError,
     gates::{
         AdditionGate, BoolGate, ConstantAdditionGate, ConstantGate, ConstantMultiplicationGate,
-        EqualityGate, Gate, IoGate, LinCombGate, MulAddGate, MultiplicationGate, PaddingGate,
-        SubtractionGate,
+        EqualityGate, FifthRootGate, Gate, IoGate, LinCombGate, MulAddGate, MultiplicationGate,
+        PaddingGate, SubtractionGate,
     },
     ConstraintSystem, GateId, Variable, WireId,
 };
@@ -1039,6 +1039,17 @@ impl<C: CurveGroup> ConstraintSystem<C::ScalarField> for MpcPlonkCircuit<C> {
         self.mul_constant_gate(input_var, *elem, output_var)?;
 
         Ok(output_var)
+    }
+
+    /// Creates a variable that is the fifth power of the input
+    fn pow5(&mut self, x: Variable) -> Result<Variable, CircuitError> {
+        let val = self.witness(x)?;
+        let res = val.pow(5);
+        let res_var = self.create_variable(res)?;
+
+        let wire_vars = &[x, 0, 0, 0, res_var];
+        self.insert_gate(wire_vars, Box::new(FifthRootGate))?;
+        Ok(res_var)
     }
 }
 
