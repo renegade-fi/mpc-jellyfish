@@ -22,7 +22,7 @@ use mpc_relation::{
         EqualityGate, FifthRootGate, Gate, IoGate, LinCombGate, MulAddGate, MultiplicationGate,
         PaddingGate, SubtractionGate,
     },
-    ConstraintSystem, GateId, Variable, WireId,
+    BoolVar, ConstraintSystem, GateId, Variable, WireId,
 };
 
 use crate::multiprover::gadgets::{next_multiple, scalar};
@@ -30,24 +30,6 @@ use crate::multiprover::gadgets::{next_multiple, scalar};
 // --------------------
 // | Traits and Types |
 // --------------------
-
-/// A variable of boolean type
-pub struct BoolVar(usize);
-
-impl From<BoolVar> for Variable {
-    fn from(value: BoolVar) -> Self {
-        value.0
-    }
-}
-
-impl BoolVar {
-    /// Create a new boolean variable from a variable index
-    ///
-    /// Do not constrain the underlying value to be boolean
-    pub(crate) fn new_unchecked(inner: usize) -> Self {
-        Self(inner)
-    }
-}
 
 /// The circuit abstraction; contains information about circuit structure and
 /// methods for constructing the circuit gate-by-gate
@@ -379,7 +361,7 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
     /// Note: This method opens the values of the witness to check
     /// satisfiability, it should only be used for testing
     #[cfg(feature = "test_apis")]
-    fn check_gate(
+    pub fn check_gate(
         &self,
         gate_id: Variable,
         pub_input: &AuthenticatedScalarResult<C>,
@@ -431,7 +413,7 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
         macro_rules! mask_selector {
             ($sel:expr, $x:expr) => {
                 if $sel != Scalar::zero() {
-                    res = res + $x;
+                    res = res + $sel * $x;
                 }
             };
         }

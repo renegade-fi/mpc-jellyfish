@@ -46,7 +46,7 @@ impl BoolVar {
     /// This is an internal API, shouldn't be used unless you know what you are
     /// doing. Normally you should only construct `BoolVar` through
     /// `Circuit::create_boolean_variable()`.
-    pub(crate) fn new_unchecked(inner: usize) -> Self {
+    pub fn new_unchecked(inner: usize) -> Self {
         Self(inner)
     }
 }
@@ -244,6 +244,33 @@ pub trait ConstraintSystem<F: Field> {
     /// Obtain a variable representing the sum of a list of variables.
     /// Return error if variables are invalid.
     fn sum(&mut self, elems: &[Variable]) -> Result<Variable, CircuitError>;
+
+    /// Sum a vector of variables with given coefficients
+    fn lc_sum(&mut self, elems: &[Variable], coeffs: &[F]) -> Result<Variable, CircuitError> {
+        assert_eq!(elems.len(), coeffs.len());
+
+        // Create partial linear combinations then sum them
+        let mut partials = Vec::new();
+
+        let n_lcs = next_multiple(elems.len(), GATE_WIDTH)?;
+        let mut padded_wires = elems.to_vec();
+        let mut padded_coeffs = coeffs.to_vec();
+
+        padded_wires.resize(n_lcs, self.zero());
+        padded_coeffs.resize(n_lcs, F::zero());
+
+        for (wires, coeffs) in padded_wires
+            .chunks(GATE_WIDTH)
+            .zip(padded_coeffs.chunks(GATE_WIDTH))
+        {
+            partials.push(self.lc(
+                &[wires[0], wires[1], wires[2], wires[3]],
+                &[coeffs[0], coeffs[1], coeffs[2], coeffs[3]],
+            )?);
+        }
+
+        self.sum(&partials)
+    }
 
     /// Constrain variable `y` to the addition of `a` and `c`, where `c` is a
     /// constant value Return error if the input variables are invalid.
