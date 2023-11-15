@@ -15,7 +15,8 @@ use mpc_relation::{
     constants::GATE_WIDTH,
     errors::{CircuitError, CircuitError::ParameterError},
     gates::{FifthRootGate, Gate},
-    Circuit, ConstraintSystem, PlonkCircuit, Variable,
+    traits::*,
+    PlonkCircuit, Variable,
 };
 
 use super::{PermutationGadget, RescueGadget, SpongeStateVar};
@@ -542,7 +543,7 @@ mod tests {
     use ark_ff::{FftField, PrimeField};
     use ark_std::{vec, vec::Vec};
     use itertools::Itertools;
-    use mpc_relation::{Circuit, ConstraintSystem, PlonkCircuit, Variable};
+    use mpc_relation::{traits::*, PlonkCircuit, Variable};
 
     fn gen_state_matrix_constant<F: PrimeField>(
     ) -> (RescueVector<F>, RescueMatrix<F>, RescueVector<F>) {

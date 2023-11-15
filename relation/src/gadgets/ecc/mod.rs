@@ -8,9 +8,7 @@
 //! non-native fields.
 
 use super::{from_emulated_field, EmulationConfig, SerializableEmulatedStruct};
-use crate::{
-    errors::CircuitError, gates::*, BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable,
-};
+use crate::{errors::CircuitError, gates::*, traits::*, BoolVar, PlonkCircuit, Variable};
 use ark_ec::{
     twisted_edwards::{Affine, Projective, TECurveConfig as Config},
     AffineRepr, CurveConfig, CurveGroup, ScalarMul,
@@ -598,7 +596,7 @@ fn compute_base_points<E: ScalarMul>(base: &E, len: usize) -> Result<[Vec<E>; 3]
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{gadgets::test_utils::test_variable_independence_for_circuit, Circuit};
+    use crate::gadgets::test_utils::test_variable_independence_for_circuit;
     use ark_bls12_377::{g1::Config as Param761, Fq as Fq377};
     use ark_ec::{twisted_edwards::TECurveConfig as Config, Group};
     use ark_ed_on_bls12_377::{EdwardsConfig as Param377, Fq as FqEd377};

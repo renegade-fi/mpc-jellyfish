@@ -19,7 +19,8 @@ use jf_utils::{compute_len_to_next_multiple, field_switching};
 use mpc_relation::{
     errors::CircuitError::{self, ParameterError},
     gadgets::ultraplonk::mod_arith::{FpElem, FpElemVar},
-    ConstraintSystem, PlonkCircuit,
+    traits::*,
+    PlonkCircuit,
 };
 
 use super::{PermutationGadget, RescueGadget, SpongeStateVar};
@@ -678,7 +679,8 @@ mod tests {
     use jf_utils::field_switching;
     use mpc_relation::{
         gadgets::ultraplonk::mod_arith::{FpElem, FpElemVar},
-        Circuit, PlonkCircuit,
+        traits::*,
+        PlonkCircuit,
     };
 
     const RANGE_BIT_LEN_FOR_TEST: usize = 8;

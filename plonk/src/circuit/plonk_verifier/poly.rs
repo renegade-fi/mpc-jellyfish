@@ -738,7 +738,6 @@ mod test {
     use ark_poly::Radix2EvaluationDomain;
     use ark_std::{One, UniformRand};
     use jf_utils::{field_switching, test_rng};
-    use mpc_relation::Circuit;
 
     const RANGE_BIT_LEN_FOR_TEST: usize = 16;
 

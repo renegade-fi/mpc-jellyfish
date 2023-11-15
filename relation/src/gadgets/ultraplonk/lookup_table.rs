@@ -6,9 +6,7 @@
 
 //! Lookup gates over variable tables.
 
-use crate::{
-    errors::CircuitError, gates::LookupGate, Circuit, ConstraintSystem, PlonkCircuit, Variable,
-};
+use crate::{errors::CircuitError, gates::LookupGate, traits::*, PlonkCircuit, Variable};
 use ark_ff::PrimeField;
 use ark_std::{boxed::Box, cmp::max};
 

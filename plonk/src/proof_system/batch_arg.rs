@@ -29,9 +29,7 @@ use ark_std::{
 };
 use jf_primitives::rescue::RescueParameter;
 use jf_utils::multi_pairing;
-use mpc_relation::{
-    gadgets::ecc::SWToTEConParam, Circuit, ConstraintSystem, MergeableCircuitType, PlonkCircuit,
-};
+use mpc_relation::{gadgets::ecc::SWToTEConParam, traits::*, MergeableCircuitType, PlonkCircuit};
 
 /// A batching argument.
 pub struct BatchArgument<E: Pairing>(PhantomData<E>);

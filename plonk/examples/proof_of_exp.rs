@@ -25,7 +25,7 @@ use mpc_plonk::{
     proof_system::{PlonkKzgSnark, UniversalSNARK},
     transcript::StandardTranscript,
 };
-use mpc_relation::{gadgets::ecc::TEPoint, Arithmetization, Circuit, PlonkCircuit};
+use mpc_relation::{gadgets::ecc::TEPoint, traits::*, PlonkCircuit};
 use rand_chacha::ChaCha20Rng;
 
 // The following example proves knowledge of exponent.

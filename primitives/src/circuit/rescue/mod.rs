@@ -12,7 +12,7 @@ mod non_native;
 
 use ark_ff::PrimeField;
 use ark_std::vec::Vec;
-use mpc_relation::{errors::CircuitError, Circuit};
+use mpc_relation::{errors::CircuitError, traits::*};
 pub use native::{RescueNativeGadget, RescueStateVar};
 pub use non_native::{RescueNonNativeGadget, RescueNonNativeStateVar};
 
