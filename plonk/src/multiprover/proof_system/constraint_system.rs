@@ -20,7 +20,7 @@ use mpc_relation::{
     gates::{
         AdditionGate, BoolGate, ConstantAdditionGate, ConstantGate, ConstantMultiplicationGate,
         EqualityGate, FifthRootGate, Gate, IoGate, LinCombGate, MulAddGate, MultiplicationGate,
-        PaddingGate, SubtractionGate,
+        MuxGate, PaddingGate, SubtractionGate,
     },
     BoolVar, ConstraintSystem, GateId, Variable, WireId,
 };
@@ -1031,6 +1031,38 @@ impl<C: CurveGroup> ConstraintSystem<C::ScalarField> for MpcPlonkCircuit<C> {
 
         let wire_vars = &[x, 0, 0, 0, res_var];
         self.insert_gate(wire_vars, Box::new(FifthRootGate))?;
+        Ok(res_var)
+    }
+
+    // ---------------
+    // | Logic Gates |
+    // ---------------
+
+    fn mux_gate(
+        &mut self,
+        sel: BoolVar,
+        a: Variable,
+        b: Variable,
+        c: Variable,
+    ) -> Result<(), CircuitError> {
+        self.check_var_bound(a)?;
+        self.check_var_bound(b)?;
+        self.check_var_bound(c)?;
+        self.check_var_bound(sel.into())?;
+
+        let wire_vars = &[sel.into(), a, sel.into(), b, c];
+        self.insert_gate(wire_vars, Box::new(MuxGate))
+    }
+
+    fn mux(&mut self, sel: BoolVar, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
+        let sel_eval = self.witness(sel.into())?;
+        let a_eval = self.witness(a)?;
+        let b_eval = self.witness(b)?;
+
+        let res = &sel_eval * &a_eval + (Scalar::one() - &sel_eval) * &b_eval;
+        let res_var = self.create_variable(res)?;
+
+        self.mux_gate(sel, a, b, res_var)?;
         Ok(res_var)
     }
 }

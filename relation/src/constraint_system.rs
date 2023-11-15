@@ -292,6 +292,22 @@ pub trait ConstraintSystem<F: Field> {
     fn pow5(&mut self, x: Variable) -> Result<Variable, CircuitError>;
 
     // ---------------
+    // | Logic Gates |
+    // ---------------
+
+    /// Constrains variable `c` to be `if sel { a } else b`
+    fn mux_gate(
+        &mut self,
+        sel: BoolVar,
+        a: Variable,
+        b: Variable,
+        c: Variable,
+    ) -> Result<(), CircuitError>;
+
+    /// Create a variable representation of `if sel { a } else { b }`
+    fn mux(&mut self, sel: BoolVar, a: Variable, b: Variable) -> Result<Variable, CircuitError>;
+
+    // ---------------
     // | Constraints |
     // ---------------
 
@@ -1096,6 +1112,33 @@ impl<F: FftField> ConstraintSystem<F> for PlonkCircuit<F> {
         let wire_vars = &[x, 0, 0, 0, res_var];
         self.insert_gate(wire_vars, Box::new(FifthRootGate))?;
         Ok(res_var)
+    }
+
+    fn mux_gate(
+        &mut self,
+        sel: BoolVar,
+        a: Variable,
+        b: Variable,
+        c: Variable,
+    ) -> Result<(), CircuitError> {
+        self.check_var_bound(a)?;
+        self.check_var_bound(b)?;
+        self.check_var_bound(c)?;
+        self.check_var_bound(sel.into())?;
+
+        let wire_vars = &[sel.into(), a, sel.into(), b, c];
+        self.insert_gate(wire_vars, Box::new(MuxGate))
+    }
+
+    fn mux(&mut self, sel: BoolVar, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
+        let sel_eval = self.witness(sel.into())?;
+        let out = if sel_eval == F::one() { a } else { b };
+
+        let out_eval = self.witness(out)?;
+        let out_var = self.create_variable(out_eval)?;
+
+        self.mux_gate(sel, a, b, out_var)?;
+        Ok(out_var)
     }
 }
 
