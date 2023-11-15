@@ -23,7 +23,8 @@ use jf_utils::fr_to_fq;
 use mpc_relation::{
     errors::CircuitError,
     gadgets::ecc::{PointVariable, TEPoint},
-    BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable,
+    traits::*,
+    BoolVar, PlonkCircuit, Variable,
 };
 
 #[derive(Debug, Clone)]
@@ -203,7 +204,7 @@ mod tests {
     use ark_ed_on_bls12_381::EdwardsConfig as Param381;
     use ark_ed_on_bls12_381_bandersnatch::EdwardsConfig as Param381b;
     use ark_ed_on_bn254::EdwardsConfig as Param254;
-    use mpc_relation::{errors::CircuitError, Circuit, PlonkCircuit, Variable};
+    use mpc_relation::{errors::CircuitError, PlonkCircuit, Variable};
 
     #[test]
     fn test_dsa_circuit() -> Result<(), CircuitError> {

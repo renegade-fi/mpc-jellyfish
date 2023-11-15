@@ -7,7 +7,8 @@
 use crate::{
     errors::CircuitError,
     gadgets::ecc::{MultiScalarMultiplicationCircuit, PointVariable},
-    BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable,
+    traits::*,
+    BoolVar, PlonkCircuit, Variable,
 };
 use ark_ec::{
     twisted_edwards::{Projective, TECurveConfig},
@@ -571,7 +572,7 @@ fn get_bits(a: &[bool]) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{errors::CircuitError, gadgets::ecc::TEPoint, Circuit, PlonkCircuit};
+    use crate::{errors::CircuitError, gadgets::ecc::TEPoint, PlonkCircuit};
     use ark_ec::{
         twisted_edwards::{Affine, TECurveConfig as Config},
         CurveConfig,

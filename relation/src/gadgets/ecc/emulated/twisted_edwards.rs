@@ -9,7 +9,8 @@
 use crate::{
     errors::CircuitError,
     gadgets::{ecc::TEPoint, EmulatedVariable, EmulationConfig},
-    BoolVar, ConstraintSystem, PlonkCircuit,
+    traits::*,
+    BoolVar, PlonkCircuit,
 };
 use ark_ff::PrimeField;
 
@@ -160,7 +161,8 @@ mod tests {
             ecc::{conversion::*, TEPoint},
             EmulationConfig,
         },
-        Circuit, PlonkCircuit,
+        traits::*,
+        PlonkCircuit,
     };
     use ark_bls12_377::{g1::Config as Param377, Fq as Fq377};
     use ark_bn254::Fr as Fr254;

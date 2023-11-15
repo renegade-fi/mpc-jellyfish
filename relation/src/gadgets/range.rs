@@ -7,8 +7,8 @@
 //! Implemtation of circuit lookup related gadgets
 
 use crate::{
-    constants::GATE_WIDTH, errors::CircuitError, next_multiple, BoolVar, Circuit, ConstraintSystem,
-    PlonkCircuit, Variable,
+    constants::GATE_WIDTH, errors::CircuitError, next_multiple, traits::*, BoolVar, PlonkCircuit,
+    Variable,
 };
 use ark_ff::{BigInteger, PrimeField};
 use ark_std::{format, string::ToString, vec::Vec};
@@ -144,8 +144,8 @@ impl<F: PrimeField> PlonkCircuit<F> {
 #[cfg(test)]
 mod test {
     use crate::{
-        errors::CircuitError, gadgets::test_utils::test_variable_independence_for_circuit, Circuit,
-        PlonkCircuit,
+        errors::CircuitError, gadgets::test_utils::test_variable_independence_for_circuit,
+        traits::*, PlonkCircuit,
     };
     use ark_bls12_377::Fq as Fq377;
     use ark_ed_on_bls12_377::Fq as FqEd377;

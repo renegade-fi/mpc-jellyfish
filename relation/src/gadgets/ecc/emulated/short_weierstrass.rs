@@ -9,7 +9,8 @@
 use crate::{
     errors::CircuitError,
     gadgets::{from_emulated_field, EmulatedVariable, EmulationConfig, SerializableEmulatedStruct},
-    BoolVar, Circuit, ConstraintSystem, PlonkCircuit,
+    traits::*,
+    BoolVar, PlonkCircuit,
 };
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ff::PrimeField;
@@ -334,7 +335,8 @@ mod tests {
     use crate::{
         errors::CircuitError,
         gadgets::{ecc::conversion::*, EmulationConfig, SerializableEmulatedStruct},
-        Circuit, PlonkCircuit,
+        traits::*,
+        PlonkCircuit,
     };
     use ark_bls12_377::{g1::Config as Param377, Fq as Fq377};
     use ark_bn254::{g1::Config as Param254, Fq as Fq254, Fr as Fr254};

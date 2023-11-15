@@ -40,7 +40,7 @@ mod tests {
     use ark_ed_on_bn254::Fq as FqEd254;
     use ark_ff::UniformRand;
     use ark_std::vec::Vec;
-    use mpc_relation::{Circuit, PlonkCircuit, Variable};
+    use mpc_relation::{traits::*, PlonkCircuit, Variable};
 
     macro_rules! test_prf_circuit {
         ($base_field:tt) => {

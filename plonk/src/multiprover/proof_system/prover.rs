@@ -821,7 +821,7 @@ pub(crate) mod test {
     use futures::{future::join_all, prelude::*};
     use itertools::Itertools;
     use jf_primitives::pcs::prelude::Commitment;
-    use mpc_relation::{Arithmetization, Circuit, ConstraintSystem, PlonkCircuit};
+    use mpc_relation::{traits::*, PlonkCircuit};
     use rand::thread_rng;
 
     use crate::{

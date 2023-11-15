@@ -32,7 +32,7 @@ use jf_primitives::pcs::{
     PolynomialCommitmentScheme,
 };
 use jf_utils::par_utils::parallelizable_slice_iter;
-use mpc_relation::{constants::GATE_WIDTH, Arithmetization};
+use mpc_relation::{constants::GATE_WIDTH, traits::*};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 

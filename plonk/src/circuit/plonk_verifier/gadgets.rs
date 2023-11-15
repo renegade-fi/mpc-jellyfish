@@ -25,7 +25,7 @@ use mpc_relation::{
         ecc::{PointVariable, SWToTEConParam},
         ultraplonk::mod_arith::{FpElem, FpElemVar},
     },
-    Circuit, PlonkCircuit,
+    PlonkCircuit,
 };
 
 /// Aggregate polynomial commitments into a single commitment (in the
@@ -464,7 +464,7 @@ mod test {
     use ark_std::{vec, UniformRand};
     use jf_primitives::rescue::RescueParameter;
     use jf_utils::{field_switching, test_rng};
-    use mpc_relation::{Circuit, MergeableCircuitType};
+    use mpc_relation::MergeableCircuitType;
 
     const RANGE_BIT_LEN_FOR_TEST: usize = 16;
     #[test]

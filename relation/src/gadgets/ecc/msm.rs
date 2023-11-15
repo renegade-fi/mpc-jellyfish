@@ -7,7 +7,7 @@
 //! This module implements multi-scalar-multiplication circuits.
 
 use super::{PointVariable, TEPoint};
-use crate::{errors::CircuitError, Circuit, ConstraintSystem, PlonkCircuit, Variable};
+use crate::{errors::CircuitError, traits::*, PlonkCircuit, Variable};
 use ark_ec::{
     twisted_edwards::{Projective, TECurveConfig as Config},
     CurveConfig,
@@ -368,7 +368,7 @@ fn ln_without_floats(a: usize) -> usize {
 mod tests {
 
     use super::*;
-    use crate::{gadgets::ecc::TEPoint, Circuit, PlonkType};
+    use crate::{gadgets::ecc::TEPoint, PlonkType};
     use ark_bls12_377::{g1::Config as Param377, Fq as Fq377};
     use ark_ec::{
         scalar_mul::variable_base::VariableBaseMSM,

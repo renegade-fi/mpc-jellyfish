@@ -7,7 +7,8 @@ use mpc_relation::{
     constants::{GATE_WIDTH, N_MUL_SELECTORS},
     errors::CircuitError,
     gates::{FifthRootGate, QuadPolyGate},
-    ConstraintSystem, Variable,
+    traits::*,
+    Variable,
 };
 
 use crate::multiprover::proof_system::{MpcCircuit, MpcPlonkCircuit};

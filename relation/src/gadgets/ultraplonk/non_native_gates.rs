@@ -8,7 +8,7 @@
 //! useful for rescue hash function.
 
 use super::mod_arith::{FpElem, FpElemVar};
-use crate::{errors::CircuitError, ConstraintSystem, PlonkCircuit};
+use crate::{errors::CircuitError, traits::*, PlonkCircuit};
 use ark_ff::{BigInteger, PrimeField};
 use ark_std::{format, vec::Vec};
 
@@ -197,7 +197,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Circuit, Variable};
+    use crate::Variable;
     use ark_bls12_377::Fq as Fq377;
     use ark_ed_on_bls12_377::Fq as FqEd377;
     use jf_utils::test_rng;

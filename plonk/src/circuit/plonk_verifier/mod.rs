@@ -20,7 +20,8 @@ use mpc_relation::{
         ecc::{MultiScalarMultiplicationCircuit, PointVariable, SWToTEConParam, TEPoint},
         ultraplonk::mod_arith::{FpElem, FpElemVar},
     },
-    ConstraintSystem, PlonkCircuit, Variable,
+    traits::*,
+    PlonkCircuit, Variable,
 };
 
 mod gadgets;
@@ -336,7 +337,7 @@ mod test {
     use jf_utils::{field_switching, test_rng};
     use mpc_relation::{
         gadgets::{ecc::TEPoint, test_utils::test_variable_independence_for_circuit},
-        Circuit, MergeableCircuitType,
+        MergeableCircuitType,
     };
 
     const RANGE_BIT_LEN_FOR_TEST: usize = 16;

@@ -10,7 +10,8 @@ use crate::{
     constants::{GATE_WIDTH, N_MUL_SELECTORS},
     errors::CircuitError,
     gates::{FifthRootGate, QuadPolyGate},
-    Circuit, ConstraintSystem, PlonkCircuit, Variable,
+    traits::*,
+    PlonkCircuit, Variable,
 };
 use ark_ff::PrimeField;
 use ark_std::{boxed::Box, string::ToString};
@@ -298,8 +299,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
 mod test {
     use crate::{
         constants::GATE_WIDTH, errors::CircuitError,
-        gadgets::test_utils::test_variable_independence_for_circuit, Circuit, ConstraintSystem,
-        PlonkCircuit,
+        gadgets::test_utils::test_variable_independence_for_circuit, traits::*, PlonkCircuit,
     };
     use ark_bls12_377::Fq as Fq377;
     use ark_ed_on_bls12_377::Fq as FqEd377;

@@ -12,7 +12,7 @@
 //! componenet, with modulus 2^T, will be divided into limbs each with B bits
 //! where 2^{2B} < p.
 
-use crate::{errors::CircuitError, BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable};
+use crate::{errors::CircuitError, traits::*, BoolVar, PlonkCircuit, Variable};
 use ark_ff::PrimeField;
 use ark_std::{string::ToString, vec, vec::Vec, One, Zero};
 use core::marker::PhantomData;
@@ -707,7 +707,7 @@ impl EmulationConfig<ark_bn254::Fr> for ark_bn254::Fq {
 #[cfg(test)]
 mod tests {
     use super::EmulationConfig;
-    use crate::{gadgets::from_emulated_field, Circuit, PlonkCircuit};
+    use crate::{gadgets::from_emulated_field, traits::*, PlonkCircuit};
     use ark_bls12_377::Fq as Fq377;
     use ark_bn254::{Fq as Fq254, Fr as Fr254};
     use ark_ff::{MontFp, PrimeField};

@@ -12,7 +12,7 @@ use ark_std::{
     rand::{CryptoRng, RngCore},
     vec::Vec,
 };
-use mpc_relation::Arithmetization;
+use mpc_relation::traits::*;
 pub mod batch_arg;
 pub(crate) mod prover;
 pub(crate) mod snark;

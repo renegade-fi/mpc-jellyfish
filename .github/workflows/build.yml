@@ -52,6 +52,10 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ github.token }}
+          args: >
+            --tests
+            --benches
+            --all-features
 
       - name: Audit
         uses: actions-rs/audit-check@v1
@@ -59,19 +63,12 @@ jobs:
           token: ${{ github.token }}
 
       - name: Check Bench
-        run: cargo bench --features test-srs --no-run
+        run: cargo bench --all-features --no-run
 
       - name: Check all tests and binaries compilation
         run: |
-          cargo check --workspace --tests --lib --bins
+          cargo check --workspace --all-features --tests --lib --bins
           cargo check --workspace --all-features
-
-      - name: Check no_std support and WASM compilation
-        env:
-          RUSTFLAGS: '-C target-cpu=generic --cfg curve25519_dalek_backend="u32"'
-        run: |
-          cargo check --no-default-features
-          cargo build --target wasm32-unknown-unknown --no-default-features
 
       - name: Test
         run: bash ./scripts/run_tests.sh

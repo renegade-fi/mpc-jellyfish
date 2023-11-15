@@ -22,7 +22,8 @@ use mpc_relation::{
         EqualityGate, FifthRootGate, Gate, IoGate, LinCombGate, MulAddGate, MultiplicationGate,
         MuxGate, PaddingGate, SubtractionGate,
     },
-    BoolVar, ConstraintSystem, GateId, Variable, WireId,
+    traits::*,
+    BoolVar, GateId, Variable, WireId,
 };
 
 use crate::multiprover::gadgets::{next_multiple, scalar};
@@ -234,25 +235,6 @@ where
         circuit.enforce_constant(1, C::ScalarField::one()).unwrap();
 
         circuit
-    }
-
-    /// Insert an algebraic gate
-    pub fn insert_gate(
-        &mut self,
-        wire_vars: &[Variable; GATE_WIDTH + 1],
-        gate: Box<dyn Gate<C::ScalarField>>,
-    ) -> Result<(), CircuitError> {
-        self.check_finalize_flag(false)?;
-
-        for (wire_var, wire_variable) in wire_vars
-            .iter()
-            .zip(self.wire_variables.iter_mut().take(GATE_WIDTH + 1))
-        {
-            wire_variable.push(*wire_var)
-        }
-
-        self.gates.push(gate);
-        Ok(())
     }
 
     /// Checks if a variable is strictly less than the number of variables.
@@ -728,6 +710,25 @@ impl<C: CurveGroup> ConstraintSystem<C::ScalarField> for MpcPlonkCircuit<C> {
         for _ in 0..n {
             self.insert_gate(wire_vars, Box::new(EqualityGate)).unwrap();
         }
+    }
+
+    /// Insert an algebraic gate
+    fn insert_gate(
+        &mut self,
+        wire_vars: &[Variable; GATE_WIDTH + 1],
+        gate: Box<dyn Gate<C::ScalarField>>,
+    ) -> Result<(), CircuitError> {
+        self.check_finalize_flag(false)?;
+
+        for (wire_var, wire_variable) in wire_vars
+            .iter()
+            .zip(self.wire_variables.iter_mut().take(GATE_WIDTH + 1))
+        {
+            wire_variable.push(*wire_var)
+        }
+
+        self.gates.push(gate);
+        Ok(())
     }
 
     fn enforce_constant(

@@ -9,7 +9,8 @@
 use crate::{
     errors::CircuitError,
     gates::{CondSelectGate, LogicOrGate, LogicOrOutputGate},
-    BoolVar, Circuit, ConstraintSystem, PlonkCircuit, Variable,
+    traits::*,
+    BoolVar, PlonkCircuit, Variable,
 };
 use ark_ff::PrimeField;
 use ark_std::{boxed::Box, string::ToString};
@@ -168,8 +169,8 @@ impl<F: PrimeField> PlonkCircuit<F> {
 #[cfg(test)]
 mod test {
     use crate::{
-        errors::CircuitError, gadgets::test_utils::test_variable_independence_for_circuit, Circuit,
-        ConstraintSystem, PlonkCircuit,
+        errors::CircuitError, gadgets::test_utils::test_variable_independence_for_circuit,
+        traits::*, PlonkCircuit,
     };
     use ark_bls12_377::Fq as Fq377;
     use ark_ed_on_bls12_377::Fq as FqEd377;

@@ -21,7 +21,8 @@ use jf_utils::compute_len_to_next_multiple;
 use mpc_relation::{
     errors::CircuitError,
     gadgets::ecc::{PointVariable, TEPoint},
-    Circuit, ConstraintSystem, PlonkCircuit, Variable,
+    traits::*,
+    PlonkCircuit, Variable,
 };
 
 /// Variables holding an encryption key.
@@ -265,7 +266,7 @@ mod tests {
     use ark_ff::UniformRand;
     use ark_std::{vec, vec::Vec};
     use jf_utils::fr_to_fq;
-    use mpc_relation::{gadgets::ecc::TEPoint, Circuit, PlonkCircuit, Variable};
+    use mpc_relation::{gadgets::ecc::TEPoint, traits::*, PlonkCircuit, Variable};
 
     #[test]
     fn apply_counter_mode_stream_no_padding() {
