@@ -10,8 +10,12 @@ use ark_ec::{
     pairing::Pairing,
     short_weierstrass::{Affine, SWCurveConfig},
 };
-use ark_mpc::{algebra::AuthenticatedScalarResult, MpcFabric};
+use ark_mpc::{
+    algebra::{AuthenticatedScalarResult, Scalar},
+    MpcFabric,
+};
 use itertools::Itertools;
+use mpc_relation::traits::Circuit;
 
 use crate::{
     errors::{PlonkError, SnarkError},
@@ -42,6 +46,11 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
     ) -> Result<CollaborativeProof<E>, PlonkError>
     where
         C: MpcArithmetization<E::G1>,
+        C: Circuit<
+            E::ScalarField,
+            Wire = AuthenticatedScalarResult<E::G1>,
+            Constant = Scalar<E::G1>,
+        >,
     {
         let domain_size = circuit.eval_domain_size()?;
         let num_wire_types = circuit.num_wire_types();
@@ -199,7 +208,7 @@ mod tests {
         errors::PlonkError,
         multiprover::proof_system::{
             test::{setup_snark, test_multiprover_circuit, test_singleprover_circuit, TestGroup},
-            MpcCircuit, MpcPlonkCircuit,
+            MpcPlonkCircuit,
         },
         proof_system::{snark::test::gen_circuit_for_test, PlonkKzgSnark},
         transcript::SolidityTranscript,

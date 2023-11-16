@@ -88,6 +88,7 @@ pub trait UniversalSNARK<E: Pairing> {
     ) -> Result<Self::Proof, Self::Error>
     where
         C: Arithmetization<E::ScalarField>,
+        C: Circuit<E::ScalarField, Wire = E::ScalarField, Constant = E::ScalarField>,
         R: CryptoRng + RngCore,
         T: PlonkTranscript<E::BaseField>;
 

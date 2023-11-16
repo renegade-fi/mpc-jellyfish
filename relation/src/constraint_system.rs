@@ -9,8 +9,7 @@ use crate::{
     constants::{compute_coset_representatives, GATE_WIDTH, N_MUL_SELECTORS},
     errors::{CircuitError, CircuitError::*},
     gates::*,
-    next_multiple,
-    traits::{Arithmetization, Circuit, ConstraintSystem},
+    traits::{Arithmetization, Circuit},
 };
 use ark_ff::{FftField, PrimeField};
 use ark_poly::{
@@ -310,6 +309,19 @@ impl<F: FftField> PlonkCircuit<F> {
 }
 
 impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
+    type Wire = F;
+    type Constant = F;
+
+    /// Default zero variable
+    fn zero(&self) -> Variable {
+        0
+    }
+
+    /// Default one variable
+    fn one(&self) -> Variable {
+        1
+    }
+
     fn num_gates(&self) -> usize {
         self.gates.len()
     }
@@ -334,6 +346,11 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
                 self.witness(var)
             })
             .collect::<Result<Vec<F>, CircuitError>>()
+    }
+
+    fn witness(&self, idx: Variable) -> Result<F, CircuitError> {
+        self.check_var_bound(idx)?;
+        Ok(self.witness[idx])
     }
 
     fn check_circuit_satisfiability(&self, pub_input: &[F]) -> Result<(), CircuitError> {
@@ -403,6 +420,17 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         Ok(())
     }
 
+    fn support_lookup(&self) -> bool {
+        self.plonk_params.plonk_type == PlonkType::UltraPlonk
+    }
+
+    fn check_var(&self, var: Variable) -> Result<(), CircuitError> {
+        if var >= self.num_vars {
+            return Err(VarIndexOutOfBound(var, self.num_vars));
+        }
+        Ok(())
+    }
+
     fn create_constant_variable(&mut self, val: F) -> Result<Variable, CircuitError> {
         let var = self.create_variable(val)?;
         self.enforce_constant(var, val)?;
@@ -417,12 +445,6 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         Ok(self.num_vars - 1)
     }
 
-    fn create_public_variable(&mut self, val: F) -> Result<Variable, CircuitError> {
-        let var = self.create_variable(val)?;
-        self.set_variable_public(var)?;
-        Ok(var)
-    }
-
     fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError> {
         self.check_finalize_flag(false)?;
         self.pub_input_gate_ids.push(self.num_gates());
@@ -431,29 +453,6 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         let wire_vars = &[0, 0, 0, 0, var];
         self.insert_gate(wire_vars, Box::new(IoGate))?;
         Ok(())
-    }
-
-    fn witness(&self, idx: Variable) -> Result<F, CircuitError> {
-        self.check_var_bound(idx)?;
-        Ok(self.witness[idx])
-    }
-}
-
-impl<F: FftField> ConstraintSystem<F> for PlonkCircuit<F> {
-    // Plookup-related methods
-    //
-    fn support_lookup(&self) -> bool {
-        self.plonk_params.plonk_type == PlonkType::UltraPlonk
-    }
-
-    /// Default zero variable
-    fn zero(&self) -> Variable {
-        0
-    }
-
-    /// Default one variable
-    fn one(&self) -> Variable {
-        1
     }
 
     /// Insert a general (algebraic) gate
@@ -478,265 +477,6 @@ impl<F: FftField> ConstraintSystem<F> for PlonkCircuit<F> {
         Ok(())
     }
 
-    fn enforce_constant(&mut self, var: Variable, constant: F) -> Result<(), CircuitError> {
-        self.check_var_bound(var)?;
-
-        let wire_vars = &[0, 0, 0, 0, var];
-        self.insert_gate(wire_vars, Box::new(ConstantGate(constant)))?;
-        Ok(())
-    }
-
-    fn enforce_bool(&mut self, a: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-
-        let wire_vars = &[a, a, 0, 0, a];
-        self.insert_gate(wire_vars, Box::new(BoolGate))?;
-        Ok(())
-    }
-
-    fn enforce_equal(&mut self, a: Variable, b: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-
-        let wire_vars = &[a, b, 0, 0, 0];
-        self.insert_gate(wire_vars, Box::new(EqualityGate))?;
-        Ok(())
-    }
-
-    fn pad_gates(&mut self, n: usize) {
-        // TODO: FIXME
-        // this is interesting...
-        // if we insert a PaddingGate
-        // the padded gate does not have a gate_id, and will bug
-        // when we check circuit satisfiability
-        // we temporarily insert equality gate to by pass the issue
-        let wire_vars = &[self.zero(), self.zero(), 0, 0, 0];
-        for _ in 0..n {
-            self.insert_gate(wire_vars, Box::new(EqualityGate)).unwrap();
-        }
-    }
-
-    fn add_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        self.check_var_bound(c)?;
-
-        let wire_vars = &[a, b, 0, 0, c];
-        self.insert_gate(wire_vars, Box::new(AdditionGate))?;
-        Ok(())
-    }
-
-    fn add(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        let val = self.witness(a)? + self.witness(b)?;
-        let c = self.create_variable(val)?;
-        self.add_gate(a, b, c)?;
-        Ok(c)
-    }
-
-    fn sub_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        self.check_var_bound(c)?;
-
-        let wire_vars = &[a, b, 0, 0, c];
-        self.insert_gate(wire_vars, Box::new(SubtractionGate))?;
-        Ok(())
-    }
-
-    fn sub(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        let val = self.witness(a)? - self.witness(b)?;
-        let c = self.create_variable(val)?;
-        self.sub_gate(a, b, c)?;
-        Ok(c)
-    }
-
-    fn mul_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        self.check_var_bound(c)?;
-
-        let wire_vars = &[a, b, 0, 0, c];
-        self.insert_gate(wire_vars, Box::new(MultiplicationGate))?;
-        Ok(())
-    }
-
-    fn mul(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        let val = self.witness(a)? * self.witness(b)?;
-        let c = self.create_variable(val)?;
-        self.mul_gate(a, b, c)?;
-        Ok(c)
-    }
-
-    fn lc_gate(
-        &mut self,
-        wires: &[Variable; GATE_WIDTH + 1],
-        coeffs: &[F; GATE_WIDTH],
-    ) -> Result<(), CircuitError> {
-        self.check_vars_bound(wires)?;
-
-        let wire_vars = [wires[0], wires[1], wires[2], wires[3], wires[4]];
-        self.insert_gate(&wire_vars, Box::new(LinCombGate { coeffs: *coeffs }))?;
-        Ok(())
-    }
-
-    fn lc(
-        &mut self,
-        wires_in: &[Variable; GATE_WIDTH],
-        coeffs: &[F; GATE_WIDTH],
-    ) -> Result<Variable, CircuitError> {
-        self.check_vars_bound(wires_in)?;
-
-        let vals_in: Vec<F> = wires_in
-            .iter()
-            .map(|&var| self.witness(var))
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-
-        // calculate y as the linear combination of coeffs and vals_in
-        let y_val = vals_in
-            .iter()
-            .zip(coeffs.iter())
-            .map(|(&val, &coeff)| val * coeff)
-            .sum();
-        let y = self.create_variable(y_val)?;
-
-        let wires = [wires_in[0], wires_in[1], wires_in[2], wires_in[3], y];
-        self.lc_gate(&wires, coeffs)?;
-        Ok(y)
-    }
-
-    fn mul_add_gate(
-        &mut self,
-        wires: &[Variable; GATE_WIDTH + 1],
-        q_muls: &[F; N_MUL_SELECTORS],
-    ) -> Result<(), CircuitError> {
-        self.check_vars_bound(wires)?;
-
-        let wire_vars = [wires[0], wires[1], wires[2], wires[3], wires[4]];
-        self.insert_gate(&wire_vars, Box::new(MulAddGate { coeffs: *q_muls }))?;
-        Ok(())
-    }
-
-    fn mul_add(
-        &mut self,
-        wires_in: &[Variable; GATE_WIDTH],
-        q_muls: &[F; N_MUL_SELECTORS],
-    ) -> Result<Variable, CircuitError> {
-        self.check_vars_bound(wires_in)?;
-
-        let vals_in: Vec<F> = wires_in
-            .iter()
-            .map(|&var| self.witness(var))
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-
-        // calculate y as the mul-addition of coeffs and vals_in
-        let y_val = q_muls[0] * vals_in[0] * vals_in[1] + q_muls[1] * vals_in[2] * vals_in[3];
-        let y = self.create_variable(y_val)?;
-
-        let wires = [wires_in[0], wires_in[1], wires_in[2], wires_in[3], y];
-        self.mul_add_gate(&wires, q_muls)?;
-        Ok(y)
-    }
-
-    fn sum(&mut self, elems: &[Variable]) -> Result<Variable, CircuitError> {
-        if elems.is_empty() {
-            return Err(CircuitError::ParameterError(
-                "Sum over an empty slice of variables is undefined".to_string(),
-            ));
-        }
-        self.check_vars_bound(elems)?;
-
-        let sum = {
-            let sum_val: F = elems
-                .iter()
-                .map(|&elem| self.witness(elem))
-                .collect::<Result<Vec<_>, CircuitError>>()?
-                .iter()
-                .sum();
-            self.create_variable(sum_val)?
-        };
-
-        // pad to ("next multiple of 3" + 1) in length
-        let mut padded: Vec<Variable> = elems.to_vec();
-        let rate = GATE_WIDTH - 1; // rate at which each lc add
-        let padded_len = next_multiple(elems.len() - 1, rate)? + 1;
-        padded.resize(padded_len, self.zero());
-
-        // z_0 = = x_0
-        // z_i = z_i-1 + x_3i-2 + x_3i-1 + x_3i
-        let coeffs = [F::one(); GATE_WIDTH];
-        let mut accum = padded[0];
-        for i in 1..padded_len / rate {
-            accum = self.lc(
-                &[
-                    accum,
-                    padded[rate * i - 2],
-                    padded[rate * i - 1],
-                    padded[rate * i],
-                ],
-                &coeffs,
-            )?;
-        }
-        // final round
-        let wires = [
-            accum,
-            padded[padded_len - 3],
-            padded[padded_len - 2],
-            padded[padded_len - 1],
-            sum,
-        ];
-        self.lc_gate(&wires, &coeffs)?;
-
-        Ok(sum)
-    }
-
-    fn add_constant_gate(&mut self, x: Variable, c: F, y: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(x)?;
-        self.check_var_bound(y)?;
-
-        let wire_vars = &[x, self.one(), 0, 0, y];
-        self.insert_gate(wire_vars, Box::new(ConstantAdditionGate(c)))?;
-        Ok(())
-    }
-
-    fn add_constant(&mut self, input_var: Variable, elem: &F) -> Result<Variable, CircuitError> {
-        self.check_var_bound(input_var)?;
-
-        let input_val = self.witness(input_var).unwrap();
-        let output_val = *elem + input_val;
-        let output_var = self.create_variable(output_val).unwrap();
-
-        self.add_constant_gate(input_var, *elem, output_var)?;
-
-        Ok(output_var)
-    }
-
-    fn mul_constant_gate(&mut self, x: Variable, c: F, y: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(x)?;
-        self.check_var_bound(y)?;
-
-        let wire_vars = &[x, 0, 0, 0, y];
-        self.insert_gate(wire_vars, Box::new(ConstantMultiplicationGate(c)))?;
-        Ok(())
-    }
-
-    fn mul_constant(&mut self, input_var: Variable, elem: &F) -> Result<Variable, CircuitError> {
-        self.check_var_bound(input_var)?;
-
-        let input_val = self.witness(input_var).unwrap();
-        let output_val = *elem * input_val;
-        let output_var = self.create_variable(output_val).unwrap();
-
-        self.mul_constant_gate(input_var, *elem, output_var)?;
-
-        Ok(output_var)
-    }
-
     fn pow5(&mut self, x: Variable) -> Result<Variable, CircuitError> {
         let val = self.witness(x)?;
         let res = val.pow([5]);
@@ -745,33 +485,6 @@ impl<F: FftField> ConstraintSystem<F> for PlonkCircuit<F> {
         let wire_vars = &[x, 0, 0, 0, res_var];
         self.insert_gate(wire_vars, Box::new(FifthRootGate))?;
         Ok(res_var)
-    }
-
-    fn mux_gate(
-        &mut self,
-        sel: BoolVar,
-        a: Variable,
-        b: Variable,
-        c: Variable,
-    ) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        self.check_var_bound(c)?;
-        self.check_var_bound(sel.into())?;
-
-        let wire_vars = &[sel.into(), a, sel.into(), b, c];
-        self.insert_gate(wire_vars, Box::new(MuxGate))
-    }
-
-    fn mux(&mut self, sel: BoolVar, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
-        let sel_eval = self.witness(sel.into())?;
-        let out = if sel_eval == F::one() { a } else { b };
-
-        let out_eval = self.witness(out)?;
-        let out_var = self.create_variable(out_eval)?;
-
-        self.mux_gate(sel, a, b, out_var)?;
-        Ok(out_var)
     }
 }
 
@@ -1670,7 +1383,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use super::{Arithmetization, Circuit, ConstraintSystem, PlonkCircuit};
+    use super::{Arithmetization, Circuit, PlonkCircuit};
     use crate::{constants::compute_coset_representatives, errors::CircuitError};
     use ark_bls12_377::Fq as Fq377;
     use ark_ed_on_bls12_377::Fq as FqEd377;
