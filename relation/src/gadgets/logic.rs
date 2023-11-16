@@ -6,26 +6,11 @@
 
 //! Logic related circuit implementations
 
-use crate::{
-    errors::CircuitError,
-    gates::{CondSelectGate, LogicOrGate, LogicOrOutputGate},
-    traits::*,
-    BoolVar, PlonkCircuit, Variable,
-};
+use crate::{errors::CircuitError, traits::*, BoolVar, PlonkCircuit, Variable};
 use ark_ff::PrimeField;
-use ark_std::{boxed::Box, string::ToString};
+use ark_std::string::ToString;
 
 impl<F: PrimeField> PlonkCircuit<F> {
-    /// Constrain that `a` is true or `b` is true.
-    /// Return error if variables are invalid.
-    pub fn logic_or_gate(&mut self, a: BoolVar, b: BoolVar) -> Result<(), CircuitError> {
-        self.check_var_bound(a.into())?;
-        self.check_var_bound(b.into())?;
-        let wire_vars = &[a.into(), b.into(), 0, 0, 0];
-        self.insert_gate(wire_vars, Box::new(LogicOrGate))?;
-        Ok(())
-    }
-
     /// Obtain a bool variable representing whether two input variables are
     /// equal. Return error if variables are invalid.
     pub fn is_equal(&mut self, a: Variable, b: Variable) -> Result<BoolVar, CircuitError> {
@@ -73,96 +58,6 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let inv_var = self.create_variable(inverse)?;
         let one_var = self.one();
         self.mul_gate(var, inv_var, one_var)
-    }
-
-    /// Obtain a variable representing the result of a logic negation gate.
-    /// Return the index of the variable. Return error if the input variable
-    /// is invalid.
-    pub fn logic_neg(&mut self, a: BoolVar) -> Result<BoolVar, CircuitError> {
-        self.is_zero(a.into())
-    }
-
-    /// Obtain a variable representing the result of a logic AND gate. Return
-    /// the index of the variable. Return error if the input variables are
-    /// invalid.
-    pub fn logic_and(&mut self, a: BoolVar, b: BoolVar) -> Result<BoolVar, CircuitError> {
-        let c = self
-            .create_boolean_variable_unchecked(self.witness(a.into())? * self.witness(b.into())?)?;
-        self.mul_gate(a.into(), b.into(), c.into())?;
-        Ok(c)
-    }
-
-    /// Given a list of boolean variables, obtain a variable representing the
-    /// result of a logic AND gate. Return the index of the variable. Return
-    /// error if the input variables are invalid.
-    pub fn logic_and_all(&mut self, vars: &[BoolVar]) -> Result<BoolVar, CircuitError> {
-        if vars.is_empty() {
-            return Err(CircuitError::ParameterError(
-                "logic_and_all: empty variable list".to_string(),
-            ));
-        }
-        let mut res = vars[0];
-        for &var in vars.iter().skip(1) {
-            res = self.logic_and(res, var)?;
-        }
-        Ok(res)
-    }
-
-    /// Obtain a variable representing the result of a logic OR gate. Return the
-    /// index of the variable. Return error if the input variables are
-    /// invalid.
-    pub fn logic_or(&mut self, a: BoolVar, b: BoolVar) -> Result<BoolVar, CircuitError> {
-        self.check_var_bound(a.into())?;
-        self.check_var_bound(b.into())?;
-
-        let a_val = self.witness(a.into())?;
-        let b_val = self.witness(b.into())?;
-        let c_val = a_val + b_val - a_val * b_val;
-
-        let c = self.create_boolean_variable_unchecked(c_val)?;
-        let wire_vars = &[a.into(), b.into(), 0, 0, c.into()];
-        self.insert_gate(wire_vars, Box::new(LogicOrOutputGate))?;
-
-        Ok(c)
-    }
-
-    /// Assuming values represented by `a` is boolean.
-    /// Constrain `a` is true
-    pub fn enforce_true(&mut self, a: Variable) -> Result<(), CircuitError> {
-        self.enforce_constant(a, F::one())
-    }
-
-    /// Assuming values represented by `a` is boolean.
-    /// Constrain `a` is false
-    pub fn enforce_false(&mut self, a: Variable) -> Result<(), CircuitError> {
-        self.enforce_constant(a, F::zero())
-    }
-
-    /// Obtain a variable that equals `x_0` if `b` is zero, or `x_1` if `b` is
-    /// one. Return error if variables are invalid.
-    pub fn conditional_select(
-        &mut self,
-        b: BoolVar,
-        x_0: Variable,
-        x_1: Variable,
-    ) -> Result<Variable, CircuitError> {
-        self.check_var_bound(b.into())?;
-        self.check_var_bound(x_0)?;
-        self.check_var_bound(x_1)?;
-
-        // y = x_bit
-        let y = if self.witness(b.into())? == F::zero() {
-            self.create_variable(self.witness(x_0)?)?
-        } else if self.witness(b.into())? == F::one() {
-            self.create_variable(self.witness(x_1)?)?
-        } else {
-            return Err(CircuitError::ParameterError(
-                "b in Conditional Selection gate is not a boolean variable".to_string(),
-            ));
-        };
-        let wire_vars = [b.into(), x_0, b.into(), x_1, y];
-        self.insert_gate(&wire_vars, Box::new(CondSelectGate))?;
-        Ok(y)
     }
 }
 
@@ -389,8 +284,8 @@ mod test {
 
         let x_0 = circuit.create_variable(F::from(23u32))?;
         let x_1 = circuit.create_variable(F::from(24u32))?;
-        let select_true = circuit.conditional_select(bit_true, x_0, x_1)?;
-        let select_false = circuit.conditional_select(bit_false, x_0, x_1)?;
+        let select_true = circuit.mux(bit_true, x_1, x_0)?;
+        let select_false = circuit.mux(bit_false, x_1, x_0)?;
 
         assert_eq!(circuit.witness(select_true)?, circuit.witness(x_1)?);
         assert_eq!(circuit.witness(select_false)?, circuit.witness(x_0)?);
@@ -400,9 +295,7 @@ mod test {
         *circuit.witness_mut(bit_false.into()) = F::one();
         assert!(circuit.check_circuit_satisfiability(&[]).is_err());
         // Check variable out of bound error.
-        assert!(circuit
-            .conditional_select(bit_false, circuit.num_vars(), x_1)
-            .is_err());
+        assert!(circuit.mux(bit_false, x_1, circuit.num_vars()).is_err());
 
         // build two fixed circuits with different variable assignments, checking that
         // the arithmetized extended permutation polynomial is variable
@@ -422,7 +315,7 @@ mod test {
         let bit_var = circuit.create_boolean_variable(bit)?;
         let x_0_var = circuit.create_variable(x_0)?;
         let x_1_var = circuit.create_variable(x_1)?;
-        circuit.conditional_select(bit_var, x_0_var, x_1_var)?;
+        circuit.mux(bit_var, x_1_var, x_0_var)?;
         circuit.finalize_for_arithmetization()?;
         Ok(circuit)
     }

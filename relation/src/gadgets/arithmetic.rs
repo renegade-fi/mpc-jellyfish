@@ -765,7 +765,7 @@ mod test {
         let bit_true = circuit.create_boolean_variable(true)?;
         let x_0 = circuit.create_variable(F::from(23u32))?;
         let x_1 = circuit.create_variable(F::from(24u32))?;
-        circuit.conditional_select(bit_true, x_0, x_1)?;
+        circuit.mux(bit_true, x_1, x_0)?;
 
         // range gate
         let b = circuit.create_variable(F::from(1023u32))?;

@@ -115,7 +115,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
     ) -> Result<EmulatedSWPointVariable<E>, CircuitError> {
         let select_x = self.conditional_select_emulated(b, &p0.0, &p1.0)?;
         let select_y = self.conditional_select_emulated(b, &p0.1, &p1.1)?;
-        let select_infinity = BoolVar(self.conditional_select(b, p0.2 .0, p1.2 .0)?);
+        let select_infinity = BoolVar(self.mux(b, p1.2 .0, p0.2 .0)?);
 
         Ok(EmulatedSWPointVariable::<E>(
             select_x,

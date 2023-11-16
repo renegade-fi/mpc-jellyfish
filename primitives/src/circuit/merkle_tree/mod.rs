@@ -212,8 +212,8 @@ fn constrain_sibling_order<F: RescueParameter>(
     node_is_right: BoolVar,
 ) -> Result<[Variable; 3], CircuitError> {
     let one = F::one();
-    let left_node = circuit.conditional_select(node_is_left, sib1, node)?;
-    let right_node = circuit.conditional_select(node_is_right, sib2, node)?;
+    let left_node = circuit.mux(node_is_left, node, sib1)?;
+    let right_node = circuit.mux(node_is_right, node, sib2)?;
     let left_plus_right = circuit.add(left_node, right_node)?;
     let mid_node = circuit.lc(
         &[node, sib1, sib2, left_plus_right],

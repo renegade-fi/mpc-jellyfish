@@ -602,7 +602,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
 
         let mut vals = vec![];
         for (&x_0, &x_1) in p0.0.iter().zip(p1.0.iter()) {
-            let selected = self.conditional_select(b, x_0, x_1)?;
+            let selected = self.mux(b, x_1, x_0)?;
             vals.push(selected);
         }
 
