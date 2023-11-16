@@ -516,9 +516,8 @@ where
     };
 
     //  (f.3) either f.1 or f.2 is satisfied
-    let sat =
-        circuit.conditional_select(k2_sign_var, k2_is_neg_sat.into(), k2_is_pos_sat.into())?;
-    circuit.enforce_true(sat)?;
+    let sat = circuit.mux(k2_sign_var, k2_is_pos_sat.into(), k2_is_neg_sat.into())?;
+    circuit.enforce_constant(sat, F::one())?;
 
     //  (g) tmp2 + lambda_2 * k2_sign * k2 + s2  = t * t_sign * r2
 
@@ -547,9 +546,8 @@ where
     };
 
     //  (g.3) either g.1 or g.2 is satisfied
-    let sat =
-        circuit.conditional_select(k2_sign_var, k2_is_neg_sat.into(), k2_is_pos_sat.into())?;
-    circuit.enforce_true(sat)?;
+    let sat = circuit.mux(k2_sign_var, k2_is_pos_sat.into(), k2_is_neg_sat.into())?;
+    circuit.enforce_constant(sat, F::one())?;
 
     // extract the output
     Ok((k1_var, k2_var, k2_sign_var))

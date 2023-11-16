@@ -68,7 +68,7 @@ where
         expected_root_var: Variable,
     ) -> Result<(), CircuitError> {
         let bool_val = self.is_non_member(non_elem_idx_var, proof_var, expected_root_var)?;
-        self.enforce_true(bool_val.into())
+        self.enforce_true(bool_val)
     }
 
     fn create_non_membership_proof_variable(

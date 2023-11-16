@@ -14,7 +14,8 @@ use crate::{
     errors::CircuitError,
     gates::{
         AdditionGate, BoolGate, ConstantAdditionGate, ConstantGate, ConstantMultiplicationGate,
-        EqualityGate, Gate, LinCombGate, MulAddGate, MultiplicationGate, MuxGate, SubtractionGate,
+        EqualityGate, Gate, LinCombGate, LogicOrGate, LogicOrOutputGate, MulAddGate,
+        MultiplicationGate, MuxGate, SubtractionGate,
     },
     next_multiple, BoolVar, SortedLookupVecAndPolys, Variable,
 };
@@ -508,6 +509,117 @@ pub trait Circuit<F: Field> {
     // ---------------
     // | Logic Gates |
     // ---------------
+
+    /// Constrain that `a` is true or `b` is true.
+    /// Return error if variables are invalid.
+    fn logic_or_gate(&mut self, a: BoolVar, b: BoolVar) -> Result<(), CircuitError> {
+        self.check_var(a.into())?;
+        self.check_var(b.into())?;
+
+        let wire_vars = &[a.into(), b.into(), 0, 0, 0];
+        self.insert_gate(wire_vars, Box::new(LogicOrGate))?;
+
+        Ok(())
+    }
+
+    /// Obtain a variable representing the result of a logic OR gate. Return the
+    /// index of the variable. Return error if the input variables are
+    /// invalid.
+    fn logic_or(&mut self, a: BoolVar, b: BoolVar) -> Result<BoolVar, CircuitError> {
+        self.check_var(a.into())?;
+        self.check_var(b.into())?;
+
+        let a_val = self.witness(a.into())?;
+        let b_val = self.witness(b.into())?;
+        let c_val = a_val.clone() + b_val.clone() - a_val * b_val;
+
+        let c = self.create_variable(c_val)?;
+        let wire_vars = &[a.into(), b.into(), 0, 0, c];
+        self.insert_gate(wire_vars, Box::new(LogicOrOutputGate))?;
+
+        // We do not need to constrain the output to be boolean as the inputs already
+        // are, and the range of this gate is {0, 1}
+        Ok(BoolVar(c))
+    }
+
+    /// Given a list of boolean variables, obtain a variable representing the
+    /// result of a logic OR gate. Return the index of the variable. Return
+    /// error if the input variables are invalid.
+    fn logic_or_all(&mut self, vars: &[BoolVar]) -> Result<BoolVar, CircuitError> {
+        if vars.is_empty() {
+            return Err(CircuitError::ParameterError(
+                "logic_or_all: empty variable list".to_string(),
+            ));
+        }
+
+        let mut res = vars[0];
+        for var in vars.iter().skip(1) {
+            res = self.logic_or(res, *var)?;
+        }
+
+        Ok(res)
+    }
+
+    /// Constrain that `a` is true and `b` is true
+    fn logic_and_gate(&mut self, a: BoolVar, b: BoolVar) -> Result<(), CircuitError> {
+        self.mul_gate(a.into(), b.into(), self.one())
+    }
+
+    /// Obtain a variable representing the result of a logic AND gate. Return
+    /// the index of the variable. Return error if the input variables are
+    /// invalid.
+    fn logic_and(&mut self, a: BoolVar, b: BoolVar) -> Result<BoolVar, CircuitError> {
+        let c = self.mul(a.into(), b.into())?;
+
+        // We do not need to constrain the output to be boolean as the inputs already
+        // are, and the range of this gate is {0, 1}
+        Ok(BoolVar(c))
+    }
+
+    /// Given a list of boolean variables, obtain a variable representing the
+    /// result of a logic AND gate. Return the index of the variable. Return
+    /// error if the input variables are invalid.
+    fn logic_and_all(&mut self, vars: &[BoolVar]) -> Result<BoolVar, CircuitError> {
+        if vars.is_empty() {
+            return Err(CircuitError::ParameterError(
+                "logic_and_all: empty variable list".to_string(),
+            ));
+        }
+
+        let mut res = vars[0];
+        for &var in vars.iter().skip(1) {
+            res = self.logic_and(res, var)?;
+        }
+
+        Ok(res)
+    }
+
+    /// Obtain a variable representing the result of a logic negation gate.
+    /// Return the index of the variable. Return error if the input variable
+    /// is invalid.
+    fn logic_neg(&mut self, a: BoolVar) -> Result<BoolVar, CircuitError> {
+        self.check_var(a.into())?;
+
+        // 1 - a
+        let one = self.one();
+        let res = self.add_with_coeffs(one, a.into(), &F::one(), &-F::one())?;
+
+        // We do not need to constrain the output to be boolean as the inputs already
+        // are, and the range of this gate is {0, 1}
+        Ok(BoolVar(res))
+    }
+
+    /// Assuming values represented by `a` is boolean
+    /// Constrain `a` is true
+    fn enforce_true(&mut self, a: BoolVar) -> Result<(), CircuitError> {
+        self.enforce_constant(a.into(), F::one())
+    }
+
+    /// Assuming values represented by `a` is boolean
+    /// Constrain `a` is false
+    fn enforce_false(&mut self, a: BoolVar) -> Result<(), CircuitError> {
+        self.enforce_constant(a.into(), F::zero())
+    }
 
     /// Constrains variable `c` to be `if sel { a } else { b }`
     fn mux_gate(

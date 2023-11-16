@@ -236,8 +236,8 @@ impl<F: PrimeField> PlonkCircuit<F> {
         self.check_point_var_bound(point0)?;
         self.check_point_var_bound(point1)?;
 
-        let selected_x = self.conditional_select(b, point0.0, point1.0)?;
-        let selected_y = self.conditional_select(b, point0.1, point1.1)?;
+        let selected_x = self.mux(b, point1.0, point0.0)?;
+        let selected_y = self.mux(b, point1.1, point0.1)?;
         Ok(PointVariable(selected_x, selected_y))
     }
 
