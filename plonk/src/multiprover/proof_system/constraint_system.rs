@@ -12,104 +12,24 @@ use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Radix2EvaluationDomain,
 };
 use async_trait::async_trait;
-use futures::future;
+use futures::{executor::block_on, future};
 use itertools::Itertools;
 use mpc_relation::{
     constants::{compute_coset_representatives, GATE_WIDTH, N_MUL_SELECTORS},
     errors::CircuitError,
-    gates::{
-        AdditionGate, BoolGate, ConstantAdditionGate, ConstantGate, ConstantMultiplicationGate,
-        EqualityGate, FifthRootGate, Gate, IoGate, LinCombGate, MulAddGate, MultiplicationGate,
-        MuxGate, PaddingGate, SubtractionGate,
-    },
+    gates::{FifthRootGate, Gate, IoGate, PaddingGate},
     traits::*,
     BoolVar, GateId, Variable, WireId,
 };
-
-use crate::multiprover::gadgets::{next_multiple, scalar};
 
 // --------------------
 // | Traits and Types |
 // --------------------
 
-/// The circuit abstraction; contains information about circuit structure and
-/// methods for constructing the circuit gate-by-gate
-///
-/// This is largely a re-implementation of the existing `Circuit` trait, made to
-/// work over a secret shared field
-#[async_trait]
-pub trait MpcCircuit<C: CurveGroup>: ConstraintSystem<C::ScalarField> {
-    /// The number of constraints
-    fn num_gates(&self) -> usize;
-
-    /// The number of variables
-    fn num_vars(&self) -> usize;
-
-    /// The number of public inputs
-    fn num_inputs(&self) -> usize;
-
-    /// The number of wire types
-    ///
-    /// We do not support UltraPlonk so this will likely be static
-    fn num_wire_types(&self) -> usize;
-
-    /// The public input to the circuit
-    ///
-    /// Note that while the input is public, it may not have yet been *made*
-    /// public so the result type is a secret shared field element
-    fn public_input(&self) -> Result<Vec<AuthenticatedScalarResult<C>>, CircuitError>;
-
-    /// Check whether the circuit constraints are satisfied
-    async fn check_circuit_satisfiability(
-        &self,
-        public_input: &[AuthenticatedScalarResult<C>],
-    ) -> Result<(), CircuitError>;
-
-    /// Create a constant variable in the circuit, returning the index of the
-    /// variable
-    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<Variable, CircuitError>;
-
-    /// Add a variable to the circuit; returns the index of the variable
-    fn create_variable(
-        &mut self,
-        val: AuthenticatedScalarResult<C>,
-    ) -> Result<Variable, CircuitError>;
-
-    /// Add a bool variable to the circuit; return the index of the variable.
-    ///
-    /// In the single-prover version of this method; the input is a `bool`.
-    /// However, inputs to the multi-prover constraint system are secret
-    /// shared, so we take in a generic field element.
-    ///
-    /// We do, however, constrain the underlying shared value to be boolean in
-    /// the same way the single-prover constraint system does
-    fn create_boolean_variable(
-        &mut self,
-        val: AuthenticatedScalarResult<C>,
-    ) -> Result<BoolVar, CircuitError> {
-        let var = self.create_variable(val)?;
-        self.enforce_bool(var)?;
-        Ok(BoolVar(var))
-    }
-
-    /// Add a public input variable; return the index of the variable.
-    fn create_public_variable(
-        &mut self,
-        val: AuthenticatedScalarResult<C>,
-    ) -> Result<Variable, CircuitError>;
-
-    /// Set a variable to a public variable
-    fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError>;
-
-    /// Return the witness value of variable `idx`.
-    /// Return error if the input variable is invalid.
-    fn witness(&self, idx: Variable) -> Result<AuthenticatedScalarResult<C>, CircuitError>;
-}
-
 /// An abstraction shimming the `Circuit` abstraction and the PIOP based
 /// arguments in the MPC prover. The `MpcArithmetization` takes circuit wire
 /// assignments and constructs polynomial representations of the assignment
-pub trait MpcArithmetization<C: CurveGroup>: MpcCircuit<C>
+pub trait MpcArithmetization<C: CurveGroup>: Circuit<C::ScalarField>
 where
     C::ScalarField: FftField,
 {
@@ -560,7 +480,18 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
 }
 
 #[async_trait]
-impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
+impl<C: CurveGroup> Circuit<C::ScalarField> for MpcPlonkCircuit<C> {
+    type Wire = AuthenticatedScalarResult<C>;
+    type Constant = Scalar<C>;
+
+    fn zero(&self) -> Variable {
+        0
+    }
+
+    fn one(&self) -> Variable {
+        1
+    }
+
     fn num_gates(&self) -> usize {
         self.gates.len()
     }
@@ -587,10 +518,16 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
             .collect::<Result<Vec<_>, CircuitError>>()
     }
 
+    fn witness(&self, idx: Variable) -> Result<AuthenticatedScalarResult<C>, CircuitError> {
+        self.check_var_bound(idx)?;
+
+        Ok(self.witness[idx].clone())
+    }
+
     // Note: This method involves opening the witness values, it should only be
     // used in testing contexts
     #[cfg(feature = "test_apis")]
-    async fn check_circuit_satisfiability(
+    fn check_circuit_satisfiability(
         &self,
         public_input: &[AuthenticatedScalarResult<C>],
     ) -> Result<(), CircuitError> {
@@ -620,8 +557,7 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         }
 
         // Await all the gate results
-        future::join_all(gate_results)
-            .await
+        block_on(future::join_all(gate_results))
             .into_iter()
             .enumerate()
             .map(|(idx, res)| {
@@ -639,17 +575,29 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
     }
 
     #[cfg(not(feature = "test_apis"))]
-    async fn check_circuit_satisfiability(
+    fn check_circuit_satisfiability(
         &self,
         _public_input: &[AuthenticatedScalarResult<C>],
     ) -> Result<(), CircuitError> {
         panic!("`check_circuit_satisfiability` should not be called outside of tests, this method leaks privacy")
     }
 
-    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<Variable, CircuitError> {
-        let authenticated_val = self.fabric.one_authenticated() * val;
+    fn support_lookup(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    fn check_var(&self, var: Variable) -> Result<(), CircuitError> {
+        if var >= self.num_vars {
+            return Err(CircuitError::VarIndexOutOfBound(var, self.num_vars));
+        }
+        Ok(())
+    }
+
+    fn create_constant_variable(&mut self, val: C::ScalarField) -> Result<Variable, CircuitError> {
+        let authenticated_val = self.fabric.one_authenticated() * Scalar::new(val);
         let var = self.create_variable(authenticated_val)?;
-        self.enforce_constant(var, val.inner())?;
+        self.enforce_constant(var, val)?;
 
         Ok(var)
     }
@@ -665,16 +613,6 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(self.num_vars - 1)
     }
 
-    fn create_public_variable(
-        &mut self,
-        val: AuthenticatedScalarResult<C>,
-    ) -> Result<Variable, CircuitError> {
-        let var = self.create_variable(val)?;
-        self.set_variable_public(var)?;
-
-        Ok(var)
-    }
-
     fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError> {
         self.check_finalize_flag(false)?;
         self.pub_input_gate_ids.push(self.num_gates());
@@ -685,34 +623,6 @@ impl<C: CurveGroup> MpcCircuit<C> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn witness(&self, idx: Variable) -> Result<AuthenticatedScalarResult<C>, CircuitError> {
-        self.check_var_bound(idx)?;
-
-        Ok(self.witness[idx].clone())
-    }
-}
-
-impl<C: CurveGroup> ConstraintSystem<C::ScalarField> for MpcPlonkCircuit<C> {
-    fn zero(&self) -> Variable {
-        0
-    }
-
-    fn one(&self) -> Variable {
-        1
-    }
-
-    fn support_lookup(&self) -> bool {
-        false
-    }
-
-    fn pad_gates(&mut self, n: usize) {
-        let wire_vars = &[self.zero(), self.zero(), 0, 0, 0];
-        for _ in 0..n {
-            self.insert_gate(wire_vars, Box::new(EqualityGate)).unwrap();
-        }
-    }
-
-    /// Insert an algebraic gate
     fn insert_gate(
         &mut self,
         wire_vars: &[Variable; GATE_WIDTH + 1],
@@ -731,300 +641,6 @@ impl<C: CurveGroup> ConstraintSystem<C::ScalarField> for MpcPlonkCircuit<C> {
         Ok(())
     }
 
-    fn enforce_constant(
-        &mut self,
-        var: Variable,
-        constant: C::ScalarField,
-    ) -> Result<(), CircuitError> {
-        self.check_var_bound(var)?;
-
-        let wire_vars = &[0, 0, 0, 0, var];
-        self.insert_gate(wire_vars, Box::new(ConstantGate(constant)))?;
-        Ok(())
-    }
-
-    fn enforce_bool(&mut self, a: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-
-        let wire_vars = &[a, a, 0, 0, a];
-        self.insert_gate(wire_vars, Box::new(BoolGate))?;
-        Ok(())
-    }
-
-    fn enforce_equal(&mut self, a: Variable, b: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-
-        let wire_vars = &[a, b, 0, 0, 0];
-        self.insert_gate(wire_vars, Box::new(EqualityGate))?;
-        Ok(())
-    }
-
-    fn add_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        self.check_var_bound(c)?;
-
-        let wire_vars = &[a, b, 0, 0, c];
-        self.insert_gate(wire_vars, Box::new(AdditionGate))?;
-        Ok(())
-    }
-
-    fn add(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-
-        let res = self.witness(a)? + self.witness(b)?;
-        let c = self.create_variable(res)?;
-
-        self.add_gate(a, b, c)?;
-        Ok(c)
-    }
-
-    fn sub_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        self.check_var_bound(c)?;
-
-        let wire_vars = &[a, b, 0, 0, c];
-        self.insert_gate(wire_vars, Box::new(SubtractionGate))?;
-        Ok(())
-    }
-
-    fn sub(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-
-        let res = self.witness(a)? - self.witness(b)?;
-        let c = self.create_variable(res)?;
-
-        self.sub_gate(a, b, c)?;
-        Ok(c)
-    }
-
-    fn mul_gate(&mut self, a: Variable, b: Variable, c: Variable) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        self.check_var_bound(c)?;
-
-        let wire_vars = &[a, b, 0, 0, c];
-        self.insert_gate(wire_vars, Box::new(MultiplicationGate))?;
-        Ok(())
-    }
-
-    fn mul(&mut self, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-
-        let res = self.witness(a)? * self.witness(b)?;
-        let c = self.create_variable(res)?;
-
-        self.mul_gate(a, b, c)?;
-        Ok(c)
-    }
-
-    fn lc_gate(
-        &mut self,
-        wires: &[Variable; GATE_WIDTH + 1],
-        coeffs: &[C::ScalarField; GATE_WIDTH],
-    ) -> Result<(), CircuitError> {
-        self.check_vars_bound(wires)?;
-
-        let wire_vars = [wires[0], wires[1], wires[2], wires[3], wires[4]];
-        self.insert_gate(&wire_vars, Box::new(LinCombGate { coeffs: *coeffs }))?;
-        Ok(())
-    }
-
-    fn lc(
-        &mut self,
-        wires_in: &[Variable; GATE_WIDTH],
-        coeffs: &[C::ScalarField; GATE_WIDTH],
-    ) -> Result<Variable, CircuitError> {
-        self.check_vars_bound(wires_in)?;
-
-        let vals_in: Vec<AuthenticatedScalarResult<C>> = wires_in
-            .iter()
-            .map(|&var| self.witness(var))
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-
-        // calculate y as the linear combination of coeffs and vals_in
-        let y_val = vals_in
-            .iter()
-            .zip(coeffs.iter())
-            .map(|(val, coeff)| val * scalar!(*coeff))
-            .sum();
-        let y = self.create_variable(y_val)?;
-
-        let wires = [wires_in[0], wires_in[1], wires_in[2], wires_in[3], y];
-        self.lc_gate(&wires, coeffs)?;
-        Ok(y)
-    }
-
-    fn mul_add_gate(
-        &mut self,
-        wires: &[Variable; GATE_WIDTH + 1],
-        q_muls: &[C::ScalarField; N_MUL_SELECTORS],
-    ) -> Result<(), CircuitError> {
-        self.check_vars_bound(wires)?;
-
-        let wire_vars = [wires[0], wires[1], wires[2], wires[3], wires[4]];
-        self.insert_gate(&wire_vars, Box::new(MulAddGate { coeffs: *q_muls }))?;
-        Ok(())
-    }
-
-    fn mul_add(
-        &mut self,
-        wires_in: &[Variable; GATE_WIDTH],
-        q_muls: &[C::ScalarField; N_MUL_SELECTORS],
-    ) -> Result<Variable, CircuitError> {
-        self.check_vars_bound(wires_in)?;
-
-        let vals_in: Vec<AuthenticatedScalarResult<C>> = wires_in
-            .iter()
-            .map(|&var| self.witness(var))
-            .collect::<Result<Vec<_>, CircuitError>>()?;
-
-        // calculate y as the mul-addition of coeffs and vals_in
-        let y_val = scalar!(q_muls[0]) * &vals_in[0] * &vals_in[1]
-            + scalar!(q_muls[1]) * &vals_in[2] * &vals_in[3];
-        let y = self.create_variable(y_val)?;
-
-        let wires = [wires_in[0], wires_in[1], wires_in[2], wires_in[3], y];
-        self.mul_add_gate(&wires, q_muls)?;
-        Ok(y)
-    }
-
-    /// Create a variable representing the sum of a list of variables
-    ///
-    /// Return an error if variables are invalid
-    fn sum(&mut self, elems: &[Variable]) -> Result<Variable, CircuitError> {
-        if elems.is_empty() {
-            return Err(CircuitError::ParameterError(
-                "Sum over an empty slice of variables is undefined".to_string(),
-            ));
-        }
-        self.check_vars_bound(elems)?;
-
-        let mut elem_iter = elems
-            .iter()
-            .map(|elem| self.witness(*elem))
-            .collect::<Result<Vec<_>, CircuitError>>()?
-            .into_iter();
-        let sum_val = elem_iter.next().expect("cannot sum empty slice");
-        let sum_val = elem_iter.fold(sum_val, |acc, val| acc + val);
-        let sum = self.create_variable(sum_val)?;
-
-        // Pad with zeros and pack into as few gates as possibly by adding on all input
-        // wires
-        let mut padded: Vec<Variable> = elems.to_owned();
-        let gate_capacity = GATE_WIDTH - 1;
-        let padded_len = next_multiple(elems.len() - 1, gate_capacity)? + 1;
-        padded.resize(padded_len, self.zero());
-
-        // Construct a series of gates in which the output wire of the `n`th gate
-        // is the accumulation of 3 * n input wires in the sequence
-        let coeffs = [C::ScalarField::one(); GATE_WIDTH];
-        let mut accum = padded[0];
-        for i in 1..padded_len / gate_capacity {
-            accum = self.lc(
-                &[
-                    accum,
-                    padded[gate_capacity * i - 2],
-                    padded[gate_capacity * i - 1],
-                    padded[gate_capacity * i],
-                ],
-                &coeffs,
-            )?;
-        }
-
-        // Final round
-        let wires = [
-            accum,
-            padded[padded_len - 3],
-            padded[padded_len - 2],
-            padded[padded_len - 1],
-            sum,
-        ];
-        self.lc_gate(&wires, &coeffs)?;
-
-        Ok(sum)
-    }
-
-    /// Constrain variable `y` to the addition of `a` and `c`, where `c` is a
-    /// constant value
-    ///
-    /// Return an error if the input variables are invalid
-    fn add_constant_gate(
-        &mut self,
-        x: Variable,
-        c: C::ScalarField,
-        y: Variable,
-    ) -> Result<(), CircuitError> {
-        self.check_var_bound(x)?;
-        self.check_var_bound(y)?;
-
-        let wire_vars = &[x, self.one(), 0, 0, y];
-        self.insert_gate(wire_vars, Box::new(ConstantAdditionGate(c)))?;
-        Ok(())
-    }
-
-    /// Create a variable representing an addition with a constant value
-    ///
-    /// Return an error if the input variable is invalid
-    fn add_constant(
-        &mut self,
-        input_var: Variable,
-        elem: &C::ScalarField,
-    ) -> Result<Variable, CircuitError> {
-        self.check_var_bound(input_var)?;
-
-        let input_val = self.witness(input_var).unwrap();
-        let output_val = scalar!(*elem) + input_val;
-        let output_var = self.create_variable(output_val).unwrap();
-
-        self.add_constant_gate(input_var, *elem, output_var)?;
-
-        Ok(output_var)
-    }
-
-    /// Constrain variable `y` to the product of `a` and `c`, where `c` is a
-    /// constant value
-    ///
-    /// Return an error if the input variables are invalid.
-    fn mul_constant_gate(
-        &mut self,
-        x: Variable,
-        c: C::ScalarField,
-        y: Variable,
-    ) -> Result<(), CircuitError> {
-        self.check_var_bound(x)?;
-        self.check_var_bound(y)?;
-
-        let wire_vars = &[x, 0, 0, 0, y];
-        self.insert_gate(wire_vars, Box::new(ConstantMultiplicationGate(c)))?;
-        Ok(())
-    }
-
-    /// Create a variable representing a multiplication with a constant value
-    ///
-    /// Return an error if the input variable is invalid
-    fn mul_constant(
-        &mut self,
-        input_var: Variable,
-        elem: &C::ScalarField,
-    ) -> Result<Variable, CircuitError> {
-        self.check_var_bound(input_var)?;
-
-        let input_val = self.witness(input_var).unwrap();
-        let output_val = scalar!(*elem) * input_val;
-        let output_var = self.create_variable(output_val).unwrap();
-
-        self.mul_constant_gate(input_var, *elem, output_var)?;
-
-        Ok(output_var)
-    }
-
-    /// Creates a variable that is the fifth power of the input
     fn pow5(&mut self, x: Variable) -> Result<Variable, CircuitError> {
         let val = self.witness(x)?;
         let res = val.pow(5);
@@ -1032,38 +648,6 @@ impl<C: CurveGroup> ConstraintSystem<C::ScalarField> for MpcPlonkCircuit<C> {
 
         let wire_vars = &[x, 0, 0, 0, res_var];
         self.insert_gate(wire_vars, Box::new(FifthRootGate))?;
-        Ok(res_var)
-    }
-
-    // ---------------
-    // | Logic Gates |
-    // ---------------
-
-    fn mux_gate(
-        &mut self,
-        sel: BoolVar,
-        a: Variable,
-        b: Variable,
-        c: Variable,
-    ) -> Result<(), CircuitError> {
-        self.check_var_bound(a)?;
-        self.check_var_bound(b)?;
-        self.check_var_bound(c)?;
-        self.check_var_bound(sel.into())?;
-
-        let wire_vars = &[sel.into(), a, sel.into(), b, c];
-        self.insert_gate(wire_vars, Box::new(MuxGate))
-    }
-
-    fn mux(&mut self, sel: BoolVar, a: Variable, b: Variable) -> Result<Variable, CircuitError> {
-        let sel_eval = self.witness(sel.into())?;
-        let a_eval = self.witness(a)?;
-        let b_eval = self.witness(b)?;
-
-        let res = &sel_eval * &a_eval + (Scalar::one() - &sel_eval) * &b_eval;
-        let res_var = self.create_variable(res)?;
-
-        self.mux_gate(sel, a, b, res_var)?;
         Ok(res_var)
     }
 }

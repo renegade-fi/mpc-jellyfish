@@ -88,7 +88,6 @@ fn decompose_le<F: PrimeField>(val: F, len: usize, range_bit_len: usize) -> Vec<
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::traits::ConstraintSystem;
     use ark_bls12_377::Fq as Fq377;
     use ark_ed_on_bls12_377::Fq as FqEd377;
     use ark_ed_on_bls12_381::Fq as FqEd381;

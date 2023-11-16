@@ -11,7 +11,7 @@ use mpc_relation::{
     Variable,
 };
 
-use crate::multiprover::proof_system::{MpcCircuit, MpcPlonkCircuit};
+use crate::multiprover::proof_system::MpcPlonkCircuit;
 
 use super::scalar;
 

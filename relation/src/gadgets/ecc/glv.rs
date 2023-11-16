@@ -480,7 +480,7 @@ where
     //  (c) tmp1 = 0        <- implied by tmp = 2^128 * tmp2
     //  (d) tmp2 < 2^128
     //  (e) tmp = tmp1 + 2^128 tmp2
-    circuit.mul_constant_gate(tmp2_var, two_to_128, tmp_var)?;
+    circuit.mul_constant_gate(tmp2_var, &two_to_128, tmp_var)?;
     circuit.enforce_in_range(tmp2_var, 128)?;
 
     // ============================================

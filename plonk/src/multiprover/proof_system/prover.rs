@@ -825,7 +825,7 @@ pub(crate) mod test {
     use rand::thread_rng;
 
     use crate::{
-        multiprover::proof_system::{MpcChallenges, MpcCircuit, MpcOracles, MpcPlonkCircuit},
+        multiprover::proof_system::{MpcChallenges, MpcOracles, MpcPlonkCircuit},
         proof_system::{
             prover::Prover,
             structs::{Challenges, Oracles, ProofEvaluations, ProvingKey, VerifyingKey},

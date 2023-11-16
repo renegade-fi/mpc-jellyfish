@@ -67,6 +67,7 @@ where
     ) -> Result<BatchProof<E>, PlonkError>
     where
         C: Arithmetization<E::ScalarField>,
+        C: Circuit<E::ScalarField, Wire = E::ScalarField, Constant = E::ScalarField>,
         R: CryptoRng + RngCore,
         T: PlonkTranscript<F>,
     {
@@ -177,6 +178,7 @@ where
     >
     where
         C: Arithmetization<E::ScalarField>,
+        C: Circuit<E::ScalarField, Wire = E::ScalarField, Constant = E::ScalarField>,
         R: CryptoRng + RngCore,
         T: PlonkTranscript<F>,
     {
@@ -603,6 +605,7 @@ where
     ) -> Result<Self::Proof, Self::Error>
     where
         C: Arithmetization<E::ScalarField>,
+        C: Circuit<E::ScalarField, Wire = E::ScalarField, Constant = E::ScalarField>,
         R: CryptoRng + RngCore,
         T: PlonkTranscript<F>,
     {
