@@ -644,63 +644,17 @@ where
     }
 }
 
-#[cfg(test)]
-pub mod test {
-    use crate::{
-        errors::PlonkError,
-        proof_system::{
-            structs::{
-                eval_merged_lookup_witness, eval_merged_table, Challenges, Oracles, Proof,
-                ProvingKey, UniversalSrs, VerifyingKey,
-            },
-            PlonkKzgSnark, UniversalSNARK,
-        },
-        transcript::{
-            rescue::RescueTranscript, solidity::SolidityTranscript, standard::StandardTranscript,
-            PlonkTranscript,
-        },
-        PlonkType,
-    };
-    use ark_bls12_377::{Bls12_377, Fq as Fq377};
-    use ark_bls12_381::{Bls12_381, Fq as Fq381};
-    use ark_bn254::{Bn254, Fq as Fq254};
-    use ark_bw6_761::{Fq as Fq761, BW6_761};
-    use ark_ec::{
-        pairing::Pairing,
-        short_weierstrass::{Affine, SWCurveConfig},
-    };
-    use ark_ff::{One, PrimeField, Zero};
-    use ark_poly::{
-        univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Polynomial,
-        Radix2EvaluationDomain,
-    };
-    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-    use ark_std::{
-        convert::TryInto,
-        format,
-        rand::{CryptoRng, RngCore},
-        string::ToString,
-        vec,
-        vec::Vec,
-    };
-    use core::ops::{Mul, Neg};
-    use jf_primitives::{
-        pcs::{
-            prelude::{Commitment, UnivariateKzgPCS},
-            PolynomialCommitmentScheme,
-        },
-        rescue::RescueParameter,
-    };
-    use jf_utils::test_rng;
-    use mpc_relation::{
-        constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam, traits::*, MergeableCircuitType,
-        PlonkCircuit,
-    };
+#[cfg(any(test, feature = "test_apis"))]
+pub mod test_helpers {
+    //! Test helpers for Plonk SNARK
+    use crate::{errors::PlonkError, PlonkType};
+    use ark_ff::PrimeField;
+    use mpc_relation::{traits::*, PlonkCircuit};
 
-    // Different `m`s lead to different circuits.
-    // Different `a0`s lead to different witness values.
-    // For UltraPlonk circuits, `a0` should be less than or equal to `m+1`
-    pub(crate) fn gen_circuit_for_test<F: PrimeField>(
+    /// Different `m`s lead to different circuits.
+    /// Different `a0`s lead to different witness values.
+    /// For UltraPlonk circuits, `a0` should be less than or equal to `m+1`
+    pub fn gen_circuit_for_test<F: PrimeField>(
         m: usize,
         a0: usize,
         plonk_type: PlonkType,
@@ -764,6 +718,61 @@ pub mod test {
 
         Ok(cs)
     }
+}
+
+#[cfg(test)]
+pub mod test {
+    use crate::{
+        errors::PlonkError,
+        proof_system::{
+            snark::test_helpers::gen_circuit_for_test,
+            structs::{
+                eval_merged_lookup_witness, eval_merged_table, Challenges, Oracles, Proof,
+                ProvingKey, UniversalSrs, VerifyingKey,
+            },
+            PlonkKzgSnark, UniversalSNARK,
+        },
+        transcript::{
+            rescue::RescueTranscript, solidity::SolidityTranscript, standard::StandardTranscript,
+            PlonkTranscript,
+        },
+        PlonkType,
+    };
+    use ark_bls12_377::{Bls12_377, Fq as Fq377};
+    use ark_bls12_381::{Bls12_381, Fq as Fq381};
+    use ark_bn254::{Bn254, Fq as Fq254};
+    use ark_bw6_761::{Fq as Fq761, BW6_761};
+    use ark_ec::{
+        pairing::Pairing,
+        short_weierstrass::{Affine, SWCurveConfig},
+    };
+    use ark_ff::{One, PrimeField, Zero};
+    use ark_poly::{
+        univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Polynomial,
+        Radix2EvaluationDomain,
+    };
+    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+    use ark_std::{
+        convert::TryInto,
+        format,
+        rand::{CryptoRng, RngCore},
+        string::ToString,
+        vec,
+        vec::Vec,
+    };
+    use core::ops::{Mul, Neg};
+    use jf_primitives::{
+        pcs::{
+            prelude::{Commitment, UnivariateKzgPCS},
+            PolynomialCommitmentScheme,
+        },
+        rescue::RescueParameter,
+    };
+    use jf_utils::test_rng;
+    use mpc_relation::{
+        constants::GATE_WIDTH, gadgets::ecc::SWToTEConParam, traits::*, MergeableCircuitType,
+        PlonkCircuit,
+    };
 
     #[test]
     fn test_preprocessing() -> Result<(), PlonkError> {

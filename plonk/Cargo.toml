@@ -10,6 +10,7 @@ license = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+ark-bn254 = { version = "0.4.0", optional = true }
 ark-ec = "0.4.0"
 ark-ff = { version = "0.4.0", features = ["asm"] }
 ark-mpc = { workspace = true }
@@ -30,6 +31,7 @@ mpc-relation = { path = "../relation", default-features = false }
 jf-utils = { path = "../utilities" }
 merlin = { version = "3.0.0", default-features = false }
 num-bigint = { version = "0.4", default-features = false }
+rand = { version = "0.8", optional = true }
 rand_chacha = { version = "0.3.1", default-features = false }
 rayon = { version = "1.5.0", optional = true }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
@@ -44,9 +46,9 @@ ark-bw6-761 = "0.4.0"
 ark-ed-on-bls12-377 = "0.4.0"
 ark-ed-on-bls12-381 = "0.4.0"
 ark-ed-on-bn254 = "0.4.0"
+criterion = { version = "0.5", features = ["async", "async_tokio"] }
 hex = "^0.4.3"
 tokio = "1.33"
-rand = "0.8"
 
 # Benchmarks
 [[bench]]
@@ -54,9 +56,15 @@ name = "plonk-benches"
 path = "benches/bench.rs"
 harness = false
 
+[[bench]]
+name = "collaborative_proof"
+harness = false
+required-features = ["test_apis", "test-srs"]
+
 [features]
 all-tests = ["ark-mpc/test_helpers", "jf-primitives/test-srs"]
 default = ["parallel", "std"]
+stats = ["ark-mpc/stats"]
 std = [
     "ark-std/std",
     "ark-serialize/std",
@@ -72,7 +80,7 @@ std = [
     "rand_chacha/std",
     "sha3/std",
 ]
-test_apis = [] # exposing apis for testing purpose
+test_apis = ["ark-bn254", "rand", "ark-mpc/test_helpers"]
 parallel = [
     "ark-ff/parallel",
     "ark-ec/parallel",

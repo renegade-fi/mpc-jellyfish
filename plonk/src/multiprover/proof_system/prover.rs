@@ -808,8 +808,6 @@ pub fn mul_poly_result<C: CurveGroup>(
 
 #[cfg(test)]
 pub(crate) mod test {
-
-    use ark_ec::pairing::Pairing;
     use ark_ff::{One, Zero};
     use ark_mpc::{
         algebra::{AuthenticatedDensePoly, Scalar},
@@ -825,37 +823,17 @@ pub(crate) mod test {
     use rand::thread_rng;
 
     use crate::{
-        multiprover::proof_system::{MpcChallenges, MpcOracles, MpcPlonkCircuit},
+        multiprover::proof_system::{
+            test_helpers::{setup_snark, TestCurve, TestGroup, TestScalar},
+            MpcChallenges, MpcOracles, MpcPlonkCircuit,
+        },
         proof_system::{
             prover::Prover,
-            structs::{Challenges, Oracles, ProofEvaluations, ProvingKey, VerifyingKey},
-            PlonkKzgSnark, UniversalSNARK,
+            structs::{Challenges, Oracles, ProofEvaluations, ProvingKey},
         },
     };
 
     use super::MpcProver;
-
-    /// The curve used for testing
-    pub type TestCurve = ark_bn254::Bn254;
-    /// The curve group used for testing
-    pub type TestGroup = <TestCurve as Pairing>::G1;
-    /// The scalar field of the test curve
-    pub type TestScalar = <TestCurve as Pairing>::ScalarField;
-
-    /// The max degree of the circuits used for testing
-    pub const MAX_DEGREE_TESTING: usize = 1024;
-
-    /// Setup commitment keys, proving and verification keys for the snark
-    pub(crate) fn setup_snark<C: Arithmetization<TestScalar>>(
-        circuit: &C,
-    ) -> (ProvingKey<TestCurve>, VerifyingKey<TestCurve>) {
-        let mut rng = thread_rng();
-        let srs =
-            PlonkKzgSnark::<TestCurve>::universal_setup_for_testing(MAX_DEGREE_TESTING, &mut rng)
-                .unwrap();
-
-        PlonkKzgSnark::<TestCurve>::preprocess(&srs, circuit).unwrap()
-    }
 
     /// Get a randomized set of challenges
     fn randomized_challenges() -> Challenges<TestScalar> {
