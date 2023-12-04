@@ -192,37 +192,48 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use ark_mpc::{
-        algebra::{AuthenticatedScalarResult, Scalar},
-        test_helpers::execute_mock_mpc,
-        MpcFabric,
-    };
-    use futures::future::join_all;
-    use itertools::Itertools;
-    use mpc_relation::{traits::*, PlonkType};
-    use rand::{thread_rng, Rng};
+#[cfg(any(test, feature = "test_apis"))]
+pub mod test_helpers {
+    //! Test helpers for the multiprover snark
+    use ark_ec::pairing::Pairing;
+    use ark_mpc::{algebra::Scalar, MpcFabric};
+    use mpc_relation::traits::*;
+    use rand::thread_rng;
 
     use crate::{
         errors::PlonkError,
-        multiprover::proof_system::{
-            test::{setup_snark, test_multiprover_circuit, test_singleprover_circuit, TestGroup},
-            MpcPlonkCircuit,
+        multiprover::proof_system::MpcPlonkCircuit,
+        proof_system::{
+            structs::{ProvingKey, VerifyingKey},
+            PlonkKzgSnark, UniversalSNARK,
         },
-        proof_system::{snark::test::gen_circuit_for_test, PlonkKzgSnark},
-        transcript::SolidityTranscript,
     };
 
-    use super::MultiproverPlonkKzgSnark;
+    /// The curve used for testing
+    pub type TestCurve = ark_bn254::Bn254;
+    /// The curve group used for testing
+    pub type TestGroup = <TestCurve as Pairing>::G1;
+    /// The scalar field of the test curve
+    pub type TestScalar = <TestCurve as Pairing>::ScalarField;
 
-    // -----------
-    // | Helpers |
-    // -----------
+    /// The max degree of the circuits used for testing
+    pub const MAX_DEGREE_TESTING: usize = 1024;
+
+    /// Setup commitment keys, proving and verification keys for the snark
+    pub fn setup_snark<C: Arithmetization<TestScalar>>(
+        circuit: &C,
+    ) -> (ProvingKey<TestCurve>, VerifyingKey<TestCurve>) {
+        let mut rng = thread_rng();
+        let srs =
+            PlonkKzgSnark::<TestCurve>::universal_setup_for_testing(MAX_DEGREE_TESTING, &mut rng)
+                .unwrap();
+
+        PlonkKzgSnark::<TestCurve>::preprocess(&srs, circuit).unwrap()
+    }
 
     /// A multiprover analog of the circuit used for testing the single-prover
     /// implementation in `plonk/proof_system/snark.rs`
-    pub(crate) fn gen_multiprover_circuit_for_test(
+    pub fn gen_multiprover_circuit_for_test(
         m: usize,
         a0: usize,
         fabric: MpcFabric<TestGroup>,
@@ -268,6 +279,29 @@ mod tests {
 
         Ok(cs)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use ark_mpc::{
+        algebra::{AuthenticatedScalarResult, Scalar},
+        test_helpers::execute_mock_mpc,
+    };
+    use futures::future::join_all;
+    use itertools::Itertools;
+    use mpc_relation::{traits::*, PlonkType};
+    use rand::{thread_rng, Rng};
+
+    use crate::{
+        multiprover::proof_system::{
+            test::{test_multiprover_circuit, test_singleprover_circuit},
+            test_helpers::{gen_multiprover_circuit_for_test, setup_snark},
+        },
+        proof_system::{snark::test_helpers::gen_circuit_for_test, PlonkKzgSnark},
+        transcript::SolidityTranscript,
+    };
+
+    use super::MultiproverPlonkKzgSnark;
 
     // ---------
     // | Tests |

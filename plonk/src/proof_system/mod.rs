@@ -23,6 +23,9 @@ pub mod verifier;
 use crate::transcript::PlonkTranscript;
 pub use snark::PlonkKzgSnark;
 
+#[cfg(feature = "test_apis")]
+pub use snark::test_helpers as snark_test_helpers;
+
 // TODO: (alex) should we name it `PlonkishSNARK` instead? since we use
 // `PlonkTranscript` on prove and verify.
 /// An interface for SNARKs with universal setup.

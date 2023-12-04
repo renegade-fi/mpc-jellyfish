@@ -14,3 +14,6 @@ repository = "https://github.com/EspressoSystems/jellyfish"
 [workspace.dependencies]
 itertools = { version = "0.10.1", default-features = false }
 ark-mpc = { git = "https://github.com/renegade-fi/ark-mpc" }
+
+[profile.bench]
+debug = true
