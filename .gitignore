@@ -8,6 +8,9 @@ Cargo.lock
 .pre-commit-config.yaml
 .vscode
 
+# Profiling
+**/flamegraph.svg
+
 # Test coverage (grcov)
 default.profraw
 /.pre-commit-config.yaml

@@ -83,7 +83,7 @@ where
 #[allow(unused)]
 pub struct MpcPlonkCircuit<C: CurveGroup>
 where
-    C::ScalarField: FftField,
+    C::ScalarField: FftField + Unpin,
 {
     /// The number of variables
     num_vars: usize,
@@ -127,7 +127,7 @@ where
 
 impl<C: CurveGroup> MpcPlonkCircuit<C>
 where
-    C::ScalarField: FftField,
+    C::ScalarField: FftField + Unpin,
 {
     /// Constructor
     pub fn new(fabric: MpcFabric<C>) -> Self {
@@ -199,7 +199,10 @@ where
 }
 
 /// Private helper methods
-impl<C: CurveGroup> MpcPlonkCircuit<C> {
+impl<C: CurveGroup> MpcPlonkCircuit<C>
+where
+    C::ScalarField: FftField + Unpin,
+{
     /// Whether the circuit is finalized
     fn is_finalized(&self) -> bool {
         self.eval_domain.size() != 1
@@ -480,7 +483,10 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
 }
 
 #[async_trait]
-impl<C: CurveGroup> Circuit<C::ScalarField> for MpcPlonkCircuit<C> {
+impl<C: CurveGroup> Circuit<C::ScalarField> for MpcPlonkCircuit<C>
+where
+    C::ScalarField: Unpin,
+{
     type Wire = AuthenticatedScalarResult<C>;
     type Constant = Scalar<C>;
 
@@ -653,7 +659,10 @@ impl<C: CurveGroup> Circuit<C::ScalarField> for MpcPlonkCircuit<C> {
 }
 
 /// Private permutation related methods
-impl<C: CurveGroup> MpcPlonkCircuit<C> {
+impl<C: CurveGroup> MpcPlonkCircuit<C>
+where
+    C::ScalarField: FftField + Unpin,
+{
     /// Copy constraints: precompute the extended permutation over circuit
     /// wires. Refer to Sec 5.2 and Sec 8.1 of https://eprint.iacr.org/2019/953.pdf for more details.
     #[inline]
@@ -709,7 +718,10 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
 }
 
 /// Finalization
-impl<C: CurveGroup> MpcPlonkCircuit<C> {
+impl<C: CurveGroup> MpcPlonkCircuit<C>
+where
+    C::ScalarField: FftField + Unpin,
+{
     /// Finalize the setup of the circuit before arithmetization.
     pub fn finalize_for_arithmetization(&mut self) -> Result<(), CircuitError> {
         if self.is_finalized() {
@@ -726,7 +738,10 @@ impl<C: CurveGroup> MpcPlonkCircuit<C> {
     }
 }
 
-impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C> {
+impl<C: CurveGroup> MpcArithmetization<C> for MpcPlonkCircuit<C>
+where
+    C::ScalarField: Unpin,
+{
     fn srs_size(&self) -> Result<usize, CircuitError> {
         Ok(self.eval_domain_size()? + 2)
     }

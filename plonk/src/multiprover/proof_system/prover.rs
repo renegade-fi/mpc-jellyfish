@@ -1,8 +1,8 @@
 //! A multiprover implementation of the PLONK proof system
-use core::ops::Neg;
+use core::{iter, ops::Neg};
 
 use ark_ec::{pairing::Pairing, CurveGroup};
-use ark_ff::{FftField, Field, One};
+use ark_ff::{FftField, Field, One, Zero};
 use ark_mpc::{
     algebra::{
         AuthenticatedDensePoly, AuthenticatedScalarResult, DensePolynomialResult, Scalar,
@@ -369,10 +369,6 @@ impl<E: Pairing> MpcProver<E> {
             .map(Scalar::new)
             .collect();
 
-        // Compute coset evaluations of the quotient polynomial
-        let mut quot_poly_coset_evals_sum = self.fabric.zeros_authenticated(m);
-        let alpha_base = self.fabric.one();
-
         // The coset we use to compute the quotient polynomial
         let coset = self
             .quot_domain
@@ -409,171 +405,290 @@ impl<E: Pairing> MpcProver<E> {
             coset,
         );
 
-        // Compute coset evaluations of the quotient polynomial following the identity
-        // in the Plonk paper
-        let quot_poly_coset_evals: Vec<AuthenticatedScalarResult<E::G1>> = (0..m)
-            .map(|i| {
-                // The evaluations of the wiring polynomials at this index
-                let w: Vec<AuthenticatedScalarResult<E::G1>> = (0..num_wire_types)
-                    .map(|j| wire_polys_coset_fft[j][i].clone())
-                    .collect();
+        // The contribution of the gate constraints to the quotient polynomial
+        // evaluations
+        let t_circ = self.compute_quotient_circuit_contribution(
+            &wire_polys_coset_fft,
+            &pub_input_poly_coset_fft,
+            &selectors_coset_fft,
+        );
 
-                // The contribution of the gate constraints to the current quotient
-                // evaluation
-                let t_circ = Self::compute_quotient_circuit_contribution(
-                    i,
-                    &w,
-                    &pub_input_poly_coset_fft[i],
-                    &selectors_coset_fft,
-                );
+        // The contribution of the permutation argument (which validates the copy
+        // constraints) to the quotient polynomial
+        let (t_perms1, t_perms2) = self.compute_quotient_copy_constraint_contribution(
+            num_wire_types,
+            domain_size_ratio,
+            pk,
+            &wire_polys_coset_fft,
+            &prod_perm_poly_coset_fft,
+            challenges,
+            &sigmas_coset_fft,
+        );
 
-                // The terms that enforce the copy constraint, the first checks that each
-                // individual index in the grand product is
-                // consistent with the permutation. The second term checks
-                // the grand product
-                let (t_perm_1, t_perm_2) = Self::compute_quotient_copy_constraint_contribution(
-                    i,
-                    self.quot_domain.element(i) * E::ScalarField::GENERATOR,
-                    pk,
-                    &w,
-                    &prod_perm_poly_coset_fft[i],
-                    &prod_perm_poly_coset_fft[(i + domain_size_ratio) % m],
-                    challenges,
-                    &sigmas_coset_fft,
-                );
+        // Combine the gate and copy constraints
+        let zh_inv_values = (0..m).map(|i| z_h_inv[i % domain_size_ratio]).collect_vec();
+        let t1 = AuthenticatedScalarResult::batch_add(&t_circ, &t_perms1);
+        let t1_mul = AuthenticatedScalarResult::batch_mul_constant(&t1, &zh_inv_values);
 
-                let t1 = t_circ + t_perm_1;
-                let t2 = t_perm_2;
-
-                t1 * z_h_inv[i % domain_size_ratio] + t2
-            })
-            .collect();
-
-        for (a, b) in quot_poly_coset_evals_sum
-            .iter_mut()
-            .zip(quot_poly_coset_evals.iter())
-        {
-            *a = &*a + &alpha_base * b;
-        }
+        let quot_poly_evals = AuthenticatedScalarResult::batch_add(&t1_mul, &t_perms2);
 
         // Compute the coefficient form of the quotient polynomial
-        let coeffs = AuthenticatedScalarResult::ifft_with_domain(&quot_poly_coset_evals_sum, coset);
+        let coeffs = AuthenticatedScalarResult::ifft_with_domain(&quot_poly_evals, coset);
         Ok(AuthenticatedDensePoly::from_coeffs(coeffs))
     }
 
-    // Compute the i-th coset evaluation of the circuit part of the quotient
-    // polynomial.
+    /// Compute the contribution of the gate constraint to the quotient
+    /// polynomial
     fn compute_quotient_circuit_contribution(
-        i: usize,
-        w: &[AuthenticatedScalarResult<E::G1>],
-        pi: &AuthenticatedScalarResult<E::G1>,
+        &self,
+        w: &[Vec<AuthenticatedScalarResult<E::G1>>],
+        pi: &[AuthenticatedScalarResult<E::G1>],
         selectors_coset_fft: &[Vec<E::ScalarField>],
-    ) -> AuthenticatedScalarResult<E::G1> {
+    ) -> Vec<AuthenticatedScalarResult<E::G1>> {
         // Selectors in order: q_lc, q_mul, q_hash, q_o, q_c, q_ecc
-        let q_lc: Vec<Scalar<E::G1>> = (0..GATE_WIDTH)
-            .map(|j| selectors_coset_fft[j][i])
-            .map(Scalar::new)
-            .collect();
-        let q_mul: Vec<Scalar<E::G1>> = (GATE_WIDTH..GATE_WIDTH + 2)
-            .map(|j| selectors_coset_fft[j][i])
-            .map(Scalar::new)
-            .collect();
-        let q_hash: Vec<Scalar<E::G1>> = (GATE_WIDTH + 2..2 * GATE_WIDTH + 2)
-            .map(|j| selectors_coset_fft[j][i])
-            .map(Scalar::new)
-            .collect();
-        let q_o = Scalar::new(selectors_coset_fft[2 * GATE_WIDTH + 2][i]);
-        let q_c = Scalar::new(selectors_coset_fft[2 * GATE_WIDTH + 3][i]);
-        let q_ecc = Scalar::new(selectors_coset_fft[2 * GATE_WIDTH + 4][i]);
+        let q_lc0 = &selectors_coset_fft[0];
+        let q_lc1 = &selectors_coset_fft[1];
+        let q_lc2 = &selectors_coset_fft[2];
+        let q_lc3 = &selectors_coset_fft[3];
+        let q_mul0 = &selectors_coset_fft[4];
+        let q_mul1 = &selectors_coset_fft[5];
+        let q_hash0 = &selectors_coset_fft[6];
+        let q_hash1 = &selectors_coset_fft[7];
+        let q_hash2 = &selectors_coset_fft[8];
+        let q_hash3 = &selectors_coset_fft[9];
+        let q_o = &selectors_coset_fft[10];
+        let q_c = &selectors_coset_fft[11];
+        let q_ecc = &selectors_coset_fft[12];
 
-        // Macro that adds a term to the result only if its selector is non-zero
-        // Multiplication in an MPC circuit is expensive so we use this macro to avoid
-        // multiplication except when necessary
-        let mut res = q_c + pi;
-        macro_rules! mask_term {
-            ($sel:expr, $x:expr) => {
-                if $sel != Scalar::zero() {
-                    res = res + $sel * $x;
-                }
-            };
+        // Compute the batch contribution of each selector
+        let lc0 = self.compute_selector_batch(q_lc0, vec![&w[0]]);
+        let lc1 = self.compute_selector_batch(q_lc1, vec![&w[1]]);
+        let lc2 = self.compute_selector_batch(q_lc2, vec![&w[2]]);
+        let lc3 = self.compute_selector_batch(q_lc3, vec![&w[3]]);
+        let mul0 = self.compute_selector_batch(q_mul0, vec![&w[0], &w[1]]);
+        let mul1 = self.compute_selector_batch(q_mul1, vec![&w[2], &w[3]]);
+        let ecc = self.compute_selector_batch(q_ecc, vec![&w[0], &w[1], &w[2], &w[3]]);
+        let hash0 = self.compute_hash_selector_batch(q_hash0, &w[0]);
+        let hash1 = self.compute_hash_selector_batch(q_hash1, &w[1]);
+        let hash2 = self.compute_hash_selector_batch(q_hash2, &w[2]);
+        let hash3 = self.compute_hash_selector_batch(q_hash3, &w[3]);
+
+        let neg_out = AuthenticatedScalarResult::batch_neg(&w[4]);
+        let output = self.compute_selector_batch(q_o, vec![&neg_out]);
+
+        let constants = q_c.iter().copied().map(Scalar::new).collect_vec();
+        let input = AuthenticatedScalarResult::batch_add_constant(pi, &constants);
+
+        // Sum up all the selectors
+        element_wise_sum(&[
+            lc0, lc1, lc2, lc3, mul0, mul1, ecc, hash0, hash1, hash2, hash3, output, input,
+        ])
+    }
+
+    /// Compute the batch circuit contribution of a selector times the product
+    /// of its wires, that is, for each entry we have     
+    ///     out[i] = sel[i] * w[i][0] * w[i][1] * ... * w[i][m-1]
+    ///
+    /// We use a sparse multiplication here and splice the sparse result with
+    /// zeros to construct the full result
+    fn compute_selector_batch(
+        &self,
+        selectors: &[E::ScalarField],
+        wires: Vec<&[AuthenticatedScalarResult<E::G1>]>,
+    ) -> Vec<AuthenticatedScalarResult<E::G1>> {
+        let n = selectors.len();
+        let m = wires.len();
+        let mut nonzero_indices = Vec::new();
+
+        let mut nonzero_sel: Vec<Scalar<E::G1>> = Vec::new();
+        let mut nonzero_wires: Vec<Vec<AuthenticatedScalarResult<E::G1>>> = vec![vec![]; m];
+        for (i, selector) in selectors.iter().enumerate() {
+            if !selector.is_zero() {
+                wires
+                    .iter()
+                    .enumerate()
+                    .for_each(|(j, w)| nonzero_wires[j].push(w[i].clone()));
+                nonzero_sel.push(Scalar::new(*selector));
+                nonzero_indices.push(i);
+            }
         }
 
-        mask_term!(q_lc[0], &w[0]);
-        mask_term!(q_lc[1], &w[1]);
-        mask_term!(q_lc[2], &w[2]);
-        mask_term!(q_lc[3], &w[3]);
-        mask_term!(q_mul[0], &w[0] * &w[1]);
-        mask_term!(q_mul[1], &w[2] * &w[3]);
-        mask_term!(q_ecc, &w[0] * &w[1] * &w[2] * &w[3] * &w[4]);
-        mask_term!(q_hash[0], w[0].pow(5));
-        mask_term!(q_hash[1], w[1].pow(5));
-        mask_term!(q_hash[2], w[2].pow(5));
-        mask_term!(q_hash[3], w[3].pow(5));
-        mask_term!(q_o, -&w[4]);
+        // Multiply the non-zero wires and selectors
+        let wire_product = element_wise_product(&nonzero_wires);
+        let mul_res = AuthenticatedScalarResult::batch_mul_constant(&wire_product, &nonzero_sel);
+
+        self.splice_with_zeros(n, mul_res, nonzero_indices)
+    }
+
+    /// Compute the contribution of a hash selector to the quotient polynomial
+    ///
+    /// This differs from the method above in that we do not take the product
+    /// but instead raise the given wire values to their fifth power
+    fn compute_hash_selector_batch(
+        &self,
+        selectors: &[E::ScalarField],
+        wires: &[AuthenticatedScalarResult<E::G1>],
+    ) -> Vec<AuthenticatedScalarResult<E::G1>> {
+        let n = selectors.len();
+        let mut nonzero_indices = Vec::new();
+
+        let mut nonzero_sel: Vec<Scalar<E::G1>> = Vec::new();
+        let mut nonzero_wires: Vec<AuthenticatedScalarResult<E::G1>> = Vec::new();
+        for (i, (selector, wire)) in selectors.iter().zip(wires.iter()).enumerate() {
+            if !selector.is_zero() {
+                nonzero_wires.push(wire.pow(5));
+                nonzero_sel.push(Scalar::new(*selector));
+                nonzero_indices.push(i);
+            }
+        }
+
+        // Multiply the non-zero wires and selectors
+        let mul_res = AuthenticatedScalarResult::batch_mul_constant(&nonzero_wires, &nonzero_sel);
+        self.splice_with_zeros(n, mul_res, nonzero_indices)
+    }
+
+    /// Splice the given vector with a vector of zeros placing the values of the
+    /// input vector at the indices specified by `nonzero_indices`
+    fn splice_with_zeros(
+        &self,
+        res_len: usize,
+        values: Vec<AuthenticatedScalarResult<E::G1>>,
+        nonzero_indices: Vec<usize>,
+    ) -> Vec<AuthenticatedScalarResult<E::G1>> {
+        let zero = self.fabric.zero_authenticated();
+
+        // Splice together the multiplication results with zeros
+        let mut res = Vec::with_capacity(res_len);
+        let mut cursor = 0;
+        for (nonzero_index, value) in nonzero_indices.iter().zip(values.into_iter()) {
+            let num_zeros = *nonzero_index - cursor;
+            res.extend(&mut iter::repeat(zero.clone()).take(num_zeros));
+            res.push(value);
+            cursor = *nonzero_index + 1;
+        }
+
+        // Add any extra zeros at the end
+        let num_zeros = res_len - cursor;
+        res.extend(&mut iter::repeat(zero).take(num_zeros));
 
         res
     }
 
-    /// Compute the i-th coset evaluation of the copy constraint part of the
-    /// quotient polynomial.
-    /// `eval_point` - the evaluation point.
-    /// `w` - the wire polynomial coset evaluations at `eval_point`.
-    /// `z_x` - the permutation product polynomial evaluation at `eval_point`.
-    /// `z_xw`-  the permutation product polynomial evaluation at `eval_point *
-    /// g`, where `g` is the root of unity of the original domain.
-    #[allow(clippy::too_many_arguments)]
+    /// Computes the contribution of the copy constraint to the quotient
+    /// polynomials.
+    ///
+    /// The first term is: the wire values summed with a random affine
+    /// transformation applied to their indices; minus the same wire values with
+    /// the same random affine transformation applied to their *permutation*
+    ///
+    /// The second term here corresponds to the grand product check that
+    /// validates the permutation
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     fn compute_quotient_copy_constraint_contribution(
-        i: usize,
-        eval_point: E::ScalarField,
+        &self,
+        num_wire_types: usize,
+        domain_size_ratio: usize,
         pk: &ProvingKey<E>,
-        w: &[AuthenticatedScalarResult<E::G1>],
-        z_x: &AuthenticatedScalarResult<E::G1>,
-        z_xw: &AuthenticatedScalarResult<E::G1>,
+        wire_evals: &[Vec<AuthenticatedScalarResult<E::G1>>],
+        prod_perm_poly_coset_evals: &[AuthenticatedScalarResult<E::G1>],
         challenges: &MpcChallenges<E::G1>,
         sigmas_coset_fft: &[Vec<E::ScalarField>],
     ) -> (
-        AuthenticatedScalarResult<E::G1>,
-        AuthenticatedScalarResult<E::G1>,
+        Vec<AuthenticatedScalarResult<E::G1>>,
+        Vec<AuthenticatedScalarResult<E::G1>>,
     ) {
-        let num_wire_types = w.len();
         let n = pk.domain_size();
-        let eval_point = Scalar::new(eval_point);
+        let m = self.quot_domain.size();
 
-        // The check that:
-        //   \prod_i [w_i(X) + beta * k_i * X + gamma] * z(X)
-        // - \prod_i [w_i(X) + beta * sigma_i(X) + gamma] * z(wX) = 0
-        // on the vanishing set.
-        // Delay the division of Z_H(X)
-        //
-        // Extended permutation values
-        let sigmas: Vec<E::ScalarField> = (0..num_wire_types)
-            .map(|j| sigmas_coset_fft[j][i])
-            .collect();
+        // Tile an array with the challenges
+        let alphas = vec![challenges.alpha.clone(); m];
+        let betas = vec![challenges.beta.clone(); m];
+        let gammas = vec![challenges.gamma.clone(); m];
 
-        // Compute the 1st term
-        let mut result_1 = &challenges.alpha
-            * w.iter().enumerate().fold(z_x.clone(), |acc, (j, w)| {
-                let challenge =
-                    Scalar::new(pk.k()[j]) * eval_point * &challenges.beta + &challenges.gamma;
-                acc * (w + challenge)
-            });
+        // Construct the evaluations shifted by the coset generators
+        let coset_generators = pk.k().iter().copied().collect_vec();
+        let eval_points = (0..m)
+            .map(|i| self.quot_domain.element(i) * E::ScalarField::GENERATOR)
+            .collect_vec();
 
-        // Minus the 2nd term
-        result_1 = result_1
-            - &challenges.alpha
-                * w.iter()
-                    .zip(sigmas.iter())
-                    .fold(z_xw.clone(), |acc, (w, &sigma)| {
-                        let challenge = Scalar::new(sigma) * &challenges.beta + &challenges.gamma;
-                        acc * (w + challenge)
-                    });
+        let mut all_evals = Vec::with_capacity(num_wire_types);
+        for generator in coset_generators.iter() {
+            let mut evals = Vec::with_capacity(m);
+            for point in eval_points.iter() {
+                evals.push(*point * *generator);
+            }
 
-        // The check that z(x) = 1 at point 1
-        // (z(x)-1) * L1(x) * alpha^2 / Z_H(x) = (z(x)-1) * alpha^2 / (n * (x - 1))
-        let denom = Scalar::from(n as u64) * (eval_point - Scalar::one());
-        let result_2 = challenges.alpha.pow(2) * (z_x - Scalar::one()) * denom.inverse();
+            all_evals.push(evals);
+        }
 
-        (result_1, result_2)
+        // --- First Term --- //
+        let mut product = Self::compute_shifted_product(&betas, &gammas, wire_evals, &all_evals);
+        product = AuthenticatedScalarResult::batch_mul(&product, prod_perm_poly_coset_evals);
+        let first_term_evals = AuthenticatedScalarResult::batch_mul_public(&product, &alphas);
+
+        // --- Second Term --- //
+        let mut product =
+            Self::compute_shifted_product(&betas, &gammas, wire_evals, sigmas_coset_fft);
+
+        let initial_shifted_evals = (0..m)
+            .map(|i| prod_perm_poly_coset_evals[(i + domain_size_ratio) % m].clone())
+            .collect_vec();
+        product = AuthenticatedScalarResult::batch_mul(&product, &initial_shifted_evals);
+        let second_term_evals = AuthenticatedScalarResult::batch_mul_public(&product, &alphas);
+
+        // Combine the first and second terms
+        let res1 = AuthenticatedScalarResult::batch_sub(&first_term_evals, &second_term_evals);
+
+        // -- Third Term -- //
+        let n_scalar = Scalar::from(n);
+        let alpha_square = challenges.alpha.pow(2);
+        let alphas = vec![alpha_square; m];
+        let ones = vec![self.fabric.one(); m];
+
+        let denominators = eval_points
+            .into_iter()
+            .map(Scalar::new)
+            .map(|p| n_scalar * (p - Scalar::one()))
+            .map(|s| s.inverse())
+            .collect_vec();
+        let scaling_factors = ScalarResult::batch_mul_constant(&alphas, &denominators);
+
+        let numerators =
+            AuthenticatedScalarResult::batch_sub_public(prod_perm_poly_coset_evals, &ones);
+        let res2 = AuthenticatedScalarResult::batch_mul_public(&numerators, &scaling_factors);
+
+        (res1, res2)
+    }
+
+    /// Computes the product of a set of wire values with random affine
+    /// transformations added to their indices
+    fn compute_shifted_product(
+        beta: &[ScalarResult<E::G1>],
+        gamma: &[ScalarResult<E::G1>],
+        wire_evals: &[Vec<AuthenticatedScalarResult<E::G1>>],
+        eval_domain: &[Vec<E::ScalarField>],
+    ) -> Vec<AuthenticatedScalarResult<E::G1>> {
+        let num_wire_types = wire_evals.len();
+
+        // Compute the affine transformations of the given domain values
+        let mut challenge_lcs = Vec::with_capacity(num_wire_types);
+        for eval_coset in eval_domain.iter() {
+            let scalar_coset = eval_coset.iter().copied().map(Scalar::new).collect_vec();
+            let scaled_eval = ScalarResult::batch_mul_constant(beta, &scalar_coset);
+            let affine_eval = ScalarResult::batch_add(&scaled_eval, gamma);
+
+            challenge_lcs.push(affine_eval);
+        }
+
+        // Add these transformed domain values to the wire values
+        let mut product_terms = Vec::with_capacity(num_wire_types);
+        for (wire_eval, challenge_lc) in wire_evals.iter().zip(challenge_lcs.iter()) {
+            let term = AuthenticatedScalarResult::batch_add_public(wire_eval, challenge_lc);
+            product_terms.push(term);
+        }
+
+        // Reduce via product
+        element_wise_product(&product_terms)
     }
 
     /// Split the quotient polynomial into `num_wire_types` polynomials.
@@ -758,6 +873,54 @@ fn mul_by_vanishing_poly<C: CurveGroup, D: EvaluationDomain<C::ScalarField>>(
 #[inline]
 fn quotient_polynomial_degree(domain_size: usize, num_wire_types: usize) -> usize {
     num_wire_types * (domain_size + 1) + 2
+}
+
+/// Take the element-wise product of a set of vectors
+fn element_wise_product<C: CurveGroup>(
+    vectors: &[Vec<AuthenticatedScalarResult<C>>],
+) -> Vec<AuthenticatedScalarResult<C>> {
+    assert!(!vectors.is_empty(), "must have at least one vector");
+    if vectors.len() == 1 {
+        return vectors[0].clone();
+    }
+
+    let n = vectors[0].len();
+    for vec in vectors.iter() {
+        assert_eq!(vec.len(), n, "all vectors must have the same length");
+    }
+
+    let initial = AuthenticatedScalarResult::batch_mul(&vectors[0], &vectors[1]);
+
+    // If we choose to view the vectors as tiling the columns of matrices, each step
+    // in this fold replaces the first and second columns with their
+    // element-wise product
+    vectors[2..].iter().fold(initial, |acc, vec| {
+        AuthenticatedScalarResult::batch_mul(&acc, vec)
+    })
+}
+
+/// Take the element-wise sum of a set of vectors
+fn element_wise_sum<C: CurveGroup>(
+    vectors: &[Vec<AuthenticatedScalarResult<C>>],
+) -> Vec<AuthenticatedScalarResult<C>> {
+    assert!(!vectors.is_empty(), "must have at least one vector");
+    if vectors.len() == 1 {
+        return vectors[0].clone();
+    }
+
+    let n = vectors[0].len();
+    for vec in vectors.iter() {
+        assert_eq!(vec.len(), n, "all vectors must have the same length");
+    }
+
+    let initial = AuthenticatedScalarResult::batch_add(&vectors[0], &vectors[1]);
+
+    // If we choose to view the vectors as tiling the columns of matrices, each step
+    // in this fold replaces the first and second columns with their
+    // element-wise sum
+    vectors[2..].iter().fold(initial, |acc, vec| {
+        AuthenticatedScalarResult::batch_add(&acc, vec)
+    })
 }
 
 /// Evaluate a public polynomial on a result in the MPC fabric
