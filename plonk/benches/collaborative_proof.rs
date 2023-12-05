@@ -112,13 +112,8 @@ async fn multiprover_prove(pk: &ProvingKey<TestCurve>) -> Duration {
             )
             .unwrap();
 
-            black_box(
-                MultiproverPlonkKzgSnark::prove(&circuit, &pk, fabric)
-                    .unwrap()
-                    .open_authenticated()
-                    .await
-                    .unwrap(),
-            );
+            let proof = MultiproverPlonkKzgSnark::prove(&circuit, &pk, fabric).unwrap();
+            black_box(proof.open_authenticated().await.unwrap());
 
             start.elapsed()
         }

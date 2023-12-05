@@ -217,7 +217,7 @@ pub mod test_helpers {
     pub type TestScalar = <TestCurve as Pairing>::ScalarField;
 
     /// The max degree of the circuits used for testing
-    pub const MAX_DEGREE_TESTING: usize = 1024;
+    pub const MAX_DEGREE_TESTING: usize = 65536;
 
     /// Setup commitment keys, proving and verification keys for the snark
     pub fn setup_snark<C: Arithmetization<TestScalar>>(

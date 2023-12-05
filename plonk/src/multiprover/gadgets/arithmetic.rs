@@ -1,7 +1,7 @@
 //! Defines arithmetic gadgets for use in circuits
 
 use ark_ec::CurveGroup;
-use ark_ff::One;
+use ark_ff::{FftField, One};
 use ark_mpc::algebra::Scalar;
 use mpc_relation::{
     constants::{GATE_WIDTH, N_MUL_SELECTORS},
@@ -15,7 +15,10 @@ use crate::multiprover::proof_system::MpcPlonkCircuit;
 
 use super::scalar;
 
-impl<C: CurveGroup> MpcPlonkCircuit<C> {
+impl<C: CurveGroup> MpcPlonkCircuit<C>
+where
+    C::ScalarField: FftField + Unpin,
+{
     /// Arithmetic gates
     ///
     /// Quadratic polynomial gate: q1 * a + q2 * b + q3 * c + q4 * d + q12 * a *
