@@ -876,7 +876,7 @@ fn quotient_polynomial_degree(domain_size: usize, num_wire_types: usize) -> usiz
 }
 
 /// Take the element-wise product of a set of vectors
-fn element_wise_product<C: CurveGroup>(
+pub fn element_wise_product<C: CurveGroup>(
     vectors: &[Vec<AuthenticatedScalarResult<C>>],
 ) -> Vec<AuthenticatedScalarResult<C>> {
     assert!(!vectors.is_empty(), "must have at least one vector");

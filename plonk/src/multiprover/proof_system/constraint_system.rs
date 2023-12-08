@@ -22,6 +22,8 @@ use mpc_relation::{
     BoolVar, GateId, Variable, WireId,
 };
 
+use super::element_wise_product;
+
 // --------------------
 // | Traits and Types |
 // --------------------
@@ -799,29 +801,38 @@ where
         let n = self.eval_domain.size();
         let one = self.fabric.one_authenticated();
 
-        let mut numerators = Vec::with_capacity(self.num_wire_types() * (n - 1));
-        let mut denominators = Vec::with_capacity(self.num_wire_types() * (n - 1));
+        let gammas = vec![gamma.clone(); n - 1];
+        let betas = vec![beta.clone(); n - 1];
 
-        for j in 0..(n - 1) {
-            // Numerator
-            let mut a = one.clone();
-            // Denominator
-            let mut b = one.clone();
+        let mut numerator_terms = Vec::with_capacity(self.num_wire_types());
+        let mut denominator_terms = Vec::with_capacity(self.num_wire_types());
+        for i in 0..self.num_wire_types() {
+            let wire_values = (0..(n - 1))
+                .map(|j| self.witness[self.wire_variable(i, j)].clone())
+                .collect_vec();
+            let id_perm_values = (0..(n - 1))
+                .map(|j| Scalar::new(self.extended_id_permutation[i * n + j]))
+                .collect_vec();
+            let perm_values = (0..(n - 1))
+                .map(|j| self.wire_permutation[i * n + j])
+                .map(|(perm_i, perm_j)| self.extended_id_permutation[perm_i * n + perm_j])
+                .map(Scalar::new)
+                .collect_vec();
 
-            for i in 0..self.num_wire_types() {
-                let wire_value = &self.witness[self.wire_variable(i, j)];
-                let tmp = wire_value + gamma;
-                a = a * (&tmp + beta * Scalar::new(self.extended_id_permutation[i * n + j]));
+            let tmp = AuthenticatedScalarResult::batch_add_public(&wire_values, &gammas);
+            let beta_times_id_perm = ScalarResult::batch_mul_constant(&betas, &id_perm_values);
+            let beta_times_sigma_perm = ScalarResult::batch_mul_constant(&betas, &perm_values);
 
-                let (perm_i, perm_j) = self.wire_permutation[i * n + j];
-                b = b
-                    * (&tmp
-                        + beta * Scalar::new(self.extended_id_permutation[perm_i * n + perm_j]));
-            }
+            let num_term = AuthenticatedScalarResult::batch_add_public(&tmp, &beta_times_id_perm);
+            let denom_term =
+                AuthenticatedScalarResult::batch_add_public(&tmp, &beta_times_sigma_perm);
 
-            numerators.push(a);
-            denominators.push(b);
+            numerator_terms.push(num_term);
+            denominator_terms.push(denom_term);
         }
+
+        let numerators = element_wise_product(&numerator_terms);
+        let denominators = element_wise_product(&denominator_terms);
 
         // Divide the numerators and denominators, create a prefix product of this
         // division, and then convert into a polynomial from evaluation form
