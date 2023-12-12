@@ -67,13 +67,9 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         ids.push(self.latest_op_id);
 
         let n = pub_input.len();
-        let res_id: ScalarResult<E::G1> = self.fabric.new_gate_op(ids, move |mut args| {
-            args.truncate(n);
-            let inputs = args
-                .into_iter()
-                .map(Scalar::from)
-                .map(|x| x.inner())
-                .collect_vec();
+        let res_id: ScalarResult<E::G1> = self.fabric.new_gate_op(ids, move |args| {
+            let args = args.take(n);
+            let inputs = args.map(Scalar::from).map(|x| x.inner()).collect_vec();
 
             let mut locked_transcript = transcript_ref.lock().unwrap();
             locked_transcript
@@ -128,8 +124,8 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         let transcript_ref = self.transcript.clone();
         let ids = vec![comm.id(), self.latest_op_id];
 
-        let res: ScalarResult<E::G1> = self.fabric.new_gate_op(ids, move |args| {
-            let comm: CurvePoint<E::G1> = args.first().unwrap().into();
+        let res: ScalarResult<E::G1> = self.fabric.new_gate_op(ids, move |mut args| {
+            let comm: CurvePoint<E::G1> = args.next().unwrap().into();
             let mut locked_transcript = transcript_ref.lock().unwrap();
 
             locked_transcript
@@ -154,27 +150,19 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         ids.push(self.latest_op_id);
 
         let transcript_ref = self.transcript.clone();
-        let res: ScalarResult<E::G1> = self.fabric.new_gate_op(ids, move |mut args| {
+        let res: ScalarResult<E::G1> = self.fabric.new_gate_op(ids, move |args| {
             let mut locked_transcript = transcript_ref.lock().unwrap();
 
-            let wires_evals = args
-                .drain(..n_wire_evals)
-                .map(Scalar::from)
-                .map(|x| x.inner())
-                .collect_vec();
+            let args = args.map(Scalar::from).map(|x| x.inner()).collect_vec();
+            let (wires_evals, args) = args.split_at(n_wire_evals);
+            let (wire_sigma_evals, args) = args.split_at(n_sigma_evals);
+            let perm_next_eval = *args.first().unwrap();
 
-            let wire_sigma_evals = args
-                .drain(..n_sigma_evals)
-                .map(Scalar::from)
-                .map(|x| x.inner())
-                .collect_vec();
-
-            let perm_next_eval = args.first().map(Scalar::from).map(|x| x.inner()).unwrap();
             <SolidityTranscript as PlonkTranscript<E::BaseField>>::append_proof_evaluations::<E>(
                 &mut locked_transcript,
                 &ProofEvaluations {
-                    wires_evals,
-                    wire_sigma_evals,
+                    wires_evals: wires_evals.to_vec(),
+                    wire_sigma_evals: wire_sigma_evals.to_vec(),
                     perm_next_eval,
                 },
             )

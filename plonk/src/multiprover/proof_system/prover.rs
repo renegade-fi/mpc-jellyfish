@@ -936,7 +936,7 @@ fn eval_poly_on_result<C: CurveGroup>(
     // For this we create a new gate op that resolves when the eval point is
     // computed
     fabric.new_gate_op(vec![point.id()], move |mut args| {
-        let point: Scalar<C> = args.pop().unwrap().into();
+        let point: Scalar<C> = args.next().unwrap().into();
         let res = poly.evaluate(&point.inner());
 
         ResultValue::Scalar(Scalar::new(res))
@@ -956,7 +956,7 @@ pub fn mul_poly_result<C: CurveGroup>(
     // Allocate a gate to scale each coefficient individually
     let arity = poly.coeffs.len();
     let coeffs = fabric.new_batch_gate_op(vec![scaling_factor.id()], arity, move |mut args| {
-        let scaling_factor: Scalar<C> = args.pop().unwrap().into();
+        let scaling_factor: Scalar<C> = args.next().unwrap().into();
 
         poly.coeffs
             .into_iter()

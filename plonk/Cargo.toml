@@ -85,6 +85,7 @@ parallel = [
     "ark-ff/parallel",
     "ark-ec/parallel",
     "ark-poly/parallel",
+    "ark-std/parallel",
     "jf-utils/parallel",
     "mpc-relation/parallel",
     "jf-primitives/parallel",
