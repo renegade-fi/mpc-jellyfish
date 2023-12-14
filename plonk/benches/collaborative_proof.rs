@@ -3,7 +3,7 @@
 
 use std::time::{Duration, Instant};
 
-use ark_mpc::test_helpers::execute_mock_mpc;
+use ark_mpc::{test_helpers::execute_mock_mpc_with_size_hint, ExecutorSizeHints};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use mpc_plonk::{
     multiprover::proof_system::{
@@ -101,23 +101,33 @@ fn bench_multiprover(c: &mut Criterion) {
 ///
 /// Return the latency excluding the MPC setup time
 async fn multiprover_prove(pk: &ProvingKey<TestCurve>) -> Duration {
-    let (elapsed1, elapsed2) = execute_mock_mpc(|fabric| {
-        let pk = pk.clone();
-        async move {
-            let start = Instant::now();
-            let circuit = gen_multiprover_circuit_for_test(
-                CIRCUIT_SIZING_PARAM,
-                0, // start val
-                fabric.clone(),
-            )
-            .unwrap();
+    // These values are fine tuned
+    let size = ExecutorSizeHints {
+        n_ops: 5_000,
+        n_results: 5_000_000,
+    };
 
-            let proof = MultiproverPlonkKzgSnark::prove(&circuit, &pk, fabric).unwrap();
-            black_box(proof.open_authenticated().await.unwrap());
+    let (elapsed1, elapsed2) = execute_mock_mpc_with_size_hint(
+        |fabric| {
+            let pk = pk.clone();
+            async move {
+                let start = Instant::now();
+                let circuit = gen_multiprover_circuit_for_test(
+                    CIRCUIT_SIZING_PARAM,
+                    0, // start val
+                    fabric.clone(),
+                )
+                .unwrap();
 
-            start.elapsed()
-        }
-    })
+                let proof = MultiproverPlonkKzgSnark::prove(&circuit, &pk, fabric).unwrap();
+                let res = proof.open_authenticated();
+                black_box(res.await.unwrap());
+
+                start.elapsed()
+            }
+        },
+        size,
+    )
     .await;
 
     Duration::max(elapsed1, elapsed2)
