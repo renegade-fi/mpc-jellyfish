@@ -20,6 +20,8 @@ pub enum CircuitError {
     PubInputLenMismatch(usize, usize),
     /// The {0}-th gate failed: {1}
     GateCheckFailure(usize, String),
+    /// The {0}-th link group was not allocated
+    LinkGroupNotFound(String),
     /// Invalid parameters: {0}
     ParameterError(String),
     /// The circuit is not finalized before doing arithmetization
