@@ -1,6 +1,8 @@
 //! Defines the arithmetization and circuit abstractions over a base
 //! MPC-enabled arithmetic
 
+use std::collections::HashMap;
+
 use ark_ec::CurveGroup;
 use ark_ff::{FftField, One, Zero};
 use ark_mpc::{
@@ -123,6 +125,17 @@ where
     /// element 0).
     eval_domain: Radix2EvaluationDomain<C::ScalarField>,
 
+    // -- Proof linking --
+    // Proof linking allows us to prove that a subset of the witness of two proofs is the same. We
+    // do so by adding proof-linking gates at specific indices in the circuit's arithmetization
+    // of the form a(x) * 0 = 0, where a(x) encodes the witness to be linked. We can then
+    // invoke a polynomial subprotocol to prove that the a(x) polynomial is the same between
+    // proofs. The following fields are used to track membership in groups and placement of groups
+    // in the arithmetization
+    /// The proof-linking group layouts for the circuit. Maps a group ID to the
+    /// indices of the witness contained in the group
+    link_groups: HashMap<&'static str, Vec<Variable>>,
+
     /// The underlying MPC fabric that this circuit is allocated within
     fabric: MpcFabric<C>,
 }
@@ -150,6 +163,7 @@ where
 
             // This is later updated
             eval_domain: Radix2EvaluationDomain::new(1 /* num_coeffs */).unwrap(),
+            link_groups: HashMap::new(),
             fabric,
         };
 
@@ -183,6 +197,25 @@ where
     #[cfg(feature = "test_apis")]
     pub fn witness_mut(&mut self, idx: Variable) -> &mut AuthenticatedScalarResult<C> {
         &mut self.witness[idx]
+    }
+
+    /// Add a variable to a set of link groups
+    pub fn add_to_link_groups(
+        &mut self,
+        var: Variable,
+        link_groups: &[LinkGroup],
+    ) -> Result<(), CircuitError> {
+        self.check_finalize_flag(false)?;
+        self.check_var_bound(var)?;
+
+        for link_group in link_groups {
+            self.link_groups
+                .get_mut(link_group.id)
+                .ok_or(CircuitError::LinkGroupNotFound(link_group.id.to_string()))?
+                .push(var);
+        }
+
+        Ok(())
     }
 
     /// Creating a `BoolVar` without checking if `v` is a boolean value!
@@ -602,23 +635,32 @@ where
         Ok(())
     }
 
-    fn create_constant_variable(&mut self, val: C::ScalarField) -> Result<Variable, CircuitError> {
+    fn create_constant_variable_with_link_groups(
+        &mut self,
+        val: C::ScalarField,
+        link_groups: &[LinkGroup],
+    ) -> Result<Variable, CircuitError> {
         let authenticated_val = self.fabric.one_authenticated() * Scalar::new(val);
         let var = self.create_variable(authenticated_val)?;
         self.enforce_constant(var, val)?;
+        self.add_to_link_groups(var, link_groups)?;
 
         Ok(var)
     }
 
-    fn create_variable(
+    fn create_variable_with_link_groups(
         &mut self,
         val: AuthenticatedScalarResult<C>,
+        link_groups: &[LinkGroup],
     ) -> Result<Variable, CircuitError> {
         self.check_finalize_flag(false)?;
         self.witness.push(val);
         self.num_vars += 1;
 
-        Ok(self.num_vars - 1)
+        let var = self.num_vars - 1;
+        self.add_to_link_groups(var, link_groups)?;
+
+        Ok(var)
     }
 
     fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError> {
@@ -629,6 +671,12 @@ where
         let wire_vars = &[0, 0, 0, 0, var];
         self.insert_gate(wire_vars, Box::new(IoGate))?;
         Ok(())
+    }
+
+    // TODO: properly handle offsets
+    fn create_link_group(&mut self, id: &'static str, _offset: Option<usize>) -> LinkGroup {
+        self.link_groups.insert(id, Vec::new());
+        LinkGroup { id }
     }
 
     fn insert_gate(

@@ -5,11 +5,13 @@
 // along with the Jellyfish library. If not, see <https://mit-license.org/>.
 
 //! Definitions and constructions of plonk constraint system
+use core::hash::Hash;
+
 use crate::{
     constants::{compute_coset_representatives, GATE_WIDTH, N_MUL_SELECTORS},
     errors::{CircuitError, CircuitError::*},
     gates::*,
-    traits::{Arithmetization, Circuit},
+    traits::{Arithmetization, Circuit, LinkGroup},
 };
 use ark_ff::{FftField, PrimeField};
 use ark_poly::{
@@ -159,6 +161,17 @@ where
     /// element 0).
     eval_domain: Radix2EvaluationDomain<F>,
 
+    // -- Proof linking --
+    // Proof linking allows us to prove that a subset of the witness of two proofs is the same. We
+    // do so by adding proof-linking gates at specific indices in the circuit's arithmetization
+    // of the form a(x) * 0 = 0, where a(x) encodes the witness to be linked. We can then
+    // invoke a polynomial subprotocol to prove that the a(x) polynomial is the same between
+    // proofs. The following fields are used to track membership in groups and placement of groups
+    // in the arithmetization
+    /// The proof-linking group layouts for the circuit. Maps a group ID to the
+    /// indices of the witness contained in the group
+    link_groups: HashMap<&'static str, Vec<Variable>>,
+
     /// The Plonk parameters.
     plonk_params: PlonkParams,
 
@@ -200,6 +213,7 @@ impl<F: FftField> PlonkCircuit<F> {
                     PlonkType::UltraPlonk => 1,
                 },
             eval_domain: Radix2EvaluationDomain::new(1).unwrap(),
+            link_groups: HashMap::new(),
             plonk_params,
             num_table_elems: 0,
             table_gate_ids: vec![],
@@ -263,6 +277,25 @@ impl<F: FftField> PlonkCircuit<F> {
     // TODO: make this function test only.
     pub fn witness_mut(&mut self, idx: Variable) -> &mut F {
         &mut self.witness[idx]
+    }
+
+    /// Add a variable to a set of link groups
+    pub fn add_to_link_groups(
+        &mut self,
+        var: Variable,
+        link_groups: &[LinkGroup],
+    ) -> Result<(), CircuitError> {
+        self.check_finalize_flag(false)?;
+        self.check_var_bound(var)?;
+
+        for link_group in link_groups {
+            self.link_groups
+                .get_mut(link_group.id)
+                .ok_or(LinkGroupNotFound(link_group.id.to_string()))?
+                .push(var);
+        }
+
+        Ok(())
     }
 
     /// Get the mutable reference of the inserted table ids.
@@ -431,18 +464,32 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         Ok(())
     }
 
-    fn create_constant_variable(&mut self, val: F) -> Result<Variable, CircuitError> {
+    fn create_constant_variable_with_link_groups(
+        &mut self,
+        val: F,
+        link_groups: &[LinkGroup],
+    ) -> Result<Variable, CircuitError> {
         let var = self.create_variable(val)?;
         self.enforce_constant(var, val)?;
+        self.add_to_link_groups(var, link_groups)?;
+
         Ok(var)
     }
 
-    fn create_variable(&mut self, val: F) -> Result<Variable, CircuitError> {
+    fn create_variable_with_link_groups(
+        &mut self,
+        val: Self::Wire,
+        link_groups: &[LinkGroup],
+    ) -> Result<Variable, CircuitError> {
         self.check_finalize_flag(false)?;
         self.witness.push(val);
         self.num_vars += 1;
+
         // the index is from `0` to `num_vars - 1`
-        Ok(self.num_vars - 1)
+        let var = self.num_vars - 1;
+        self.add_to_link_groups(var, link_groups)?;
+
+        Ok(var)
     }
 
     fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError> {
@@ -453,6 +500,13 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         let wire_vars = &[0, 0, 0, 0, var];
         self.insert_gate(wire_vars, Box::new(IoGate))?;
         Ok(())
+    }
+
+    // TODO: Add offset support
+    fn create_link_group(&mut self, id: &'static str, _offset: Option<usize>) -> LinkGroup {
+        self.link_groups.insert(id, Vec::new());
+
+        LinkGroup { id }
     }
 
     /// Insert a general (algebraic) gate
@@ -942,6 +996,15 @@ impl<F: PrimeField> PlonkCircuit<F> {
     /// The method only supports TurboPlonk circuits.
     #[allow(dead_code)]
     pub fn merge(&self, other: &Self) -> Result<Self, CircuitError> {
+        assert!(
+            self.link_groups.is_empty(),
+            "proof linking not supported for merged circuits"
+        );
+        assert!(
+            other.link_groups.is_empty(),
+            "proof linking not supported for merged circuits"
+        );
+
         self.check_finalize_flag(true)?;
         other.check_finalize_flag(true)?;
         if self.eval_domain_size()? != other.eval_domain_size()? {
@@ -1029,6 +1092,8 @@ impl<F: PrimeField> PlonkCircuit<F> {
             extended_id_permutation: self.extended_id_permutation.clone(),
             num_wire_types: self.num_wire_types,
             eval_domain: self.eval_domain,
+            // `link_groups` must be empty for both proofs
+            link_groups: HashMap::new(),
             plonk_params: self.plonk_params,
             num_table_elems: 0,
             table_gate_ids: vec![],

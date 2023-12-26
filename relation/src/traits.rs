@@ -37,6 +37,14 @@ macro_rules! felts {
     };
 }
 
+/// Represents the parameterization of a proof-linking group in the circuit
+///
+/// See `Circuit::create_link_group` for more details on proof-linking
+pub struct LinkGroup {
+    /// The id of the group
+    pub id: &'static str,
+}
+
 /// An interface to add gates to a circuit that generalizes across wiring
 /// implementations
 ///
@@ -129,17 +137,47 @@ pub trait Circuit<F: Field> {
 
     /// Add a constant variable to the circuit; return the index of the
     /// variable.
-    fn create_constant_variable(&mut self, val: F) -> Result<Variable, CircuitError>;
+    fn create_constant_variable(&mut self, val: F) -> Result<Variable, CircuitError> {
+        self.create_constant_variable_with_link_groups(val, &[])
+    }
+
+    /// Add a constant variable to the circuit; with an optional set of link
+    /// groups to add it to
+    fn create_constant_variable_with_link_groups(
+        &mut self,
+        val: F,
+        link_groups: &[LinkGroup],
+    ) -> Result<Variable, CircuitError>;
 
     /// Add a variable to the circuit; return the index of the variable.
-    fn create_variable(&mut self, val: Self::Wire) -> Result<Variable, CircuitError>;
+    fn create_variable(&mut self, val: Self::Wire) -> Result<Variable, CircuitError> {
+        self.create_variable_with_link_groups(val, &[])
+    }
+
+    /// Add a variable to the witness; with an optional set of link groups to
+    /// add it to
+    fn create_variable_with_link_groups(
+        &mut self,
+        val: Self::Wire,
+        link_groups: &[LinkGroup],
+    ) -> Result<Variable, CircuitError>;
 
     /// Add a bool variable to the circuit; return the index of the variable.
     fn create_boolean_variable<T: Into<Self::Wire>>(
         &mut self,
         val: T,
     ) -> Result<BoolVar, CircuitError> {
-        let var = self.create_variable(val.into())?;
+        self.create_boolean_variable_with_link_groups(val, &[])
+    }
+
+    /// Add a constant bool variable to the circuit; with an optional set of
+    /// link groups to add it to
+    fn create_boolean_variable_with_link_groups<T: Into<Self::Wire>>(
+        &mut self,
+        val: T,
+        link_groups: &[LinkGroup],
+    ) -> Result<BoolVar, CircuitError> {
+        let var = self.create_variable_with_link_groups(val.into(), link_groups)?;
         self.enforce_bool(var)?;
         Ok(BoolVar(var))
     }
@@ -163,6 +201,17 @@ pub trait Circuit<F: Field> {
 
     /// Set a variable to a public variable
     fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError>;
+
+    /// Create a proof linking group in the circuit. Witness elements may be
+    /// allocated into this group in order and they will be placed into the
+    /// given offset as proof-linking gates (or assigned a default offset if
+    /// none is provided).
+    ///
+    /// These proof linking gates are effictively of the form a(x) * 0 = 0,
+    /// where a(x) is the witness element. This allows us to prove
+    /// that the a(x) polynomial of one proof equals the a(x) polynomial of
+    /// another proof over some proof-linking domain, represented by the group
+    fn create_link_group(&mut self, id: &'static str, offset: Option<usize>) -> LinkGroup;
 
     // --- Gate Allocation --- //
 

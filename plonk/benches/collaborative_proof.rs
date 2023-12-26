@@ -4,6 +4,7 @@
 use std::time::{Duration, Instant};
 
 use ark_mpc::{test_helpers::execute_mock_mpc_with_size_hint, ExecutorSizeHints};
+#[allow(unused_imports)]
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use mpc_plonk::{
     multiprover::proof_system::{
