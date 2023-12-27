@@ -36,10 +36,8 @@ use super::{MpcArithmetization, MpcOracles};
 /// A type alias for a bundle of commitments and polynomials
 /// TODO: Remove this lint allowance
 #[allow(type_alias_bounds)]
-type MpcCommitmentsAndPolys<E: Pairing> = (
-    Vec<MultiproverKzgCommitment<E>>,
-    Vec<AuthenticatedDensePoly<E::G1>>,
-);
+type MpcCommitmentsAndPolys<E: Pairing> =
+    (Vec<MultiproverKzgCommitment<E>>, Vec<AuthenticatedDensePoly<E::G1>>);
 
 /// A Plonk IOP prover over a secret shared algebra
 /// TODO: Remove this lint allowance
@@ -85,11 +83,7 @@ impl<E: Pairing> MpcProver<E> {
         )
         .ok_or(PlonkError::DomainCreationError)?;
 
-        Ok(Self {
-            domain,
-            quot_domain,
-            fabric,
-        })
+        Ok(Self { domain, quot_domain, fabric })
     }
 
     /// Round 1:
@@ -172,11 +166,8 @@ impl<E: Pairing> MpcProver<E> {
         online_oracles: &MpcOracles<E::G1>,
         num_wire_types: usize,
     ) -> MpcProofEvaluations<E::G1> {
-        let wires_evals: Vec<AuthenticatedScalarResult<E::G1>> = online_oracles
-            .wire_polys
-            .iter()
-            .map(|poly| poly.eval(&challenges.zeta))
-            .collect();
+        let wires_evals: Vec<AuthenticatedScalarResult<E::G1>> =
+            online_oracles.wire_polys.iter().map(|poly| poly.eval(&challenges.zeta)).collect();
 
         let wire_sigma_evals: Vec<ScalarResult<E::G1>> = pk
             .sigmas
@@ -370,23 +361,14 @@ impl<E: Pairing> MpcProver<E> {
             .collect();
 
         // The coset we use to compute the quotient polynomial
-        let coset = self
-            .quot_domain
-            .get_coset(E::ScalarField::GENERATOR)
-            .unwrap();
+        let coset = self.quot_domain.get_coset(E::ScalarField::GENERATOR).unwrap();
 
         // Compute evaluations of the selectors, permutations, and wiring polynomials
-        let selectors_coset_fft: Vec<Vec<E::ScalarField>> = pk
-            .selectors
-            .iter()
-            .map(|poly| coset.fft(poly.coeffs()))
-            .collect();
+        let selectors_coset_fft: Vec<Vec<E::ScalarField>> =
+            pk.selectors.iter().map(|poly| coset.fft(poly.coeffs())).collect();
 
-        let sigmas_coset_fft: Vec<Vec<E::ScalarField>> = pk
-            .sigmas
-            .iter()
-            .map(|poly| coset.fft(poly.coeffs()))
-            .collect();
+        let sigmas_coset_fft: Vec<Vec<E::ScalarField>> =
+            pk.sigmas.iter().map(|poly| coset.fft(poly.coeffs())).collect();
 
         let wire_polys_coset_fft: Vec<Vec<AuthenticatedScalarResult<E::G1>>> = online_oracles
             .wire_polys
@@ -504,10 +486,7 @@ impl<E: Pairing> MpcProver<E> {
         let mut nonzero_wires: Vec<Vec<AuthenticatedScalarResult<E::G1>>> = vec![vec![]; m];
         for (i, selector) in selectors.iter().enumerate() {
             if !selector.is_zero() {
-                wires
-                    .iter()
-                    .enumerate()
-                    .for_each(|(j, w)| nonzero_wires[j].push(w[i].clone()));
+                wires.iter().enumerate().for_each(|(j, w)| nonzero_wires[j].push(w[i].clone()));
                 nonzero_sel.push(Scalar::new(*selector));
                 nonzero_indices.push(i);
             }
@@ -593,10 +572,7 @@ impl<E: Pairing> MpcProver<E> {
         prod_perm_poly_coset_evals: &[AuthenticatedScalarResult<E::G1>],
         challenges: &MpcChallenges<E::G1>,
         sigmas_coset_fft: &[Vec<E::ScalarField>],
-    ) -> (
-        Vec<AuthenticatedScalarResult<E::G1>>,
-        Vec<AuthenticatedScalarResult<E::G1>>,
-    ) {
+    ) -> (Vec<AuthenticatedScalarResult<E::G1>>, Vec<AuthenticatedScalarResult<E::G1>>) {
         let n = pk.domain_size();
         let m = self.quot_domain.size();
 
@@ -607,9 +583,8 @@ impl<E: Pairing> MpcProver<E> {
 
         // Construct the evaluations shifted by the coset generators
         let coset_generators = pk.k().iter().copied().collect_vec();
-        let eval_points = (0..m)
-            .map(|i| self.quot_domain.element(i) * E::ScalarField::GENERATOR)
-            .collect_vec();
+        let eval_points =
+            (0..m).map(|i| self.quot_domain.element(i) * E::ScalarField::GENERATOR).collect_vec();
 
         let mut all_evals = Vec::with_capacity(num_wire_types);
         for generator in coset_generators.iter() {
@@ -720,11 +695,8 @@ impl<E: Pairing> MpcProver<E> {
         // chunks of degree n + 1 contiguous coefficients
         let mut split_quot_polys: Vec<AuthenticatedDensePoly<E::G1>> = (0..num_wire_types)
             .map(|i| {
-                let end = if i < num_wire_types - 1 {
-                    (i + 1) * (n + 2)
-                } else {
-                    quot_poly.degree() + 1
-                };
+                let end =
+                    if i < num_wire_types - 1 { (i + 1) * (n + 2) } else { quot_poly.degree() + 1 };
 
                 // Degree-(n+1) polynomial has n + 2 coefficients.
                 AuthenticatedDensePoly::from_coeffs(quot_poly.coeffs[i * (n + 2)..end].to_vec())
@@ -738,22 +710,17 @@ impl<E: Pairing> MpcProver<E> {
         // with t_lowest_i(X) = t_lowest_i(X) - 0 + b_now_i * X^(n+2)
         // and t_highest_i(X) = t_highest_i(X) - b_last_i
         let mut last_randomizer = self.fabric.zero_authenticated();
-        let mut randomizers = self
-            .fabric
-            .random_shared_scalars_authenticated(num_wire_types - 1);
+        let mut randomizers = self.fabric.random_shared_scalars_authenticated(num_wire_types - 1);
 
-        split_quot_polys
-            .iter_mut()
-            .take(num_wire_types - 1)
-            .for_each(|poly| {
-                poly.coeffs[0] = &poly.coeffs[0] - &last_randomizer;
-                assert_eq!(poly.degree(), n + 1);
+        split_quot_polys.iter_mut().take(num_wire_types - 1).for_each(|poly| {
+            poly.coeffs[0] = &poly.coeffs[0] - &last_randomizer;
+            assert_eq!(poly.degree(), n + 1);
 
-                let next_randomizer = randomizers.pop().unwrap();
-                poly.coeffs.push(next_randomizer.clone());
+            let next_randomizer = randomizers.pop().unwrap();
+            poly.coeffs.push(next_randomizer.clone());
 
-                last_randomizer = next_randomizer;
-            });
+            last_randomizer = next_randomizer;
+        });
 
         // Mask the highest splitting poly
         split_quot_polys[num_wire_types - 1].coeffs[0] =
@@ -894,9 +861,7 @@ pub fn element_wise_product<C: CurveGroup>(
     // If we choose to view the vectors as tiling the columns of matrices, each step
     // in this fold replaces the first and second columns with their
     // element-wise product
-    vectors[2..].iter().fold(initial, |acc, vec| {
-        AuthenticatedScalarResult::batch_mul(&acc, vec)
-    })
+    vectors[2..].iter().fold(initial, |acc, vec| AuthenticatedScalarResult::batch_mul(&acc, vec))
 }
 
 /// Take the element-wise sum of a set of vectors
@@ -918,9 +883,7 @@ fn element_wise_sum<C: CurveGroup>(
     // If we choose to view the vectors as tiling the columns of matrices, each step
     // in this fold replaces the first and second columns with their
     // element-wise sum
-    vectors[2..].iter().fold(initial, |acc, vec| {
-        AuthenticatedScalarResult::batch_add(&acc, vec)
-    })
+    vectors[2..].iter().fold(initial, |acc, vec| AuthenticatedScalarResult::batch_add(&acc, vec))
 }
 
 /// Evaluate a public polynomial on a result in the MPC fabric
@@ -1055,10 +1018,8 @@ pub(crate) mod test {
             return AuthenticatedDensePoly::from_coeffs(vec![fabric.zero_authenticated()]);
         }
 
-        let coeffs = fabric.batch_share_scalar(
-            poly.coeffs.iter().cloned().map(Scalar::new).collect(),
-            PARTY0,
-        );
+        let coeffs = fabric
+            .batch_share_scalar(poly.coeffs.iter().cloned().map(Scalar::new).collect(), PARTY0);
         AuthenticatedDensePoly::from_coeffs(coeffs)
     }
 
@@ -1280,7 +1241,7 @@ pub(crate) mod test {
     /// Run the fifth round of a single-prover circuit
     ///
     /// Returns the commitments to the opening and shifted opening polynomials
-    fn run_fifth_round(params: &mut TestParams) -> (Commitment<TestCurve>, Commitment<TestCurve>) {
+    fn run_fifth_round(params: &TestParams) -> (Commitment<TestCurve>, Commitment<TestCurve>) {
         params
             .prover
             .compute_opening_proofs(
@@ -1330,10 +1291,7 @@ pub(crate) mod test {
                     .collect::<Vec<_>>();
                 let pub_poly = pub_poly.open_authenticated();
 
-                (
-                    (wire_comms_open.await, wire_polys_open.await),
-                    pub_poly.await.unwrap(),
-                )
+                ((wire_comms_open.await, wire_polys_open.await), pub_poly.await.unwrap())
             }
         })
         .await;
@@ -1372,10 +1330,7 @@ pub(crate) mod test {
                     .unwrap();
 
                 // Open the results
-                (
-                    perm_commit.open_authenticated().await.unwrap(),
-                    perm_poly.open().await,
-                )
+                (perm_commit.open_authenticated().await.unwrap(), perm_poly.open().await)
             }
         })
         .await;
@@ -1508,7 +1463,7 @@ pub(crate) mod test {
         run_second_round(true /* mask */, &mut params);
         run_third_round(false /* mask */, &mut params);
         run_fourth_round(&mut params);
-        let (expected_open, expected_shift) = run_fifth_round(&mut params);
+        let (expected_open, expected_shift) = run_fifth_round(&params);
 
         // Compute the result in an MPC
         let ((open, shifted_open), _) = execute_mock_mpc(|fabric| {

@@ -83,6 +83,21 @@ impl<F: Field> fmt::Debug for (dyn Gate<F> + 'static) {
     }
 }
 
+/// A proof linking gate, for linking two proofs' witnesses together
+#[derive(Copy, Clone, Debug)]
+pub struct ProofLinkingGate;
+
+impl<F: Field> Gate<F> for ProofLinkingGate {
+    fn name(&self) -> &'static str {
+        "Proof Linking Gate"
+    }
+
+    // Represents a * 0 = 0
+    fn q_mul(&self) -> [F; N_MUL_SELECTORS] {
+        [F::one(), F::zero()]
+    }
+}
+
 /// A empty gate for circuit padding
 #[derive(Debug, Clone)]
 pub struct PaddingGate;

@@ -18,8 +18,9 @@ use ark_poly::{
     domain::Radix2EvaluationDomain, univariate::DensePolynomial, DenseUVPolynomial,
     EvaluationDomain,
 };
-use ark_std::{boxed::Box, cmp::max, format, string::ToString, vec, vec::Vec};
+use ark_std::{boxed::Box, cmp::max, format, iterable::Iterable, string::ToString, vec, vec::Vec};
 use hashbrown::{HashMap, HashSet};
+use itertools::Itertools;
 use jf_utils::par_utils::parallelizable_slice_iter;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -72,6 +73,17 @@ pub enum MergeableCircuitType {
     TypeB,
 }
 
+/// The layout of a circuit
+#[derive(Clone, Debug)]
+pub struct CircuitLayout {
+    /// The number of public inputs to the circuit
+    pub n_inputs: usize,
+    /// The number of gates in the circuit
+    pub n_gates: usize,
+    /// The offsets of the proof linking groups in the circuit
+    pub link_group_offsets: HashMap<String, usize>,
+}
+
 /// The wire type identifier for range gates.
 const RANGE_WIRE_ID: usize = 5;
 /// The wire type identifier for the key index in a lookup gate
@@ -96,21 +108,13 @@ struct PlonkParams {
 impl PlonkParams {
     fn init(plonk_type: PlonkType, range_bit_len: Option<usize>) -> Result<Self, CircuitError> {
         if plonk_type == PlonkType::TurboPlonk {
-            return Ok(Self {
-                plonk_type,
-                range_bit_len: None,
-            });
+            return Ok(Self { plonk_type, range_bit_len: None });
         }
         if range_bit_len.is_none() {
-            return Err(ParameterError(
-                "range bit len cannot be none for UltraPlonk".to_string(),
-            ));
+            return Err(ParameterError("range bit len cannot be none for UltraPlonk".to_string()));
         }
 
-        Ok(Self {
-            plonk_type,
-            range_bit_len,
-        })
+        Ok(Self { plonk_type, range_bit_len })
     }
 }
 
@@ -166,11 +170,13 @@ where
     // do so by adding proof-linking gates at specific indices in the circuit's arithmetization
     // of the form a(x) * 0 = 0, where a(x) encodes the witness to be linked. We can then
     // invoke a polynomial subprotocol to prove that the a(x) polynomial is the same between
-    // proofs. The following fields are used to track membership in groups and placement of groups
-    // in the arithmetization
+    // proofs on some subdomain. The following fields are used to track membership in groups and
+    // placement of groups in the arithmetization
     /// The proof-linking group layouts for the circuit. Maps a group ID to the
     /// indices of the witness contained in the group
-    link_groups: HashMap<&'static str, Vec<Variable>>,
+    link_groups: HashMap<String, Vec<Variable>>,
+    /// The offset of each group in the arithmetization
+    link_group_offsets: HashMap<String, usize>,
 
     /// The Plonk parameters.
     plonk_params: PlonkParams,
@@ -214,6 +220,7 @@ impl<F: FftField> PlonkCircuit<F> {
                 },
             eval_domain: Radix2EvaluationDomain::new(1).unwrap(),
             link_groups: HashMap::new(),
+            link_group_offsets: HashMap::new(),
             plonk_params,
             num_table_elems: 0,
             table_gate_ids: vec![],
@@ -288,10 +295,10 @@ impl<F: FftField> PlonkCircuit<F> {
         self.check_finalize_flag(false)?;
         self.check_var_bound(var)?;
 
-        for link_group in link_groups {
+        for group in link_groups {
             self.link_groups
-                .get_mut(link_group.id)
-                .ok_or(LinkGroupNotFound(link_group.id.to_string()))?
+                .get_mut(&group.id)
+                .ok_or_else(|| LinkGroupNotFound(group.id.to_string()))?
                 .push(var);
         }
 
@@ -388,10 +395,7 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
 
     fn check_circuit_satisfiability(&self, pub_input: &[F]) -> Result<(), CircuitError> {
         if pub_input.len() != self.num_inputs() {
-            return Err(PubInputLenMismatch(
-                pub_input.len(),
-                self.pub_input_gate_ids.len(),
-            ));
+            return Err(PubInputLenMismatch(pub_input.len(), self.pub_input_gate_ids.len()));
         }
         // Check public I/O gates
         for (i, gate_id) in self.pub_input_gate_ids.iter().enumerate() {
@@ -469,9 +473,8 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         val: F,
         link_groups: &[LinkGroup],
     ) -> Result<Variable, CircuitError> {
-        let var = self.create_variable(val)?;
+        let var = self.create_variable_with_link_groups(val, link_groups)?;
         self.enforce_constant(var, val)?;
-        self.add_to_link_groups(var, link_groups)?;
 
         Ok(var)
     }
@@ -502,9 +505,11 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         Ok(())
     }
 
-    // TODO: Add offset support
-    fn create_link_group(&mut self, id: &'static str, _offset: Option<usize>) -> LinkGroup {
-        self.link_groups.insert(id, Vec::new());
+    fn create_link_group(&mut self, id: String, offset: Option<usize>) -> LinkGroup {
+        self.link_groups.insert(id.clone(), Vec::new());
+        if let Some(offset) = offset {
+            self.link_group_offsets.insert(id.clone(), offset);
+        }
 
         LinkGroup { id }
     }
@@ -520,11 +525,10 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
     ) -> Result<(), CircuitError> {
         self.check_finalize_flag(false)?;
 
-        for (wire_var, wire_variable) in wire_vars
-            .iter()
-            .zip(self.wire_variables.iter_mut().take(GATE_WIDTH + 1))
+        for (wire_var, wire_variable) in
+            wire_vars.iter().zip(self.wire_variables.iter_mut().take(GATE_WIDTH + 1))
         {
-            wire_variable.push(*wire_var)
+            wire_variable.push(wire_var)
         }
 
         self.gates.push(gate);
@@ -570,7 +574,8 @@ impl<F: FftField> PlonkCircuit<F> {
 
     /// Re-arrange the order of the gates so that
     /// 1. io gates are in the front.
-    /// 2. variable table lookup gate are at the rear so that they do not affect
+    /// 2. proof linking gates follow
+    /// 3. variable table lookup gate are at the rear so that they do not affect
     /// the range gates when merging the lookup tables.
     ///
     /// Remember to pad gates before calling the method.
@@ -588,6 +593,11 @@ impl<F: FftField> PlonkCircuit<F> {
                 *io_gate_id = gate_id;
             }
         }
+
+        // Insert proof linking gates into the circuit
+        let layout = self.gen_circuit_layout()?;
+        self.insert_link_gates(&layout);
+
         if self.support_lookup() {
             // move lookup gates to the rear, the relative order of the lookup gates
             // should not change
@@ -610,6 +620,89 @@ impl<F: FftField> PlonkCircuit<F> {
         }
         Ok(())
     }
+
+    /// Place the proof linking gates into the circuit
+    pub fn gen_circuit_layout(&self) -> Result<CircuitLayout, CircuitError> {
+        // 1. Place the proof linking groups with specific offsets into the circuit
+        let mut sorted_offset_pairs = self.link_group_offsets.clone().into_iter().collect_vec();
+        sorted_offset_pairs.sort_by_key(|(_, offset)| *offset);
+
+        // 2. Place the rest of the gates into the circuit
+        // Sort the keys so they appear stably in the trace
+        for group_id in
+            self.link_groups.keys().sorted().filter(|id| !self.link_group_offsets.contains_key(*id))
+        {
+            self.place_group(group_id.clone(), &mut sorted_offset_pairs);
+        }
+
+        // 3. Create a layout and validate it
+        let link_group_offsets = sorted_offset_pairs.into_iter().collect();
+        let layout = CircuitLayout {
+            n_inputs: self.num_inputs(),
+            n_gates: self.num_gates(),
+            link_group_offsets,
+        };
+        if !self.validate_layout(&layout) {
+            return Err(CircuitError::Layout(
+                "Invalid circuit layout, please check the link group offsets".to_string(),
+            ));
+        }
+
+        Ok(layout)
+    }
+
+    /// Place a group into a list of already allocated groups
+    ///
+    /// Mutates `placed_groups` to insert the new group
+    fn place_group(&self, group_id: String, placed_groups: &mut Vec<(String, usize)>) {
+        let group_size = self.link_groups.get(&group_id).unwrap().len();
+        let mut offset = self.num_inputs(); // Link gates being after i/o gates
+        let mut next_idx = 0; // Index into the placed gates
+
+        loop {
+            // Determine the size of the candidate placement between the current offset and
+            // the next group that has already been placed
+            let default = (String::from(""), usize::MAX);
+            let (next_group_id, next_group_boundary) =
+                placed_groups.get(next_idx).unwrap_or(&default);
+            let candidate_size = next_group_boundary - offset;
+
+            if candidate_size >= group_size {
+                // We have found a placement for the group, insert the group into the
+                // `placed_groups`
+                placed_groups.insert(next_idx, (group_id, offset));
+                return;
+            }
+
+            // Move to the next candidate range
+            let next_group_size = self.link_groups.get(next_group_id).unwrap().len();
+            offset = *next_group_boundary + next_group_size;
+            next_idx += 1;
+        }
+    }
+
+    /// Validate a circuit layout against the circuit's arithmetization
+    fn validate_layout(&self, layout: &CircuitLayout) -> bool {
+        // Check that none of the link groups are overlapping
+        let sorted = layout.link_group_offsets.iter().sorted_by_key(|(_, off)| *off).collect_vec();
+        for window in sorted.windows(2 /* size */) {
+            let (id, off1) = window[0];
+            let (_, off2) = window[1];
+
+            let group_len = self.link_groups.get(id).unwrap().len();
+            if off1 + group_len > *off2 {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Insert proof linking gates into the circuit
+    fn insert_link_gates(&self, _layout: &CircuitLayout) {
+        todo!()
+    }
+
     // use downcast to check whether a gate is of IoGate type
     fn is_io_gate(&self, gate_id: GateId) -> bool {
         self.gates[gate_id].as_any().is::<IoGate>()
@@ -640,9 +733,8 @@ impl<F: FftField> PlonkCircuit<F> {
     fn check_gate(&self, gate_id: Variable, pub_input: &F) -> Result<(), CircuitError> {
         // Compute wire values
 
-        let w_vals: Vec<F> = (0..GATE_WIDTH + 1)
-            .map(|i| self.witness[self.wire_variables[i][gate_id]])
-            .collect();
+        let w_vals: Vec<F> =
+            (0..GATE_WIDTH + 1).map(|i| self.witness[self.wire_variables[i][gate_id]]).collect();
         // Compute selector values.
         let q_lc: [F; GATE_WIDTH] = self.gates[gate_id].q_lc();
         let q_mul: [F; N_MUL_SELECTORS] = self.gates[gate_id].q_mul();
@@ -698,11 +790,8 @@ impl<F: FftField> PlonkCircuit<F> {
         // slightly faster than using a `HashMap<Variable, Vec<(WireId, GateId)>>` as we
         // avoid any constant overhead from the hashmap read/write.
         let mut variable_wires_map = vec![vec![]; m];
-        for (gate_wire_id, variables) in self
-            .wire_variables
-            .iter()
-            .take(self.num_wire_types())
-            .enumerate()
+        for (gate_wire_id, variables) in
+            self.wire_variables.iter().take(self.num_wire_types()).enumerate()
         {
             for (gate_id, &var) in variables.iter().enumerate() {
                 variable_wires_map[var].push((gate_wire_id, gate_id));
@@ -996,14 +1085,8 @@ impl<F: PrimeField> PlonkCircuit<F> {
     /// The method only supports TurboPlonk circuits.
     #[allow(dead_code)]
     pub fn merge(&self, other: &Self) -> Result<Self, CircuitError> {
-        assert!(
-            self.link_groups.is_empty(),
-            "proof linking not supported for merged circuits"
-        );
-        assert!(
-            other.link_groups.is_empty(),
-            "proof linking not supported for merged circuits"
-        );
+        assert!(self.link_groups.is_empty(), "proof linking not supported for merged circuits");
+        assert!(other.link_groups.is_empty(), "proof linking not supported for merged circuits");
 
         self.check_finalize_flag(true)?;
         other.check_finalize_flag(true)?;
@@ -1029,22 +1112,15 @@ impl<F: PrimeField> PlonkCircuit<F> {
             )));
         }
         if self.pub_input_gate_ids[0] != 0 {
-            return Err(ParameterError(
-                "the first circuit is not type A".to_string(),
-            ));
+            return Err(ParameterError("the first circuit is not type A".to_string()));
         }
         if other.pub_input_gate_ids[0] != other.eval_domain_size()? - 1 {
-            return Err(ParameterError(
-                "the second circuit is not type B".to_string(),
-            ));
+            return Err(ParameterError("the second circuit is not type B".to_string()));
         }
         let num_vars = self.num_vars + other.num_vars;
         let witness: Vec<F> = [self.witness.as_slice(), other.witness.as_slice()].concat();
-        let pub_input_gate_ids: Vec<usize> = [
-            self.pub_input_gate_ids.as_slice(),
-            other.pub_input_gate_ids.as_slice(),
-        ]
-        .concat();
+        let pub_input_gate_ids: Vec<usize> =
+            [self.pub_input_gate_ids.as_slice(), other.pub_input_gate_ids.as_slice()].concat();
 
         // merge gates and wire variables
         // the first circuit occupies the first n gates, the second circuit
@@ -1054,21 +1130,13 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let mut wire_variables = [vec![], vec![], vec![], vec![], vec![], vec![]];
         for (j, gate) in self.gates.iter().take(n).enumerate() {
             gates.push((*gate).clone());
-            for (i, wire_vars) in wire_variables
-                .iter_mut()
-                .enumerate()
-                .take(self.num_wire_types)
-            {
+            for (i, wire_vars) in wire_variables.iter_mut().enumerate().take(self.num_wire_types) {
                 wire_vars.push(self.wire_variable(i, j));
             }
         }
         for (j, gate) in other.gates.iter().skip(n).enumerate() {
             gates.push((*gate).clone());
-            for (i, wire_vars) in wire_variables
-                .iter_mut()
-                .enumerate()
-                .take(self.num_wire_types)
-            {
+            for (i, wire_vars) in wire_variables.iter_mut().enumerate().take(self.num_wire_types) {
                 wire_vars.push(other.wire_variable(i, n + j) + self.num_vars);
             }
         }
@@ -1094,6 +1162,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
             eval_domain: self.eval_domain,
             // `link_groups` must be empty for both proofs
             link_groups: HashMap::new(),
+            link_group_offsets: HashMap::new(),
             plonk_params: self.plonk_params,
             num_table_elems: 0,
             table_gate_ids: vec![],
@@ -1219,36 +1288,28 @@ where
     fn compute_range_table_polynomial(&self) -> Result<DensePolynomial<F>, CircuitError> {
         let range_table = self.compute_range_table()?;
         let domain = &self.eval_domain;
-        Ok(DensePolynomial::from_coefficients_vec(
-            domain.ifft(&range_table),
-        ))
+        Ok(DensePolynomial::from_coefficients_vec(domain.ifft(&range_table)))
     }
 
     fn compute_key_table_polynomial(&self) -> Result<DensePolynomial<F>, CircuitError> {
         self.check_plonk_type(PlonkType::UltraPlonk)?;
         self.check_finalize_flag(true)?;
         let domain = &self.eval_domain;
-        Ok(DensePolynomial::from_coefficients_vec(
-            domain.ifft(&self.table_key_vec()),
-        ))
+        Ok(DensePolynomial::from_coefficients_vec(domain.ifft(&self.table_key_vec())))
     }
 
     fn compute_table_dom_sep_polynomial(&self) -> Result<DensePolynomial<F>, CircuitError> {
         self.check_plonk_type(PlonkType::UltraPlonk)?;
         self.check_finalize_flag(true)?;
         let domain = &self.eval_domain;
-        Ok(DensePolynomial::from_coefficients_vec(
-            domain.ifft(&self.table_dom_sep_vec()),
-        ))
+        Ok(DensePolynomial::from_coefficients_vec(domain.ifft(&self.table_dom_sep_vec())))
     }
 
     fn compute_q_dom_sep_polynomial(&self) -> Result<DensePolynomial<F>, CircuitError> {
         self.check_plonk_type(PlonkType::UltraPlonk)?;
         self.check_finalize_flag(true)?;
         let domain = &self.eval_domain;
-        Ok(DensePolynomial::from_coefficients_vec(
-            domain.ifft(&self.q_dom_sep()),
-        ))
+        Ok(DensePolynomial::from_coefficients_vec(domain.ifft(&self.q_dom_sep())))
     }
 
     fn compute_merged_lookup_table(&self, tau: F) -> Result<Vec<F>, CircuitError> {
@@ -1296,9 +1357,7 @@ where
             ));
         }
         if 2 * n - 1 != sorted_vec.len() {
-            return Err(ParameterError(
-                "The sorted vector has wrong length".to_string(),
-            ));
+            return Err(ParameterError("The sorted vector has wrong length".to_string()));
         }
 
         let mut product_vec = vec![F::one()];
@@ -1652,9 +1711,7 @@ pub(crate) mod test {
         assert!(circuit.check_circuit_satisfiability(&[]).is_err());
 
         // Check variable out of bound error.
-        assert!(circuit
-            .enforce_constant(circuit.num_vars(), F::from(0u32))
-            .is_err());
+        assert!(circuit.enforce_constant(circuit.num_vars(), F::from(0u32)).is_err());
 
         Ok(())
     }
@@ -1676,34 +1733,20 @@ pub(crate) mod test {
         circuit.set_variable_public(b)?;
 
         // Different valid public inputs should all pass the circuit check.
-        assert!(circuit
-            .check_circuit_satisfiability(&[F::from(1u32), F::from(0u32)])
-            .is_ok());
+        assert!(circuit.check_circuit_satisfiability(&[F::from(1u32), F::from(0u32)]).is_ok());
         *circuit.witness_mut(a) = F::from(0u32);
-        assert!(circuit
-            .check_circuit_satisfiability(&[F::from(0u32), F::from(0u32)])
-            .is_ok());
+        assert!(circuit.check_circuit_satisfiability(&[F::from(0u32), F::from(0u32)]).is_ok());
         *circuit.witness_mut(b) = F::from(1u32);
-        assert!(circuit
-            .check_circuit_satisfiability(&[F::from(0u32), F::from(1u32)])
-            .is_ok());
+        assert!(circuit.check_circuit_satisfiability(&[F::from(0u32), F::from(1u32)]).is_ok());
 
         // Invalid public inputs should fail the circuit check.
-        assert!(circuit
-            .check_circuit_satisfiability(&[F::from(2u32), F::from(1u32)])
-            .is_err());
+        assert!(circuit.check_circuit_satisfiability(&[F::from(2u32), F::from(1u32)]).is_err());
         *circuit.witness_mut(a) = F::from(2u32);
-        assert!(circuit
-            .check_circuit_satisfiability(&[F::from(2u32), F::from(1u32)])
-            .is_err());
+        assert!(circuit.check_circuit_satisfiability(&[F::from(2u32), F::from(1u32)]).is_err());
         *circuit.witness_mut(a) = F::from(0u32);
-        assert!(circuit
-            .check_circuit_satisfiability(&[F::from(0u32), F::from(2u32)])
-            .is_err());
+        assert!(circuit.check_circuit_satisfiability(&[F::from(0u32), F::from(2u32)]).is_err());
         *circuit.witness_mut(b) = F::from(2u32);
-        assert!(circuit
-            .check_circuit_satisfiability(&[F::from(0u32), F::from(2u32)])
-            .is_err());
+        assert!(circuit.check_circuit_satisfiability(&[F::from(0u32), F::from(2u32)]).is_err());
 
         Ok(())
     }
@@ -1874,10 +1917,7 @@ pub(crate) mod test {
         let group_elems: Vec<F> = domain.elements().collect();
         (0..circuit.num_wire_types).for_each(|i| {
             (0..n).for_each(|j| {
-                assert_eq!(
-                    k[i] * group_elems[j],
-                    circuit.extended_id_permutation[i * n + j]
-                )
+                assert_eq!(k[i] * group_elems[j], circuit.extended_id_permutation[i * n + j])
             });
         });
 
@@ -1903,9 +1943,7 @@ pub(crate) mod test {
         assert!(circuit.compute_range_table_polynomial().is_err());
         assert!(circuit.compute_key_table_polynomial().is_err());
         assert!(circuit.compute_merged_lookup_table(F::one()).is_err());
-        assert!(circuit
-            .compute_lookup_sorted_vec_polynomials(F::one(), &[])
-            .is_err());
+        assert!(circuit.compute_lookup_sorted_vec_polynomials(F::one(), &[]).is_err());
         assert!(circuit
             .compute_lookup_prod_polynomial(&F::one(), &F::one(), &F::one(), &[], &[])
             .is_err());
@@ -1928,9 +1966,7 @@ pub(crate) mod test {
         assert!(circuit.compute_extended_permutation_polynomials().is_err());
         assert!(circuit.compute_pub_input_polynomial().is_err());
         assert!(circuit.compute_wire_polynomials().is_err());
-        assert!(circuit
-            .compute_prod_permutation_polynomial(&F::one(), &F::one())
-            .is_err());
+        assert!(circuit.compute_prod_permutation_polynomial(&F::one(), &F::one()).is_err());
 
         // Should not insert gates or add variables after finalizing the circuit.
         circuit.finalize_for_arithmetization()?;
@@ -1962,15 +1998,11 @@ pub(crate) mod test {
         assert!(circuit.compute_extended_permutation_polynomials().is_err());
         assert!(circuit.compute_pub_input_polynomial().is_err());
         assert!(circuit.compute_wire_polynomials().is_err());
-        assert!(circuit
-            .compute_prod_permutation_polynomial(&F::one(), &F::one())
-            .is_err());
+        assert!(circuit.compute_prod_permutation_polynomial(&F::one(), &F::one()).is_err());
         assert!(circuit.compute_range_table_polynomial().is_err());
         assert!(circuit.compute_key_table_polynomial().is_err());
         assert!(circuit.compute_merged_lookup_table(F::one()).is_err());
-        assert!(circuit
-            .compute_lookup_sorted_vec_polynomials(F::one(), &[])
-            .is_err());
+        assert!(circuit.compute_lookup_sorted_vec_polynomials(F::one(), &[]).is_err());
         assert!(circuit
             .compute_lookup_prod_polynomial(&F::one(), &F::one(), &F::one(), &[], &[])
             .is_err());
@@ -2128,9 +2160,8 @@ pub(crate) mod test {
 
         // Check wire witness polynomials
         let wire_polys = circuit.compute_wire_polynomials()?;
-        for (poly, wire_vars) in wire_polys
-            .iter()
-            .zip(circuit.wire_variables.iter().take(circuit.num_wire_types()))
+        for (poly, wire_vars) in
+            wire_polys.iter().zip(circuit.wire_variables.iter().take(circuit.num_wire_types()))
         {
             let wire_evals: Vec<F> = wire_vars.iter().map(|&var| circuit.witness[var]).collect();
             check_polynomial(poly, &wire_evals);

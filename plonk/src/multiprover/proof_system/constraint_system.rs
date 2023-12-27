@@ -130,11 +130,13 @@ where
     // do so by adding proof-linking gates at specific indices in the circuit's arithmetization
     // of the form a(x) * 0 = 0, where a(x) encodes the witness to be linked. We can then
     // invoke a polynomial subprotocol to prove that the a(x) polynomial is the same between
-    // proofs. The following fields are used to track membership in groups and placement of groups
-    // in the arithmetization
+    // proofs. The following fields are used to track membership in groups and placement of
+    // groups in the arithmetization
     /// The proof-linking group layouts for the circuit. Maps a group ID to the
     /// indices of the witness contained in the group
-    link_groups: HashMap<&'static str, Vec<Variable>>,
+    link_groups: HashMap<String, Vec<Variable>>,
+    /// The offsets at which to place the link groups in the arithmetization
+    link_group_offsets: HashMap<String, usize>,
 
     /// The underlying MPC fabric that this circuit is allocated within
     fabric: MpcFabric<C>,
@@ -164,6 +166,7 @@ where
             // This is later updated
             eval_domain: Radix2EvaluationDomain::new(1 /* num_coeffs */).unwrap(),
             link_groups: HashMap::new(),
+            link_group_offsets: HashMap::new(),
             fabric,
         };
 
@@ -210,7 +213,7 @@ where
 
         for link_group in link_groups {
             self.link_groups
-                .get_mut(link_group.id)
+                .get_mut(&link_group.id)
                 .ok_or(CircuitError::LinkGroupNotFound(link_group.id.to_string()))?
                 .push(var);
         }
@@ -307,9 +310,8 @@ where
         pub_input: &AuthenticatedScalarResult<C>,
     ) -> ScalarResult<C> {
         // Compute wire values
-        let w_vals = (0..=GATE_WIDTH)
-            .map(|i| &self.witness[self.wire_variables[i][gate_id]])
-            .collect_vec();
+        let w_vals =
+            (0..=GATE_WIDTH).map(|i| &self.witness[self.wire_variables[i][gate_id]]).collect_vec();
 
         // Compute selector values
         macro_rules! as_scalars {
@@ -387,11 +389,8 @@ where
 
         // Compute the mapping from variables to wires.
         let mut variable_wires_map = vec![vec![]; m];
-        for (gate_wire_id, variables) in self
-            .wire_variables
-            .iter()
-            .take(self.num_wire_types())
-            .enumerate()
+        for (gate_wire_id, variables) in
+            self.wire_variables.iter().take(self.num_wire_types()).enumerate()
         {
             for (gate_id, &var) in variables.iter().enumerate() {
                 variable_wires_map[var].push((gate_wire_id, gate_id));
@@ -574,10 +573,7 @@ where
     ) -> Result<(), CircuitError> {
         let n = public_input.len();
         if n != self.num_inputs() {
-            return Err(CircuitError::PubInputLenMismatch(
-                n,
-                self.pub_input_gate_ids.len(),
-            ));
+            return Err(CircuitError::PubInputLenMismatch(n, self.pub_input_gate_ids.len()));
         }
 
         let mut gate_results = Vec::new();
@@ -605,10 +601,7 @@ where
                 if res == Scalar::zero() {
                     Ok(())
                 } else {
-                    Err(CircuitError::GateCheckFailure(
-                        idx,
-                        "gate check failed".to_string(),
-                    ))
+                    Err(CircuitError::GateCheckFailure(idx, "gate check failed".to_string()))
                 }
             })
             .collect::<Result<Vec<_>, CircuitError>>()
@@ -641,9 +634,8 @@ where
         link_groups: &[LinkGroup],
     ) -> Result<Variable, CircuitError> {
         let authenticated_val = self.fabric.one_authenticated() * Scalar::new(val);
-        let var = self.create_variable(authenticated_val)?;
+        let var = self.create_variable_with_link_groups(authenticated_val, link_groups)?;
         self.enforce_constant(var, val)?;
-        self.add_to_link_groups(var, link_groups)?;
 
         Ok(var)
     }
@@ -673,9 +665,12 @@ where
         Ok(())
     }
 
-    // TODO: properly handle offsets
-    fn create_link_group(&mut self, id: &'static str, _offset: Option<usize>) -> LinkGroup {
-        self.link_groups.insert(id, Vec::new());
+    fn create_link_group(&mut self, id: String, offset: Option<usize>) -> LinkGroup {
+        self.link_groups.insert(id.clone(), Vec::new());
+        if let Some(offset) = offset {
+            self.link_group_offsets.insert(id.clone(), offset);
+        }
+
         LinkGroup { id }
     }
 
@@ -686,9 +681,8 @@ where
     ) -> Result<(), CircuitError> {
         self.check_finalize_flag(false)?;
 
-        for (wire_var, wire_variable) in wire_vars
-            .iter()
-            .zip(self.wire_variables.iter_mut().take(GATE_WIDTH + 1))
+        for (wire_var, wire_variable) in
+            wire_vars.iter().zip(self.wire_variables.iter_mut().take(GATE_WIDTH + 1))
         {
             wire_variable.push(*wire_var)
         }
@@ -855,9 +849,8 @@ where
         let mut numerator_terms = Vec::with_capacity(self.num_wire_types());
         let mut denominator_terms = Vec::with_capacity(self.num_wire_types());
         for i in 0..self.num_wire_types() {
-            let wire_values = (0..(n - 1))
-                .map(|j| self.witness[self.wire_variable(i, j)].clone())
-                .collect_vec();
+            let wire_values =
+                (0..(n - 1)).map(|j| self.witness[self.wire_variable(i, j)].clone()).collect_vec();
             let id_perm_values = (0..(n - 1))
                 .map(|j| Scalar::new(self.extended_id_permutation[i * n + j]))
                 .collect_vec();
@@ -914,10 +907,8 @@ where
             .iter()
             .take(self.num_wire_types())
             .map(|wire_vars| {
-                let wire_vec: Vec<AuthenticatedScalarResult<C>> = wire_vars
-                    .iter()
-                    .map(|&var| witness[var].clone())
-                    .collect_vec();
+                let wire_vec: Vec<AuthenticatedScalarResult<C>> =
+                    wire_vars.iter().map(|&var| witness[var].clone()).collect_vec();
 
                 let coeffs = AuthenticatedScalarResult::ifft::<
                     Radix2EvaluationDomain<C::ScalarField>,
