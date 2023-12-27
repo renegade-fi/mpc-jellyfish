@@ -31,18 +31,17 @@ macro_rules! felt {
 /// circuit
 macro_rules! felts {
     ($x:expr) => {
-        $x.iter()
-            .map(|x| Self::Constant::from_field(x))
-            .collect::<Vec<_>>()
+        $x.iter().map(|x| Self::Constant::from_field(x)).collect::<Vec<_>>()
     };
 }
 
 /// Represents the parameterization of a proof-linking group in the circuit
 ///
 /// See `Circuit::create_link_group` for more details on proof-linking
+#[derive(Clone, Debug)]
 pub struct LinkGroup {
     /// The id of the group
-    pub id: &'static str,
+    pub id: String,
 }
 
 /// An interface to add gates to a circuit that generalizes across wiring
@@ -211,7 +210,7 @@ pub trait Circuit<F: Field> {
     /// where a(x) is the witness element. This allows us to prove
     /// that the a(x) polynomial of one proof equals the a(x) polynomial of
     /// another proof over some proof-linking domain, represented by the group
-    fn create_link_group(&mut self, id: &'static str, offset: Option<usize>) -> LinkGroup;
+    fn create_link_group(&mut self, id: String, offset: Option<usize>) -> LinkGroup;
 
     // --- Gate Allocation --- //
 
@@ -347,11 +346,8 @@ pub trait Circuit<F: Field> {
             .collect::<Result<Vec<_>, CircuitError>>()?;
 
         // calculate y as the linear combination of coeffs and vals_in
-        let y_val = vals_in
-            .iter()
-            .zip(coeffs.iter())
-            .map(|(val, coeff)| felt!(coeff) * val.clone())
-            .sum();
+        let y_val =
+            vals_in.iter().zip(coeffs.iter()).map(|(val, coeff)| felt!(coeff) * val.clone()).sum();
         let y = self.create_variable(y_val)?;
 
         let wires = [wires_in[0], wires_in[1], wires_in[2], wires_in[3], y];
@@ -456,24 +452,14 @@ pub trait Circuit<F: Field> {
         let mut accum = padded[0];
         for i in 1..padded_len / rate {
             accum = self.lc(
-                &[
-                    accum,
-                    padded[rate * i - 2],
-                    padded[rate * i - 1],
-                    padded[rate * i],
-                ],
+                &[accum, padded[rate * i - 2], padded[rate * i - 1], padded[rate * i]],
                 &coeffs,
             )?;
         }
 
         // Final round
-        let wires = [
-            accum,
-            padded[padded_len - 3],
-            padded[padded_len - 2],
-            padded[padded_len - 1],
-            sum,
-        ];
+        let wires =
+            [accum, padded[padded_len - 3], padded[padded_len - 2], padded[padded_len - 1], sum];
         self.lc_gate(&wires, &coeffs)?;
 
         Ok(sum)
@@ -493,9 +479,7 @@ pub trait Circuit<F: Field> {
         padded_wires.resize(n_lcs, self.zero());
         padded_coeffs.resize(n_lcs, F::zero());
 
-        for (wires, coeffs) in padded_wires
-            .chunks(GATE_WIDTH)
-            .zip(padded_coeffs.chunks(GATE_WIDTH))
+        for (wires, coeffs) in padded_wires.chunks(GATE_WIDTH).zip(padded_coeffs.chunks(GATE_WIDTH))
         {
             partials.push(self.lc(
                 &[wires[0], wires[1], wires[2], wires[3]],
