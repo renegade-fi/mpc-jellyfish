@@ -574,8 +574,7 @@ impl<F: FftField> PlonkCircuit<F> {
 
     /// Re-arrange the order of the gates so that
     /// 1. io gates are in the front.
-    /// 2. proof linking gates follow
-    /// 3. variable table lookup gate are at the rear so that they do not affect
+    /// 2. variable table lookup gate are at the rear so that they do not affect
     /// the range gates when merging the lookup tables.
     ///
     /// Remember to pad gates before calling the method.
@@ -593,10 +592,6 @@ impl<F: FftField> PlonkCircuit<F> {
                 *io_gate_id = gate_id;
             }
         }
-
-        // Insert proof linking gates into the circuit
-        let layout = self.gen_circuit_layout()?;
-        self.insert_link_gates(&layout);
 
         if self.support_lookup() {
             // move lookup gates to the rear, the relative order of the lookup gates
@@ -642,13 +637,81 @@ impl<F: FftField> PlonkCircuit<F> {
             n_gates: self.num_gates(),
             link_group_offsets,
         };
-        if !self.validate_layout(&layout) {
-            return Err(CircuitError::Layout(
-                "Invalid circuit layout, please check the link group offsets".to_string(),
-            ));
+
+        self.validate_layout(&layout)?;
+        Ok(layout)
+    }
+
+    /// Validate a circuit layout against the circuit's arithmetization
+    fn validate_layout(&self, layout: &CircuitLayout) -> Result<(), CircuitError> {
+        // Check that each offset occurs after the public inputs
+        for (id, offset) in layout.link_group_offsets.iter() {
+            if *offset < self.num_inputs() {
+                return Err(CircuitError::Layout(format!(
+                    "Link group {} offset {} would mangle public inputs",
+                    id, offset
+                )));
+            }
         }
 
-        Ok(layout)
+        // Check that adjacent link groups are non-overlapping
+        let sorted = layout.link_group_offsets.iter().sorted_by_key(|(_, off)| *off).collect_vec();
+        for window in sorted.windows(2 /* size */) {
+            let (id1, off1) = window[0];
+            let (id2, off2) = window[1];
+
+            let group_len = self.link_groups.get(id1).unwrap().len();
+            if off1 + group_len > *off2 {
+                return Err(CircuitError::Layout(format!(
+                    "Link group {} (len = {}, offset = {}) overlaps with group {} (offset = {})",
+                    id1, group_len, off1, id2, off2
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Insert proof linking gates into the circuit
+    fn insert_link_gates(&mut self, layout: &CircuitLayout) {
+        // A lower bound on the number of gates needed
+        let n_gates = self.link_groups.values().map(|v| v.len()).sum();
+        let mut gates: Vec<Box<dyn Gate<F>>> = Vec::with_capacity(n_gates);
+        let mut wires: Vec<Variable> = Vec::with_capacity(n_gates);
+
+        // Construct the gates
+        let zero = self.zero();
+        let mut gate_cursor = self.num_inputs();
+        for (group, offset) in layout.link_group_offsets.iter().sorted_by_key(|(_, off)| *off) {
+            let group = self.link_groups.get(group).unwrap();
+
+            // Pad up to the next group's offset if necessary
+            let n_pad = *offset - gate_cursor;
+            for _ in 0..n_pad {
+                gates.push(Box::new(PaddingGate));
+                wires.push(zero);
+            }
+
+            // Insert gates to represent the link
+            for var in group.iter() {
+                gates.push(Box::new(ProofLinkingGate));
+                wires.push(*var);
+            }
+
+            gate_cursor = *offset + group.len();
+        }
+
+        // Insert the gates and wires into the trace after the i/o gates
+        let n_gates = gates.len();
+        let insert_idx = self.num_inputs();
+        let insert_range = insert_idx..insert_idx;
+
+        self.gates.splice(insert_range.clone(), gates);
+        self.wire_variables[0].splice(insert_range.clone(), wires);
+        for i in 1..GATE_WIDTH + 1 {
+            let zeros = vec![zero; n_gates];
+            self.wire_variables[i].splice(insert_range.clone(), zeros);
+        }
     }
 
     /// Place a group into a list of already allocated groups
@@ -679,28 +742,6 @@ impl<F: FftField> PlonkCircuit<F> {
             offset = *next_group_boundary + next_group_size;
             next_idx += 1;
         }
-    }
-
-    /// Validate a circuit layout against the circuit's arithmetization
-    fn validate_layout(&self, layout: &CircuitLayout) -> bool {
-        // Check that none of the link groups are overlapping
-        let sorted = layout.link_group_offsets.iter().sorted_by_key(|(_, off)| *off).collect_vec();
-        for window in sorted.windows(2 /* size */) {
-            let (id, off1) = window[0];
-            let (_, off2) = window[1];
-
-            let group_len = self.link_groups.get(id).unwrap().len();
-            if off1 + group_len > *off2 {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    /// Insert proof linking gates into the circuit
-    fn insert_link_gates(&self, _layout: &CircuitLayout) {
-        todo!()
     }
 
     // use downcast to check whether a gate is of IoGate type
@@ -1005,6 +1046,12 @@ impl<F: PrimeField> PlonkCircuit<F> {
         if self.is_finalized() {
             return Ok(());
         }
+
+        if !self.link_groups.is_empty() {
+            let layout = self.gen_circuit_layout()?;
+            self.insert_link_gates(&layout);
+        }
+
         let num_slots_needed = match self.support_lookup() {
             false => self.num_gates(),
             true => max(
@@ -1508,14 +1555,23 @@ impl<F: PrimeField> PlonkCircuit<F> {
 #[cfg(test)]
 pub(crate) mod test {
     use super::{Arithmetization, Circuit, PlonkCircuit};
-    use crate::{constants::compute_coset_representatives, errors::CircuitError};
+    use crate::{
+        constants::{compute_coset_representatives, GATE_WIDTH},
+        errors::CircuitError,
+        gates::ProofLinkingGate,
+    };
     use ark_bls12_377::Fq as Fq377;
     use ark_ed_on_bls12_377::Fq as FqEd377;
     use ark_ed_on_bls12_381::Fq as FqEd381;
     use ark_ed_on_bn254::Fq as FqEd254;
-    use ark_ff::PrimeField;
+    use ark_ff::{One, PrimeField};
     use ark_poly::{domain::Radix2EvaluationDomain, univariate::DensePolynomial, EvaluationDomain};
-    use ark_std::{vec, vec::Vec};
+    use ark_std::{
+        rand::{distributions::uniform::SampleRange, thread_rng},
+        vec,
+        vec::Vec,
+        UniformRand,
+    };
     use jf_utils::test_rng;
 
     #[test]
@@ -1836,6 +1892,110 @@ pub(crate) mod test {
         circuit.create_table_and_lookup_variables(&lookup_vars, &table_vars)?;
 
         Ok((circuit, vec![F::from(1u32), F::from(8u32)]))
+    }
+
+    /// Tests the layout method of the circuit
+    #[test]
+    fn test_circuit_layout() {
+        let mut rng = thread_rng();
+        let mut cs = PlonkCircuit::<FqEd254>::new_turbo_plonk();
+
+        // Create three groups at varying specified and unspecified offsets, give enough
+        // room before the first group so that the second (unspecified) is
+        // slotted in before it
+        let offset1 = (10..100).sample_single(&mut rng);
+        let offset3 = (100..200).sample_single(&mut rng);
+
+        let group1 = cs.create_link_group(String::from("group1"), Some(offset1));
+        let group2 = cs.create_link_group(String::from("group2"), None);
+        let group3 = cs.create_link_group(String::from("group3"), Some(offset3));
+
+        // Add two values to the three groups
+        let val1 = FqEd254::rand(&mut rng);
+        let val2 = FqEd254::rand(&mut rng);
+
+        // Add a public variable to bump the offsets
+        let _public = cs.create_public_variable(FqEd254::one()).unwrap();
+        let w1 = cs.create_variable_with_link_groups(val1, &[group1.clone(), group2]).unwrap();
+        let w2 = cs.create_variable_with_link_groups(val2, &[group1.clone(), group3]).unwrap();
+
+        let layout = cs.gen_circuit_layout().unwrap();
+
+        // We expect that the second group is placed immediately after the i/o gates and
+        // the first and third groups at their randomized offsets
+        assert_eq!(layout.link_group_offsets["group1"], offset1);
+        let expected_offset2 = cs.num_inputs();
+        assert_eq!(layout.link_group_offsets["group2"], expected_offset2);
+        assert_eq!(layout.link_group_offsets["group3"], offset3);
+
+        // Finalize the circuit and check that the linking gates have been positioned
+        // correctly
+        cs.finalize_for_arithmetization().unwrap();
+
+        // Group 1
+        assert!(cs.gates[offset1].as_any().is::<ProofLinkingGate>());
+        assert_eq!(cs.wire_variables[0][offset1], w1);
+
+        assert!(cs.gates[offset1 + 1].as_any().is::<ProofLinkingGate>());
+        assert_eq!(cs.wire_variables[0][offset1 + 1], w2);
+
+        // Group 2
+        assert!(cs.gates[expected_offset2].as_any().is::<ProofLinkingGate>());
+        assert_eq!(cs.wire_variables[0][expected_offset2], w1);
+
+        // Group 3
+        assert!(cs.gates[offset3].as_any().is::<ProofLinkingGate>());
+        assert_eq!(cs.wire_variables[0][offset3], w2);
+    }
+
+    /// Tests the circuit layout when an invalid offset is given
+    #[test]
+    fn test_invalid_circuit_layout() {
+        let mut rng = thread_rng();
+
+        // Add a link group in the public inputs
+        let mut cs = PlonkCircuit::<FqEd254>::new_turbo_plonk();
+        let val = FqEd254::rand(&mut rng);
+        let group = cs.create_link_group(String::from("test"), Some(0));
+
+        cs.create_public_variable(FqEd254::one()).unwrap();
+        cs.create_variable_with_link_groups(val, &[group]).unwrap();
+
+        assert!(cs.gen_circuit_layout().is_err());
+
+        // Attempt to add two link groups at conflicting offsets
+        let mut cs = PlonkCircuit::<FqEd254>::new_turbo_plonk();
+
+        let group1 = cs.create_link_group(String::from("group1"), Some(0));
+        let group2 = cs.create_link_group(String::from("group2"), Some(1));
+
+        let val1 = FqEd254::rand(&mut rng);
+        let val2 = FqEd254::rand(&mut rng);
+        cs.create_variable_with_link_groups(val1, &[group1.clone(), group2.clone()]).unwrap();
+        cs.create_variable_with_link_groups(val2, &[group1, group2]).unwrap();
+
+        assert!(cs.gen_circuit_layout().is_err());
+    }
+
+    /// Tests the placement of proof-linking gates in the circuit
+    #[test]
+    fn test_link_group_trace() {
+        let mut rng = thread_rng();
+        let value = FqEd254::rand(&mut rng);
+        let offset = (0..100).sample_single(&mut rng);
+
+        let mut cs = PlonkCircuit::<FqEd254>::new_turbo_plonk();
+        let group = cs.create_link_group(String::from("test"), Some(offset));
+        let w = cs.create_variable_with_link_groups(value, &[group]).unwrap();
+
+        cs.finalize_for_arithmetization().unwrap();
+
+        // Test that a proof linking gate has been added at the correct offset
+        assert!(cs.gates[offset].as_any().is::<ProofLinkingGate>());
+        assert_eq!(cs.wire_variables[0][offset], w);
+        for i in 1..GATE_WIDTH + 1 {
+            assert!(cs.wire_variables[i][offset] == cs.zero());
+        }
     }
 
     /// Tests related to permutations
