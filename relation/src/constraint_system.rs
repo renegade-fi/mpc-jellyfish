@@ -176,7 +176,7 @@ where
     /// The IO gates for the list of public input variables.
     pub_input_gate_ids: Vec<GateId>,
     /// The actual values of variables.
-    witness: Vec<F>,
+    pub(crate) witness: Vec<F>,
 
     /// The permutation over wires.
     /// Each algebraic gate has 5 wires, i.e., 4 input wires and an output
@@ -200,7 +200,7 @@ where
     /// polynomials. This is only relevant after the circuit is finalized for
     /// arithmetization, by default it is a domain with size 1 (only with
     /// element 0).
-    eval_domain: Radix2EvaluationDomain<F>,
+    pub(crate) eval_domain: Radix2EvaluationDomain<F>,
 
     // -- Proof linking --
     // Proof linking allows us to prove that a subset of the witness of two proofs is the same. We

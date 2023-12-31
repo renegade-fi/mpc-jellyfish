@@ -1,6 +1,7 @@
 use core::iter;
 
-use ark_ff::PrimeField;
+use ark_ff::{FftField, PrimeField};
+use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain};
 use itertools::Itertools;
 
 use crate::{
@@ -10,6 +11,9 @@ use crate::{
     traits::Circuit,
     CircuitLayout, PlonkCircuit, Variable,
 };
+
+/// The index in the wire polynomials that encodes the proof linking gates
+pub const PROOF_LINK_WIRE_IDX: usize = 0;
 
 /// The placement parameterization of a group
 #[derive(Clone, Copy, Debug)]
@@ -42,6 +46,12 @@ impl GroupLayout {
         let end = start + (self.size - 1) * spacing;
 
         (start, end)
+    }
+
+    /// Get the domain generator of a group when embedded in the given field
+    pub fn get_domain_generator<F: FftField>(&self) -> F {
+        let roots_order = 1 << self.alignment;
+        F::get_root_of_unity(roots_order).expect("field 2-adicity too small for layout {self:?}")
     }
 }
 
@@ -299,14 +309,30 @@ impl<F: PrimeField> PlonkCircuit<F> {
         for link_var in self.link_groups[id].iter().copied() {
             // Insert a proof linking gate and wires
             gates.push(Box::new(ProofLinkingGate));
-            wire_variables[0].push(link_var);
-            for wire_var in wire_variables.iter_mut().skip(1) {
-                wire_var.push(0);
+            wire_variables[PROOF_LINK_WIRE_IDX].push(link_var);
+            for (i, wire_var) in wire_variables.iter_mut().enumerate() {
+                if i != PROOF_LINK_WIRE_IDX {
+                    wire_var.push(0);
+                }
             }
 
             // Insert gates in between the proof linking gates
             Self::place_gates(spacing - 1, gates, wire_variables, gates_iter, vars_iter);
         }
+    }
+}
+
+/// Helper methods for generating wiring polynomials
+impl<F: FftField> PlonkCircuit<F> {
+    /// Get the wiring polynomial that encodes proof-linking gates
+    pub fn get_proof_linking_wire_poly(&self) -> DensePolynomial<F> {
+        let witness = &self.witness;
+        let wire_vars = &self.wire_variables[PROOF_LINK_WIRE_IDX];
+        let mut coeffs = wire_vars.iter().map(|v| witness[*v]).collect_vec();
+
+        // Compute coefficients via an inverse FFT
+        self.eval_domain.ifft_in_place(&mut coeffs);
+        DensePolynomial::from_coefficients_vec(coeffs)
     }
 }
 
