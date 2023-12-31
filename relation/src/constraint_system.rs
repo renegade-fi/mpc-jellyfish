@@ -80,8 +80,15 @@ pub struct CircuitLayout {
     pub n_inputs: usize,
     /// The number of gates in the circuit
     pub n_gates: usize,
-    /// The offsets of the proof linking groups in the circuit
-    pub link_group_offsets: HashMap<String, usize>,
+    /// The offsets and sizes of the proof linking groups in the circuit
+    pub link_group_dims: HashMap<String, (usize, usize)>,
+}
+
+impl CircuitLayout {
+    /// Get an iterator over link groups sorted by their offset
+    pub(crate) fn sorted_offset_iter(&self) -> impl Iterator<Item = (&String, &(usize, usize))> {
+        self.link_group_dims.iter().sorted_by_key(|(_, (offset, _))| *offset)
+    }
 }
 
 /// The wire type identifier for range gates.
@@ -631,11 +638,16 @@ impl<F: FftField> PlonkCircuit<F> {
         }
 
         // 3. Create a layout and validate it
-        let link_group_offsets = sorted_offset_pairs.into_iter().collect();
+        let mut link_group_dims = HashMap::with_capacity(self.link_groups.len());
+        for (id, offset) in sorted_offset_pairs.into_iter() {
+            let group = self.link_groups.get(&id).unwrap();
+            link_group_dims.insert(id, (offset, group.len()));
+        }
+
         let layout = CircuitLayout {
             n_inputs: self.num_inputs(),
             n_gates: self.num_gates(),
-            link_group_offsets,
+            link_group_dims,
         };
 
         self.validate_layout(&layout)?;
@@ -645,7 +657,7 @@ impl<F: FftField> PlonkCircuit<F> {
     /// Validate a circuit layout against the circuit's arithmetization
     fn validate_layout(&self, layout: &CircuitLayout) -> Result<(), CircuitError> {
         // Check that each offset occurs after the public inputs
-        for (id, offset) in layout.link_group_offsets.iter() {
+        for (id, (offset, _)) in layout.link_group_dims.iter() {
             if *offset < self.num_inputs() {
                 return Err(CircuitError::Layout(format!(
                     "Link group {} offset {} would mangle public inputs",
@@ -655,12 +667,11 @@ impl<F: FftField> PlonkCircuit<F> {
         }
 
         // Check that adjacent link groups are non-overlapping
-        let sorted = layout.link_group_offsets.iter().sorted_by_key(|(_, off)| *off).collect_vec();
+        let sorted = layout.sorted_offset_iter().collect_vec();
         for window in sorted.windows(2 /* size */) {
-            let (id1, off1) = window[0];
-            let (id2, off2) = window[1];
+            let (id1, (off1, group_len)) = window[0];
+            let (id2, (off2, _)) = window[1];
 
-            let group_len = self.link_groups.get(id1).unwrap().len();
             if off1 + group_len > *off2 {
                 return Err(CircuitError::Layout(format!(
                     "Link group {} (len = {}, offset = {}) overlaps with group {} (offset = {})",
@@ -682,7 +693,7 @@ impl<F: FftField> PlonkCircuit<F> {
         // Construct the gates
         let zero = self.zero();
         let mut gate_cursor = self.num_inputs();
-        for (group, offset) in layout.link_group_offsets.iter().sorted_by_key(|(_, off)| *off) {
+        for (group, (offset, size)) in layout.sorted_offset_iter() {
             let group = self.link_groups.get(group).unwrap();
 
             // Pad up to the next group's offset if necessary
@@ -698,7 +709,7 @@ impl<F: FftField> PlonkCircuit<F> {
                 wires.push(*var);
             }
 
-            gate_cursor = *offset + group.len();
+            gate_cursor = offset + size;
         }
 
         // Insert the gates and wires into the trace after the i/o gates
@@ -1923,10 +1934,10 @@ pub(crate) mod test {
 
         // We expect that the second group is placed immediately after the i/o gates and
         // the first and third groups at their randomized offsets
-        assert_eq!(layout.link_group_offsets["group1"], offset1);
+        assert_eq!(layout.link_group_dims["group1"], (offset1, 2));
         let expected_offset2 = cs.num_inputs();
-        assert_eq!(layout.link_group_offsets["group2"], expected_offset2);
-        assert_eq!(layout.link_group_offsets["group3"], offset3);
+        assert_eq!(layout.link_group_dims["group2"], (expected_offset2, 1));
+        assert_eq!(layout.link_group_dims["group3"], (offset3, 1));
 
         // Finalize the circuit and check that the linking gates have been positioned
         // correctly
