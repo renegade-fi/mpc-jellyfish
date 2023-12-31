@@ -14,6 +14,7 @@ use ark_std::{
 };
 use mpc_relation::traits::*;
 pub mod batch_arg;
+pub mod proof_linking;
 pub(crate) mod prover;
 pub(crate) mod snark;
 #[allow(missing_docs)]
