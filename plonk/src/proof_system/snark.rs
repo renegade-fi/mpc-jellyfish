@@ -163,7 +163,7 @@ where
     /// `circuit` and `prove_key` has to be consistent (with the same evaluation
     /// domain etc.), otherwise return error.
     #[allow(clippy::type_complexity)]
-    fn batch_prove_internal<C, R, T>(
+    pub(crate) fn batch_prove_internal<C, R, T>(
         prng: &mut R,
         circuits: &[&C],
         prove_keys: &[&ProvingKey<E>],

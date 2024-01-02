@@ -14,8 +14,8 @@
 use crate::{
     errors::PlonkError,
     proof_system::{
-        structs::{self, BatchProof, PlookupProof, ProofEvaluations, VerifyingKey},
-        verifier,
+        structs::{self, BatchProof, PlookupProof, ProofEvaluations, VerifyingKey, ProvingKey},
+        verifier, PlonkKzgSnark,
     },
     transcript::PlonkTranscript,
 };
@@ -23,12 +23,13 @@ use ark_ec::{
     pairing::Pairing,
     short_weierstrass::{Affine, SWCurveConfig},
 };
-use ark_ff::Field;
-use ark_poly::Radix2EvaluationDomain;
+use ark_ff::{Field, FftField};
+use ark_poly::{Radix2EvaluationDomain, univariate::DensePolynomial};
 use ark_std::vec::Vec;
 use hashbrown::HashMap;
 use jf_primitives::{pcs::prelude::Commitment, rescue::RescueParameter};
-use mpc_relation::gadgets::ecc::SWToTEConParam;
+use mpc_relation::{gadgets::ecc::SWToTEConParam, traits::{Arithmetization, Circuit}};
+use rand::{CryptoRng, RngCore};
 
 /// A wrapper of crate::proof_system::structs::Challenges
 #[derive(Debug, Default, PartialEq, Clone, Copy)]
@@ -66,6 +67,42 @@ impl<F: Field> From<Challenges<F>> for structs::Challenges<F> {
             zeta: other.zeta,
             v: other.v,
             u: other.u,
+        }
+    }
+}
+
+/// Plonk IOP online polynomial oracles.
+#[derive(Debug, Default, Clone)]
+pub struct Oracles<F: FftField> {
+    pub wire_polys: Vec<DensePolynomial<F>>,
+    pub pub_inp_poly: DensePolynomial<F>,
+    pub prod_perm_poly: DensePolynomial<F>,
+    pub plookup_oracles: PlookupOracles<F>,
+}
+
+/// Plookup IOP online polynomial oracles.
+#[derive(Debug, Default, Clone)]
+pub struct PlookupOracles<F: FftField> {
+    pub h_polys: Vec<DensePolynomial<F>>,
+    pub prod_lookup_poly: DensePolynomial<F>,
+}
+
+impl<F: FftField> From<structs::Oracles<F>> for Oracles<F> {
+    fn from(value: structs::Oracles<F>) -> Self {
+        Self {
+            wire_polys: value.wire_polys,
+            pub_inp_poly: value.pub_inp_poly,
+            prod_perm_poly: value.prod_perm_poly,
+            plookup_oracles: value.plookup_oracles.into(),
+        }
+    }
+}
+
+impl<F: FftField> From<structs::PlookupOracles<F>> for PlookupOracles<F> {
+    fn from(value: structs::PlookupOracles<F>) -> Self {
+        Self {
+            h_polys: value.h_polys,
+            prod_lookup_poly: value.prod_lookup_poly,
         }
     }
 }
@@ -345,3 +382,24 @@ where
         )
     }
 }
+
+#[allow(clippy::type_complexity)]
+pub fn batch_prove_internal<E, F, P, C, R, T>(
+        prng: &mut R,
+        circuits: &[&C],
+        prove_keys: &[&ProvingKey<E>],
+        extra_transcript_init_msg: Option<Vec<u8>>,
+    ) -> Result<(BatchProof<E>, Vec<Oracles<E::ScalarField>>, Challenges<E::ScalarField>), PlonkError>
+    where
+        E: Pairing<BaseField = F, G1Affine = Affine<P>>,
+        F: RescueParameter + SWToTEConParam,
+        P: SWCurveConfig<BaseField = F>,
+        C: Arithmetization<E::ScalarField>,
+        C: Circuit<E::ScalarField, Wire = E::ScalarField, Constant = E::ScalarField>,
+        R: CryptoRng + RngCore,
+        T: PlonkTranscript<F>,
+    {
+        let (batch_proof, oracles_vec, challenges) = PlonkKzgSnark::batch_prove_internal::<C, R, T>(prng, circuits, prove_keys, extra_transcript_init_msg)?;
+        let oracles_vec = oracles_vec.into_iter().map(|x| x.into()).collect();
+        Ok((batch_proof, oracles_vec, challenges.into()))
+    }
