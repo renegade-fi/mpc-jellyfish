@@ -17,7 +17,9 @@ use crate::{
         EqualityGate, Gate, LinCombGate, LogicOrGate, LogicOrOutputGate, MulAddGate,
         MultiplicationGate, MuxGate, SubtractionGate,
     },
-    next_multiple, BoolVar, SortedLookupVecAndPolys, Variable,
+    next_multiple,
+    proof_linking::GroupLayout,
+    BoolVar, SortedLookupVecAndPolys, Variable,
 };
 
 /// A shorthand for converting a value to a constant in the circuit
@@ -203,14 +205,14 @@ pub trait Circuit<F: Field> {
 
     /// Create a proof linking group in the circuit. Witness elements may be
     /// allocated into this group in order and they will be placed into the
-    /// given offset as proof-linking gates (or assigned a default offset if
+    /// given layout as proof-linking gates (or assigned a default layout if
     /// none is provided).
     ///
     /// These proof linking gates are effictively of the form a(x) * 0 = 0,
     /// where a(x) is the witness element. This allows us to prove
     /// that the a(x) polynomial of one proof equals the a(x) polynomial of
     /// another proof over some proof-linking domain, represented by the group
-    fn create_link_group(&mut self, id: String, offset: Option<usize>) -> LinkGroup;
+    fn create_link_group(&mut self, id: String, layout: Option<GroupLayout>) -> LinkGroup;
 
     // --- Gate Allocation --- //
 

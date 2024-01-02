@@ -20,6 +20,7 @@ use mpc_relation::{
     constants::{compute_coset_representatives, GATE_WIDTH, N_MUL_SELECTORS},
     errors::CircuitError,
     gates::{FifthRootGate, Gate, IoGate, PaddingGate},
+    proof_linking::GroupLayout,
     traits::*,
     BoolVar, GateId, Variable, WireId,
 };
@@ -136,7 +137,7 @@ where
     /// indices of the witness contained in the group
     link_groups: HashMap<String, Vec<Variable>>,
     /// The offsets at which to place the link groups in the arithmetization
-    link_group_offsets: HashMap<String, usize>,
+    link_group_layouts: HashMap<String, GroupLayout>,
 
     /// The underlying MPC fabric that this circuit is allocated within
     fabric: MpcFabric<C>,
@@ -166,7 +167,7 @@ where
             // This is later updated
             eval_domain: Radix2EvaluationDomain::new(1 /* num_coeffs */).unwrap(),
             link_groups: HashMap::new(),
-            link_group_offsets: HashMap::new(),
+            link_group_layouts: HashMap::new(),
             fabric,
         };
 
@@ -665,10 +666,10 @@ where
         Ok(())
     }
 
-    fn create_link_group(&mut self, id: String, offset: Option<usize>) -> LinkGroup {
+    fn create_link_group(&mut self, id: String, layout: Option<GroupLayout>) -> LinkGroup {
         self.link_groups.insert(id.clone(), Vec::new());
-        if let Some(offset) = offset {
-            self.link_group_offsets.insert(id.clone(), offset);
+        if let Some(layout) = layout {
+            self.link_group_layouts.insert(id.clone(), layout);
         }
 
         LinkGroup { id }

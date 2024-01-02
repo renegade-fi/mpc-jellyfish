@@ -12,6 +12,7 @@ pub mod constants;
 pub mod errors;
 pub mod gadgets;
 pub mod gates;
+pub mod proof_linking;
 pub mod traits;
 
 pub mod constraint_system;
