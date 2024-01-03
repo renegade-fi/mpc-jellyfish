@@ -134,16 +134,10 @@ impl<E: Pairing> PolynomialCommitmentScheme for MultilinearKzgPCS<E> {
             )));
         }
         let ignored = prover_param.0.num_vars - poly.num_vars;
-        let scalars: Vec<_> = poly
-            .to_evaluations()
-            .into_iter()
-            .map(|x| x.into_bigint())
-            .collect();
-        let commitment = E::G1::msm_bigint(
-            &prover_param.0.powers_of_g[ignored].evals,
-            scalars.as_slice(),
-        )
-        .into_affine();
+        let scalars: Vec<_> = poly.to_evaluations().into_iter().map(|x| x.into_bigint()).collect();
+        let commitment =
+            E::G1::msm_bigint(&prover_param.0.powers_of_g[ignored].evals, scalars.as_slice())
+                .into_affine();
 
         end_timer!(commit_timer);
         Ok(Commitment(commitment))
@@ -161,11 +155,7 @@ impl<E: Pairing> PolynomialCommitmentScheme for MultilinearKzgPCS<E> {
         let commit_timer = start_timer!(|| "multi commit");
         let poly = merge_polynomials(polys)?;
 
-        let scalars: Vec<_> = poly
-            .to_evaluations()
-            .iter()
-            .map(|x| x.into_bigint())
-            .collect();
+        let scalars: Vec<_> = poly.to_evaluations().iter().map(|x| x.into_bigint()).collect();
 
         let commitment =
             E::G1::msm_bigint(&prover_param.0.powers_of_g[0].evals, scalars.as_slice())
@@ -322,10 +312,8 @@ fn open_internal<E: Pairing>(
 
     let mut proofs = Vec::new();
 
-    for (i, (&point_at_k, gi)) in point
-        .iter()
-        .zip(prover_param.powers_of_g[ignored..ignored + nv].iter())
-        .enumerate()
+    for (i, (&point_at_k, gi)) in
+        point.iter().zip(prover_param.powers_of_g[ignored..ignored + nv].iter()).enumerate()
     {
         let ith_round = start_timer!(|| format!("{}-th round", i));
 
@@ -395,25 +383,18 @@ fn verify_internal<E: Pairing>(
 
     // the first `ignored` G2 parameters are unused
     let ignored = verifier_param.num_vars - num_var;
-    let h_vec: Vec<_> = (0..num_var)
-        .map(|i| verifier_param.h_mask[ignored + i].into_group() - h_mul[i])
-        .collect();
+    let h_vec: Vec<_> =
+        (0..num_var).map(|i| verifier_param.h_mask[ignored + i].into_group() - h_mul[i]).collect();
     let h_vec: Vec<E::G2Affine> = E::G2::normalize_batch(&h_vec);
     end_timer!(prepare_inputs_timer);
 
     let pairing_product_timer = start_timer!(|| "pairing product");
 
-    let mut pairings_l: Vec<E::G1Prepared> = proof
-        .proofs
-        .iter()
-        .map(|&x| E::G1Prepared::from(x))
-        .collect();
+    let mut pairings_l: Vec<E::G1Prepared> =
+        proof.proofs.iter().map(|&x| E::G1Prepared::from(x)).collect();
 
-    let mut pairings_r: Vec<E::G2Prepared> = h_vec
-        .into_iter()
-        .take(num_var)
-        .map(E::G2Prepared::from)
-        .collect();
+    let mut pairings_r: Vec<E::G2Prepared> =
+        h_vec.into_iter().take(num_var).map(E::G2Prepared::from).collect();
     pairings_l.push(E::G1Prepared::from(
         (verifier_param.g * (*value) - commitment.0.into_group()).into_affine(),
     ));
@@ -450,14 +431,10 @@ mod tests {
         let com = MultilinearKzgPCS::commit(&ck, poly)?;
         let (proof, value) = MultilinearKzgPCS::open(&ck, poly, &point)?;
 
-        assert!(MultilinearKzgPCS::verify(
-            &vk, &com, &point, &value, &proof
-        )?);
+        assert!(MultilinearKzgPCS::verify(&vk, &com, &point, &value, &proof)?);
 
         let value = Fr::rand(rng);
-        assert!(!MultilinearKzgPCS::verify(
-            &vk, &com, &point, &value, &proof
-        )?);
+        assert!(!MultilinearKzgPCS::verify(&vk, &com, &point, &value, &proof)?);
 
         Ok(())
     }

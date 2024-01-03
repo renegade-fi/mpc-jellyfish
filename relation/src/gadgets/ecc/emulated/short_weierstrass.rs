@@ -117,11 +117,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let select_y = self.conditional_select_emulated(b, &p0.1, &p1.1)?;
         let select_infinity = BoolVar(self.mux(b, p1.2 .0, p0.2 .0)?);
 
-        Ok(EmulatedSWPointVariable::<E>(
-            select_x,
-            select_y,
-            select_infinity,
-        ))
+        Ok(EmulatedSWPointVariable::<E>(select_x, select_y, select_infinity))
     }
 
     /// Constrain two emulated point variables to be the same.
@@ -384,21 +380,13 @@ mod tests {
         let p1 = Projective::<P>::rand(&mut rng).into_affine();
         let p2 = Projective::<P>::rand(&mut rng).into_affine();
         let expected = (p1 + p2).into_affine().into();
-        let wrong_result = (p1 + p2 + Projective::<P>::generator())
-            .into_affine()
-            .into();
+        let wrong_result = (p1 + p2 + Projective::<P>::generator()).into_affine().into();
 
         let mut circuit = PlonkCircuit::<F>::new_ultra_plonk(20);
 
-        let var_p1 = circuit
-            .create_public_emulated_sw_point_variable(p1.into())
-            .unwrap();
-        let var_p2 = circuit
-            .create_emulated_sw_point_variable(p2.into())
-            .unwrap();
-        let var_neutral = circuit
-            .create_emulated_sw_point_variable(neutral.into())
-            .unwrap();
+        let var_p1 = circuit.create_public_emulated_sw_point_variable(p1.into()).unwrap();
+        let var_p2 = circuit.create_emulated_sw_point_variable(p2.into()).unwrap();
+        let var_neutral = circuit.create_emulated_sw_point_variable(neutral.into()).unwrap();
         ecc_add_and_check::<E, F>(&mut circuit, &var_p1, &var_p2, a, &expected).unwrap();
         ecc_add_and_check::<E, F>(&mut circuit, &var_p1, &var_neutral, a, &p1.into()).unwrap();
         ecc_add_and_check::<E, F>(&mut circuit, &var_neutral, &var_p2, a, &p2.into()).unwrap();
@@ -417,14 +405,8 @@ mod tests {
         assert!(circuit.check_circuit_satisfiability(&wrong_inputs).is_err());
 
         // fail path
-        let var_wrong_result = circuit
-            .create_emulated_sw_point_variable(wrong_result)
-            .unwrap();
-        circuit
-            .emulated_sw_ecc_add_gate(&var_p1, &var_p2, &var_wrong_result, a)
-            .unwrap();
-        assert!(circuit
-            .check_circuit_satisfiability(&public_inputs)
-            .is_err());
+        let var_wrong_result = circuit.create_emulated_sw_point_variable(wrong_result).unwrap();
+        circuit.emulated_sw_ecc_add_gate(&var_p1, &var_p2, &var_wrong_result, a).unwrap();
+        assert!(circuit.check_circuit_satisfiability(&public_inputs).is_err());
     }
 }

@@ -53,10 +53,8 @@ mod tests {
             for i in 0..input_len {
                 data[i] = $base_field::rand(&mut prng);
             }
-            let data_vars: Vec<Variable> = data
-                .iter()
-                .map(|&x| circuit.create_variable(x).unwrap())
-                .collect();
+            let data_vars: Vec<Variable> =
+                data.iter().map(|&x| circuit.create_variable(x).unwrap()).collect();
 
             let expected_prf_output =
                 RescuePRF::<$base_field, 10, 1>::evaluate(&rand_scalar, &data).unwrap();

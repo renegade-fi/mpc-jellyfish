@@ -70,10 +70,8 @@ mod tests {
             for i in 0..TEST_INPUT_LEN {
                 data[i] = $base_field::rand(&mut prng);
             }
-            let data_vars: Vec<Variable> = data
-                .iter()
-                .map(|&x| circuit.create_variable(x).unwrap())
-                .collect_vec();
+            let data_vars: Vec<Variable> =
+                data.iter().map(|&x| circuit.create_variable(x).unwrap()).collect_vec();
 
             let expected_commitment = FixedLengthRescueCommitment::<
                 $base_field,
@@ -85,10 +83,7 @@ mod tests {
             let commitment_var = circuit.commit(&data_vars, blinding_var).unwrap();
 
             // Check commitment output consistency
-            assert_eq!(
-                expected_commitment,
-                circuit.witness(commitment_var).unwrap()
-            );
+            assert_eq!(expected_commitment, circuit.witness(commitment_var).unwrap());
 
             // Check constraints
             assert!(circuit.check_circuit_satisfiability(&[]).is_ok());

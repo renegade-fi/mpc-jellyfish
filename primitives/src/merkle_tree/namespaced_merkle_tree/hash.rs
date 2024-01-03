@@ -62,11 +62,7 @@ where
 {
     /// Constructs a new NamespacedHash
     pub fn new(min_namespace: N, max_namespace: N, hash: T) -> Self {
-        Self {
-            min_namespace,
-            max_namespace,
-            hash,
-        }
+        Self { min_namespace, max_namespace, hash }
     }
 }
 
@@ -103,11 +99,7 @@ where
 
         let inner_hash = H::digest(&nodes)?;
 
-        Ok(NamespacedHash::new(
-            min_namespace,
-            max_namespace,
-            inner_hash,
-        ))
+        Ok(NamespacedHash::new(min_namespace, max_namespace, inner_hash))
     }
 
     fn digest_leaf(pos: &I, elem: &E) -> Result<NamespacedHash<T, N>, PrimitivesError> {
@@ -127,18 +119,9 @@ where
     fn generate_namespaced_commitment(namespaced_hash: NamespacedHash<Sha3Node, N>) -> Sha3Node {
         let mut hasher = Sha3_256::new();
         let mut writer = Vec::new();
-        namespaced_hash
-            .min_namespace
-            .serialize_compressed(&mut writer)
-            .unwrap();
-        namespaced_hash
-            .max_namespace
-            .serialize_compressed(&mut writer)
-            .unwrap();
-        namespaced_hash
-            .hash
-            .serialize_compressed(&mut writer)
-            .unwrap();
+        namespaced_hash.min_namespace.serialize_compressed(&mut writer).unwrap();
+        namespaced_hash.max_namespace.serialize_compressed(&mut writer).unwrap();
+        namespaced_hash.hash.serialize_compressed(&mut writer).unwrap();
         hasher.update(&mut writer);
         Sha3Node(hasher.finalize().into())
     }

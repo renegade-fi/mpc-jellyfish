@@ -129,11 +129,7 @@ where
         let alpha_powers = vec![alpha_2, alpha_3, alpha_4, alpha_5, alpha_6];
         let mut alpha_bases = vec![E::ScalarField::one()];
 
-        let mut tmp = if verify_keys[0].plookup_vk.is_some() {
-            alpha_7
-        } else {
-            alpha_3
-        };
+        let mut tmp = if verify_keys[0].plookup_vk.is_some() { alpha_7 } else { alpha_3 };
         if verify_keys.len() > 1 {
             for _ in 0..verify_keys.len() - 1 {
                 alpha_bases.push(tmp);
@@ -321,15 +317,7 @@ where
         transcript.append_commitment(b"open_proof", &batch_proof.opening_proof)?;
         transcript.append_commitment(b"shifted_open_proof", &batch_proof.shifted_opening_proof)?;
         let u = transcript.get_and_append_challenge::<E>(b"u")?;
-        Ok(Challenges {
-            tau,
-            alpha,
-            beta,
-            gamma,
-            zeta,
-            v,
-            u,
-        })
+        Ok(Challenges { tau, alpha, beta, gamma, zeta, v, u })
     }
 
     /// Compute the constant term of the linearization polynomial:
@@ -378,11 +366,10 @@ where
         let mut result = E::ScalarField::zero();
         for (poly_evals, (plookup_proof, (&pi, (&vk, &current_alpha_bases)))) in
             batch_proof.poly_evals_vec.iter().zip(
-                batch_proof.plookup_proofs_vec.iter().zip(
-                    public_inputs
-                        .iter()
-                        .zip(verify_keys.iter().zip(alpha_bases.iter())),
-                ),
+                batch_proof
+                    .plookup_proofs_vec
+                    .iter()
+                    .zip(public_inputs.iter().zip(verify_keys.iter().zip(alpha_bases.iter()))),
             )
         {
             let mut tmp = self.evaluate_pi_poly(pi, &challenges.zeta, vanish_eval, vk.is_merged)?
@@ -476,23 +463,13 @@ where
             // Add wire witness polynomial commitments.
             for &poly_comm in batch_proof.wires_poly_comms_vec[i].iter() {
                 buffer_v_and_uv_basis.push(v_base);
-                Self::add_poly_comm(
-                    &mut scalars_and_bases,
-                    &mut v_base,
-                    poly_comm.0,
-                    challenges.v,
-                );
+                Self::add_poly_comm(&mut scalars_and_bases, &mut v_base, poly_comm.0, challenges.v);
             }
             // Add wire sigma polynomial commitments. The last sigma commitment is excluded.
             let num_wire_types = batch_proof.wires_poly_comms_vec[i].len();
             for &poly_comm in vk.sigma_comms.iter().take(num_wire_types - 1) {
                 buffer_v_and_uv_basis.push(v_base);
-                Self::add_poly_comm(
-                    &mut scalars_and_bases,
-                    &mut v_base,
-                    poly_comm.0,
-                    challenges.v,
-                );
+                Self::add_poly_comm(&mut scalars_and_bases, &mut v_base, poly_comm.0, challenges.v);
             }
 
             // Add poly commitments to be evaluated at point `zeta * g`.
@@ -570,12 +547,9 @@ where
             // where a_bar, b_bar and c_bar are in w_evals
             let mut coeff = alpha_powers[0] * lagrange_1_eval;
             let w_evals = &batch_proof.poly_evals_vec[i].wires_evals;
-            coeff += w_evals
-                .iter()
-                .zip(vk.k.iter())
-                .fold(challenges.alpha, |acc, (w_eval, k)| {
-                    acc * (challenges.beta * k * challenges.zeta + challenges.gamma + w_eval)
-                });
+            coeff += w_evals.iter().zip(vk.k.iter()).fold(challenges.alpha, |acc, (w_eval, k)| {
+                acc * (challenges.beta * k * challenges.zeta + challenges.gamma + w_eval)
+            });
             coeff *= current_alpha_bases;
             // Add permutation product polynomial commitment.
             scalars_and_bases.push(coeff, batch_proof.prod_perm_poly_comms_vec[i].0);
@@ -583,24 +557,14 @@ where
             // Compute coefficient for the last wire sigma polynomial commitment.
             let num_wire_types = batch_proof.wires_poly_comms_vec[i].len();
             let sigma_evals = &batch_proof.poly_evals_vec[i].wire_sigma_evals;
-            let coeff = w_evals
-                .iter()
-                .take(num_wire_types - 1)
-                .zip(sigma_evals.iter())
-                .fold(
-                    challenges.alpha
-                        * challenges.beta
-                        * batch_proof.poly_evals_vec[i].perm_next_eval,
-                    |acc, (w_eval, sigma_eval)| {
-                        acc * (challenges.beta * sigma_eval + challenges.gamma + w_eval)
-                    },
-                )
-                * current_alpha_bases;
+            let coeff = w_evals.iter().take(num_wire_types - 1).zip(sigma_evals.iter()).fold(
+                challenges.alpha * challenges.beta * batch_proof.poly_evals_vec[i].perm_next_eval,
+                |acc, (w_eval, sigma_eval)| {
+                    acc * (challenges.beta * sigma_eval + challenges.gamma + w_eval)
+                },
+            ) * current_alpha_bases;
             // Add output wire sigma polynomial commitment.
-            scalars_and_bases.push(
-                -coeff,
-                vk.sigma_comms.last().ok_or(PlonkError::IndexError)?.0,
-            );
+            scalars_and_bases.push(-coeff, vk.sigma_comms.last().ok_or(PlonkError::IndexError)?.0);
 
             // Add selector polynomial commitments.
             // Compute coefficients for selector polynomial commitments.
@@ -693,11 +657,7 @@ where
         let mut coeff = vanish_eval.neg();
         scalars_and_bases.push(
             coeff,
-            batch_proof
-                .split_quot_poly_comms
-                .first()
-                .ok_or(PlonkError::IndexError)?
-                .0,
+            batch_proof.split_quot_poly_comms.first().ok_or(PlonkError::IndexError)?.0,
         );
         for poly in batch_proof.split_quot_poly_comms.iter().skip(1) {
             coeff *= zeta_to_n_plus_2;
@@ -726,27 +686,21 @@ where
             for &wire_eval in poly_evals.wires_evals.iter() {
                 Self::add_pcs_eval(
                     &mut result,
-                    v_and_uv_basis
-                        .next()
-                        .ok_or(PlonkError::IteratorOutOfRange)?,
+                    v_and_uv_basis.next().ok_or(PlonkError::IteratorOutOfRange)?,
                     wire_eval,
                 );
             }
             for &sigma_eval in poly_evals.wire_sigma_evals.iter() {
                 Self::add_pcs_eval(
                     &mut result,
-                    v_and_uv_basis
-                        .next()
-                        .ok_or(PlonkError::IteratorOutOfRange)?,
+                    v_and_uv_basis.next().ok_or(PlonkError::IteratorOutOfRange)?,
                     sigma_eval,
                 );
             }
             // evaluations at point `zeta * g`
             Self::add_pcs_eval(
                 &mut result,
-                v_and_uv_basis
-                    .next()
-                    .ok_or(PlonkError::IteratorOutOfRange)?,
+                v_and_uv_basis.next().ok_or(PlonkError::IteratorOutOfRange)?,
                 poly_evals.perm_next_eval,
             );
 
@@ -757,9 +711,7 @@ where
                 for &eval in evals.evals_vec().iter() {
                     Self::add_pcs_eval(
                         &mut result,
-                        v_and_uv_basis
-                            .next()
-                            .ok_or(PlonkError::IteratorOutOfRange)?,
+                        v_and_uv_basis.next().ok_or(PlonkError::IteratorOutOfRange)?,
                         eval,
                     );
                 }
@@ -767,9 +719,7 @@ where
                 for &next_eval in evals.next_evals_vec().iter() {
                     Self::add_pcs_eval(
                         &mut result,
-                        v_and_uv_basis
-                            .next()
-                            .ok_or(PlonkError::IteratorOutOfRange)?,
+                        v_and_uv_basis.next().ok_or(PlonkError::IteratorOutOfRange)?,
                         next_eval,
                     );
                 }

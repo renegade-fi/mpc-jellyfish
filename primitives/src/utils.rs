@@ -34,11 +34,7 @@ where
 #[inline]
 pub(crate) fn pad_with(vec: &mut Vec<Variable>, multiple: usize, var: Variable) {
     let len = vec.len();
-    let new_len = if len % multiple == 0 {
-        len
-    } else {
-        len + multiple - len % multiple
-    };
+    let new_len = if len % multiple == 0 { len } else { len + multiple - len % multiple };
     vec.resize(new_len, var);
 }
 

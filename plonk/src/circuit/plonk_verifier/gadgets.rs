@@ -146,9 +146,7 @@ where
             add_pcs_eval_circuit(
                 circuit,
                 &mut result,
-                v_and_uv_basis
-                    .next()
-                    .ok_or(PlonkError::IteratorOutOfRange)?,
+                v_and_uv_basis.next().ok_or(PlonkError::IteratorOutOfRange)?,
                 wire_eval,
                 &non_native_field_info.modulus_fp_elem,
             )?;
@@ -157,9 +155,7 @@ where
             add_pcs_eval_circuit(
                 circuit,
                 &mut result,
-                v_and_uv_basis
-                    .next()
-                    .ok_or(PlonkError::IteratorOutOfRange)?,
+                v_and_uv_basis.next().ok_or(PlonkError::IteratorOutOfRange)?,
                 sigma_eval,
                 &non_native_field_info.modulus_fp_elem,
             )?;
@@ -168,9 +164,7 @@ where
         add_pcs_eval_circuit(
             circuit,
             &mut result,
-            v_and_uv_basis
-                .next()
-                .ok_or(PlonkError::IteratorOutOfRange)?,
+            v_and_uv_basis.next().ok_or(PlonkError::IteratorOutOfRange)?,
             &poly_evals.perm_next_eval,
             &non_native_field_info.modulus_fp_elem,
         )?;
@@ -208,10 +202,8 @@ where
     let mut transcript_var = RescueTranscriptVar::new(circuit);
     if let Some(msg) = extra_transcript_init_msg {
         let msg_fs = bytes_to_field_elements::<_, F>(msg.as_ref());
-        let msg_vars = msg_fs
-            .iter()
-            .map(|x| circuit.create_variable(*x))
-            .collect::<Result<Vec<_>, _>>()?;
+        let msg_vars =
+            msg_fs.iter().map(|x| circuit.create_variable(*x)).collect::<Result<Vec<_>, _>>()?;
         transcript_var.append_message_vars(EXTRA_TRANSCRIPT_MSG_LABEL, &msg_vars)?;
     }
     for (&vk, &pi) in verify_keys.iter().zip(public_inputs.iter()) {
@@ -243,15 +235,7 @@ where
     let u = transcript_var.get_and_append_challenge_var::<E>(b"u", circuit)?;
 
     // convert challenge vars into FpElemVars
-    let challenge_var = ChallengesVar {
-        tau,
-        alpha,
-        beta,
-        gamma,
-        zeta,
-        v,
-        u,
-    };
+    let challenge_var = ChallengesVar { tau, alpha, beta, gamma, zeta, v, u };
 
     let challenge_fp_elem_var =
         challenge_var_to_fp_elem_var(circuit, &challenge_var, &non_native_field_info)?;
@@ -432,11 +416,8 @@ fn compute_alpha_basis<F: PrimeField>(
     non_native_field_info: NonNativeFieldInfo<F>,
 ) -> Result<Vec<FpElemVar<F>>, CircuitError> {
     let mut res = Vec::new();
-    let mut alpha_base_elem_var = FpElemVar::<F>::one(
-        circuit,
-        non_native_field_info.m,
-        non_native_field_info.two_power_m,
-    );
+    let mut alpha_base_elem_var =
+        FpElemVar::<F>::one(circuit, non_native_field_info.m, non_native_field_info.two_power_m);
     res.push(alpha_base_elem_var);
     for _ in 0..len - 1 {
         alpha_base_elem_var = circuit.mod_mul(
@@ -513,14 +494,10 @@ mod test {
             BatchArgument::batch_prove::<_, T>(rng, &instances_type_a, &instances_type_b)?;
 
         // 4. Aggregate verification keys
-        let vks_type_a: Vec<&VerifyingKey<E>> = instances_type_a
-            .iter()
-            .map(|pred| pred.verify_key_ref())
-            .collect();
-        let vks_type_b: Vec<&VerifyingKey<E>> = instances_type_b
-            .iter()
-            .map(|pred| pred.verify_key_ref())
-            .collect();
+        let vks_type_a: Vec<&VerifyingKey<E>> =
+            instances_type_a.iter().map(|pred| pred.verify_key_ref()).collect();
+        let vks_type_b: Vec<&VerifyingKey<E>> =
+            instances_type_b.iter().map(|pred| pred.verify_key_ref()).collect();
         let merged_vks = BatchArgument::aggregate_verify_keys(&vks_type_a, &vks_type_b)?;
         // error path: inconsistent length between vks_type_a and vks_type_b
         assert!(BatchArgument::aggregate_verify_keys(&vks_type_a[1..], &vks_type_b).is_err());
@@ -551,12 +528,8 @@ mod test {
         let fr_modulus_bits = <E::ScalarField as PrimeField>::MODULUS.to_bytes_le();
         let modulus_in_f = F::from_le_bytes_mod_order(&fr_modulus_bits);
         let modulus_fp_elem = FpElem::new(&modulus_in_f, m, two_power_m)?;
-        let non_native_field_info = NonNativeFieldInfo::<F> {
-            m,
-            two_power_m,
-            modulus_in_f,
-            modulus_fp_elem,
-        };
+        let non_native_field_info =
+            NonNativeFieldInfo::<F> { m, two_power_m, modulus_in_f, modulus_fp_elem };
 
         // vk
         let vk_vars = merged_vks
@@ -587,9 +560,7 @@ mod test {
         let public_inputs = [tmp];
 
         assert!(
-            circuit
-                .check_circuit_satisfiability(public_inputs.as_ref())
-                .is_ok(),
+            circuit.check_circuit_satisfiability(public_inputs.as_ref()).is_ok(),
             "{:?}",
             circuit.check_circuit_satisfiability(public_inputs.as_ref())
         );

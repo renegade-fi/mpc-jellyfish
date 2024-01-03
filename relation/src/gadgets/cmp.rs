@@ -275,10 +275,7 @@ mod test {
         let list = [
             (F::from(5u32), F::from(5u32)),
             (F::from(1u32), F::from(2u32)),
-            (
-                F::from(F::MODULUS_MINUS_ONE_DIV_TWO).add(F::one()),
-                F::from(2u32),
-            ),
+            (F::from(F::MODULUS_MINUS_ONE_DIV_TWO).add(F::one()), F::from(2u32)),
             (
                 F::from(F::MODULUS_MINUS_ONE_DIV_TWO).add(F::one()),
                 F::from(F::MODULUS_MINUS_ONE_DIV_TWO).mul(F::from(2u32)),

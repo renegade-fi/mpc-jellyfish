@@ -84,9 +84,7 @@ mod bench {
             {
                 let start = Instant::now();
                 for _ in 0..repetition {
-                    assert!(MultilinearKzgPCS::verify(
-                        &vk, &com, &point, &value, &proof
-                    )?);
+                    assert!(MultilinearKzgPCS::verify(&vk, &com, &point, &value, &proof)?);
                 }
                 println!(
                     "KZG verify for {} variables: {} ns",

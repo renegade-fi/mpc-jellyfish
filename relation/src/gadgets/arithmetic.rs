@@ -34,15 +34,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
     ) -> Result<(), CircuitError> {
         self.check_vars_bound(wires)?;
 
-        self.insert_gate(
-            wires,
-            Box::new(QuadPolyGate {
-                q_lc: *q_lc,
-                q_mul: *q_mul,
-                q_o,
-                q_c,
-            }),
-        )?;
+        self.insert_gate(wires, Box::new(QuadPolyGate { q_lc: *q_lc, q_mul: *q_mul, q_o, q_c }))?;
         Ok(())
     }
 
@@ -75,12 +67,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
 
         self.insert_gate(
             &wires,
-            Box::new(QuadPolyGate {
-                q_lc: *q_lc,
-                q_mul: *q_mul,
-                q_o: F::one(),
-                q_c,
-            }),
+            Box::new(QuadPolyGate { q_lc: *q_lc, q_mul: *q_mul, q_o: F::one(), q_c }),
         )?;
 
         Ok(output_var)
@@ -144,9 +131,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         bit_length: usize,
     ) -> Result<(), CircuitError> {
         if !self.support_lookup() {
-            return Err(CircuitError::ParameterError(
-                "does not support range table".to_string(),
-            ));
+            return Err(CircuitError::ParameterError("does not support range table".to_string()));
         }
 
         self.check_var_bound(a)?;
@@ -244,23 +229,14 @@ impl<F: PrimeField> PlonkCircuit<F> {
         // step 4. prove equations (4) - (9)
         // (4) b = b1 + b2 * 2^bit_length_lookup_component
         let wires = [b1_var, b2_var, self.zero(), self.zero(), b];
-        let coeffs = [
-            F::one(),
-            two_to_bit_length_lookup_component,
-            F::zero(),
-            F::zero(),
-        ];
+        let coeffs = [F::one(), two_to_bit_length_lookup_component, F::zero(), F::zero()];
         self.lc_gate(&wires, &coeffs)?;
 
         // (5) a = b + modulus * z1
         //       + modulus * 2^delta_length_lookup_component * z2
         let wires = [b, z1_var, z2_var, self.zero(), a];
-        let coeffs = [
-            F::one(),
-            modulus,
-            modulus_mul_two_to_delta_length_lookup_component,
-            F::zero(),
-        ];
+        let coeffs =
+            [F::one(), modulus, modulus_mul_two_to_delta_length_lookup_component, F::zero()];
         self.lc_gate(&wires, &coeffs)?;
 
         // (6) b1 < 2^bit_length_lookup_component
@@ -323,26 +299,16 @@ mod test {
         let q_mul = [F::one(), F::from(2u8)];
         let q_o = F::one();
         let q_c = F::from(9u8);
-        let wires_1: Vec<_> = [
-            F::from(23u32),
-            F::from(8u32),
-            F::from(1u32),
-            -F::from(20u32),
-            F::from(188u32),
-        ]
-        .iter()
-        .map(|val| circuit.create_variable(*val).unwrap())
-        .collect();
-        let wires_2: Vec<_> = [
-            F::zero(),
-            -F::from(8u32),
-            F::from(1u32),
-            F::zero(),
-            -F::from(10u32),
-        ]
-        .iter()
-        .map(|val| circuit.create_variable(*val).unwrap())
-        .collect();
+        let wires_1: Vec<_> =
+            [F::from(23u32), F::from(8u32), F::from(1u32), -F::from(20u32), F::from(188u32)]
+                .iter()
+                .map(|val| circuit.create_variable(*val).unwrap())
+                .collect();
+        let wires_2: Vec<_> =
+            [F::zero(), -F::from(8u32), F::from(1u32), F::zero(), -F::from(10u32)]
+                .iter()
+                .map(|val| circuit.create_variable(*val).unwrap())
+                .collect();
 
         // 23 * 2 + 8 * 3 + 1 * 5 + (-20) * 2 + 23 * 8 + 2 * 1 * (-20) + 9 = 188
         let var = wires_1[0];
@@ -379,10 +345,8 @@ mod test {
         wires: [F; GATE_WIDTH + 1],
     ) -> Result<PlonkCircuit<F>, CircuitError> {
         let mut circuit: PlonkCircuit<F> = PlonkCircuit::new_turbo_plonk();
-        let wires: Vec<_> = wires
-            .iter()
-            .map(|val| circuit.create_variable(*val).unwrap())
-            .collect();
+        let wires: Vec<_> =
+            wires.iter().map(|val| circuit.create_variable(*val).unwrap()).collect();
         let q_lc = [F::from(2u32), F::from(3u32), F::from(5u32), F::from(2u32)];
         let q_mul = [F::one(), F::from(2u8)];
         let q_o = F::one();
@@ -401,15 +365,10 @@ mod test {
     }
     fn test_lc_helper<F: PrimeField>() -> Result<(), CircuitError> {
         let mut circuit: PlonkCircuit<F> = PlonkCircuit::new_turbo_plonk();
-        let wire_in_1: Vec<_> = [
-            F::from(23u32),
-            F::from(8u32),
-            F::from(1u32),
-            -F::from(20u32),
-        ]
-        .iter()
-        .map(|val| circuit.create_variable(*val).unwrap())
-        .collect();
+        let wire_in_1: Vec<_> = [F::from(23u32), F::from(8u32), F::from(1u32), -F::from(20u32)]
+            .iter()
+            .map(|val| circuit.create_variable(*val).unwrap())
+            .collect();
         let wire_in_2: Vec<_> = [F::zero(), -F::from(8u32), F::from(1u32), F::zero()]
             .iter()
             .map(|val| circuit.create_variable(*val).unwrap())
@@ -438,10 +397,8 @@ mod test {
 
     fn build_lc_circuit<F: PrimeField>(wires_in: [F; 4]) -> Result<PlonkCircuit<F>, CircuitError> {
         let mut circuit: PlonkCircuit<F> = PlonkCircuit::new_turbo_plonk();
-        let wires_in: Vec<_> = wires_in
-            .iter()
-            .map(|val| circuit.create_variable(*val).unwrap())
-            .collect();
+        let wires_in: Vec<_> =
+            wires_in.iter().map(|val| circuit.create_variable(*val).unwrap()).collect();
         let coeffs = [F::from(2u32), F::from(3u32), F::from(5u32), F::from(2u32)];
         circuit.lc(&wires_in.try_into().unwrap(), &coeffs)?;
         circuit.finalize_for_arithmetization()?;
@@ -458,15 +415,10 @@ mod test {
 
     fn test_mul_add_helper<F: PrimeField>() -> Result<(), CircuitError> {
         let mut circuit = PlonkCircuit::<F>::new_turbo_plonk();
-        let wire_in_1: Vec<_> = [
-            F::from(23u32),
-            F::from(8u32),
-            F::from(1u32),
-            -F::from(20u32),
-        ]
-        .iter()
-        .map(|val| circuit.create_variable(*val).unwrap())
-        .collect();
+        let wire_in_1: Vec<_> = [F::from(23u32), F::from(8u32), F::from(1u32), -F::from(20u32)]
+            .iter()
+            .map(|val| circuit.create_variable(*val).unwrap())
+            .collect();
         let wire_in_2: Vec<_> = [F::one(), -F::from(8u32), F::one(), F::one()]
             .iter()
             .map(|val| circuit.create_variable(*val).unwrap())
@@ -483,9 +435,7 @@ mod test {
         *circuit.witness_mut(y_1) = F::from(34u32);
         assert!(circuit.check_circuit_satisfiability(&[]).is_err());
         // Check variable out of bound error.
-        assert!(circuit
-            .mul_add(&[0, 1, 1, circuit.num_vars()], &q_muls)
-            .is_err());
+        assert!(circuit.mul_add(&[0, 1, 1, circuit.num_vars()], &q_muls).is_err());
 
         let circuit_1 =
             build_mul_add_circuit([-F::from(98973u32), F::from(4u32), F::zero(), F::from(79u32)])?;
@@ -500,10 +450,8 @@ mod test {
         wires_in: [F; 4],
     ) -> Result<PlonkCircuit<F>, CircuitError> {
         let mut circuit = PlonkCircuit::new_turbo_plonk();
-        let wires_in: Vec<_> = wires_in
-            .iter()
-            .map(|val| circuit.create_variable(*val).unwrap())
-            .collect();
+        let wires_in: Vec<_> =
+            wires_in.iter().map(|val| circuit.create_variable(*val).unwrap()).collect();
         let q_muls = [F::from(3u32), F::from(5u32)];
         circuit.mul_add(&wires_in.try_into().unwrap(), &q_muls)?;
         circuit.finalize_for_arithmetization()?;
@@ -547,13 +495,8 @@ mod test {
             F::from(79u32),
             F::from(23u32),
         ])?;
-        let circuit_2 = build_sum_circuit(vec![
-            F::one(),
-            F::zero(),
-            F::from(6u32),
-            -F::from(9u32),
-            F::one(),
-        ])?;
+        let circuit_2 =
+            build_sum_circuit(vec![F::one(), F::zero(), F::from(6u32), -F::from(9u32), F::one()])?;
         test_variable_independence_for_circuit(circuit_1, circuit_2)?;
 
         Ok(())
@@ -723,9 +666,7 @@ mod test {
             let x_var = circuit.create_variable(x)?;
             let y = F::one();
             let y_var = circuit.create_variable(y)?;
-            assert!(circuit
-                .truncate_gate(x_var, y_var, F::MODULUS_BIT_SIZE as usize)
-                .is_err());
+            assert!(circuit.truncate_gate(x_var, y_var, F::MODULUS_BIT_SIZE as usize).is_err());
         }
 
         Ok(())
@@ -749,15 +690,10 @@ mod test {
         circuit.is_equal(a, b)?;
 
         // lc gate
-        let wire_in: Vec<_> = [
-            F::from(23u32),
-            F::from(8u32),
-            F::from(1u32),
-            -F::from(20u32),
-        ]
-        .iter()
-        .map(|val| circuit.create_variable(*val).unwrap())
-        .collect();
+        let wire_in: Vec<_> = [F::from(23u32), F::from(8u32), F::from(1u32), -F::from(20u32)]
+            .iter()
+            .map(|val| circuit.create_variable(*val).unwrap())
+            .collect();
         let coeffs = [F::from(2u32), F::from(3u32), F::from(5u32), F::from(2u32)];
         circuit.lc(&wire_in.try_into().unwrap(), &coeffs)?;
 

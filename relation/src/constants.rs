@@ -34,9 +34,7 @@ pub fn compute_coset_representatives<F: PrimeField>(
     // check if two cosets `aH == bH` where `a, b` are cosets representations
     fn is_equal_coset<F: PrimeField>(pow_a_N: F, pow_b_N: F) -> bool {
         // check (a^-1 * b)^`N` = 1
-        pow_a_N
-            .inverse()
-            .expect("Unreachable: all elements in a prime field should have inverse")
+        pow_a_N.inverse().expect("Unreachable: all elements in a prime field should have inverse")
             * pow_b_N
             == F::one()
     }
@@ -44,9 +42,7 @@ pub fn compute_coset_representatives<F: PrimeField>(
     // check if a new k is valid: i.e. doesn't represent the same coset as any
     // previous values `prev`.
     fn is_valid_k<F: PrimeField>(pow_k_N: F, pow_prev_N: &[F]) -> bool {
-        !pow_prev_N
-            .iter()
-            .any(|&pow_k_prev_N| is_equal_coset(pow_k_N, pow_k_prev_N))
+        !pow_prev_N.iter().any(|&pow_k_prev_N| is_equal_coset(pow_k_N, pow_k_prev_N))
     }
 
     // storing cached `Ki -> Ki^coset_size` values.

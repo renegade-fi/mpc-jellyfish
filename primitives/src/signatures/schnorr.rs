@@ -309,10 +309,7 @@ where
     pub fn randomize_with(&self, randomizer: &<P as CurveConfig>::ScalarField) -> Self {
         let randomized_sk = self.sk.randomize_with(randomizer);
         let randomized_vk = self.vk.randomize_with(randomizer);
-        Self {
-            sk: randomized_sk,
-            vk: randomized_vk,
-        }
+        Self { sk: randomized_sk, vk: randomized_vk }
     }
 }
 
@@ -367,9 +364,7 @@ where
         if y == x {
             Ok(())
         } else {
-            Err(PrimitivesError::VerificationError(
-                "Signature verification error".to_string(),
-            ))
+            Err(PrimitivesError::VerificationError("Signature verification error".to_string()))
         }
     }
 }
@@ -389,13 +384,7 @@ where
         let mut challenge_input = {
             let vk_affine = self.0.into_affine();
             let R_affine = R.into_affine();
-            vec![
-                instance_description,
-                vk_affine.x,
-                vk_affine.y,
-                R_affine.x,
-                R_affine.y,
-            ]
+            vec![instance_description, vk_affine.x, vk_affine.y, R_affine.x, R_affine.y]
         };
         challenge_input.extend(msg);
         let challenge_fq = VariableLengthRescueCRHF::<F, 1>::evaluate(challenge_input).unwrap()[0]; // safe unwrap
@@ -492,15 +481,11 @@ mod tests {
 
                 // Bad path
                 let bad_ver_key = VerKey(Projective::<$curve_param>::zero());
-                let bad_keypair = KeyPair {
-                    sk: SignKey($scalar_field::zero()),
-                    vk: bad_ver_key.clone(),
-                };
+                let bad_keypair =
+                    KeyPair { sk: SignKey($scalar_field::zero()), vk: bad_ver_key.clone() };
 
                 let sig_on_bad_key = bad_keypair.sign(&[], CS_ID_SCHNORR);
-                assert!(&bad_ver_key
-                    .verify(&[], &sig_on_bad_key, CS_ID_SCHNORR)
-                    .is_err());
+                assert!(&bad_ver_key.verify(&[], &sig_on_bad_key, CS_ID_SCHNORR).is_err());
 
                 // test serialization
                 let mut vk_bytes = vec![];
@@ -537,9 +522,7 @@ mod tests {
                 // Bad path 1: when s bytes overflow
                 let mut bad_bytes_sig = bytes_sig.clone();
                 let mut q_minus_one_bytes = vec![];
-                (-$base_field::from(1u32))
-                    .serialize_compressed(&mut q_minus_one_bytes)
-                    .unwrap();
+                (-$base_field::from(1u32)).serialize_compressed(&mut q_minus_one_bytes).unwrap();
                 bad_bytes_sig.splice(.., q_minus_one_bytes.iter().cloned());
                 assert!(Signature::<$curve_param>::deserialize_compressed(
                     bad_bytes_sig.as_slice()

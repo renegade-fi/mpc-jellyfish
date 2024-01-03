@@ -135,9 +135,7 @@ where
     circuit.enforce_point_equal(&X_var_computed, &X_var)?;
 
     // Sanity check: the circuit must be satisfied.
-    assert!(circuit
-        .check_circuit_satisfiability(&[X_jf.get_x(), X_jf.get_y()])
-        .is_ok());
+    assert!(circuit.check_circuit_satisfiability(&[X_jf.get_x(), X_jf.get_y()]).is_ok());
 
     // And we are done!
     circuit.finalize_for_arithmetization()?;

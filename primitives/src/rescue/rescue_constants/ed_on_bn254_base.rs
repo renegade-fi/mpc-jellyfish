@@ -19,12 +19,8 @@ impl RescueParameter for Fq {
     // 1/5 % (q254-1)
     // A_INV = 0x26b6a528b427b35493736af8679aad17535cb9d394945a0dcfe7f7a98ccccccd
     //       = 17510594297471420177797124596205820070838691520332827474958563349260646796493
-    const A_INV: &'static [u64] = &[
-        0xcfe7f7a98ccccccd,
-        0x535cb9d394945a0d,
-        0x93736af8679aad17,
-        0x26b6a528b427b354,
-    ];
+    const A_INV: &'static [u64] =
+        &[0xcfe7f7a98ccccccd, 0x535cb9d394945a0d, 0x93736af8679aad17, 0x26b6a528b427b354];
 
     // The following constants are from the output of
     // rescue254.MDS

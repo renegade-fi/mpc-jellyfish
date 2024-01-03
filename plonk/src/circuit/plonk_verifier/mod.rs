@@ -108,9 +108,7 @@ impl<E: Pairing> VerifyingKeyVar<E> {
         P: TEParam<BaseField = F>,
     {
         if self.is_merged || other.is_merged {
-            return Err(ParameterError(
-                "cannot merge a merged key again".to_string(),
-            ));
+            return Err(ParameterError("cannot merge a merged key again".to_string()));
         }
         if self.domain_size != other.domain_size {
             return Err(ParameterError(
@@ -195,12 +193,8 @@ impl<E: Pairing> VerifyingKeyVar<E> {
         let modulus_in_f = F::from_le_bytes_mod_order(&fr_modulus_bits);
         let modulus_fp_elem = FpElem::new(&modulus_in_f, m, two_power_m)?;
 
-        let non_native_field_info = NonNativeFieldInfo::<F> {
-            m,
-            two_power_m,
-            modulus_in_f,
-            modulus_fp_elem,
-        };
+        let non_native_field_info =
+            NonNativeFieldInfo::<F> { m, two_power_m, modulus_in_f, modulus_fp_elem };
 
         let verifier = Verifier::<E>::new(domain_size)?;
         let domain = verifier.domain;
@@ -227,11 +221,8 @@ impl<E: Pairing> VerifyingKeyVar<E> {
         //  + u * [shifted_open_proof]
         //  + blinding_factor * [1]1
         let generator_g_var = circuit.create_constant_point_variable(*generator_g)?;
-        let bases = [
-            pcs_info_var.opening_proof,
-            pcs_info_var.shifted_opening_proof,
-            generator_g_var,
-        ];
+        let bases =
+            [pcs_info_var.opening_proof, pcs_info_var.shifted_opening_proof, generator_g_var];
         let u_var = pcs_info_var.u.convert_to_var(circuit)?;
         let scalars = [circuit.one(), u_var, blinding_factor];
 
@@ -247,15 +238,10 @@ impl<E: Pairing> VerifyingKeyVar<E> {
         scalars_and_bases.scalars.push(pcs_info_var.eval_point);
         scalars_and_bases.bases.push(pcs_info_var.opening_proof);
 
-        let tmp = circuit.mod_mul(
-            &pcs_info_var.next_eval_point,
-            &pcs_info_var.u,
-            &modulus_fp_elem,
-        )?;
+        let tmp =
+            circuit.mod_mul(&pcs_info_var.next_eval_point, &pcs_info_var.u, &modulus_fp_elem)?;
         scalars_and_bases.scalars.push(tmp);
-        scalars_and_bases
-            .bases
-            .push(pcs_info_var.shifted_opening_proof);
+        scalars_and_bases.bases.push(pcs_info_var.shifted_opening_proof);
 
         let generator_g_inv_var = circuit.create_constant_point_variable(generator_g.inverse())?;
         scalars_and_bases.scalars.push(pcs_info_var.eval);
@@ -429,9 +415,7 @@ mod test {
         // merged keys can't be merged again.
         let mut bad_vk_vars = vk_type_a_vars.clone();
         bad_vk_vars[0].is_merged = true;
-        assert!(circuit
-            .aggregate_verify_keys::<E, Q>(&bad_vk_vars, &vk_type_b_vars)
-            .is_err());
+        assert!(circuit.aggregate_verify_keys::<E, Q>(&bad_vk_vars, &vk_type_b_vars).is_err());
 
         Ok(())
     }
@@ -508,14 +492,10 @@ mod test {
                 BatchArgument::batch_prove::<_, T>(rng, &instances_type_a, &instances_type_b)?;
 
             // 4. Aggregate verification keys
-            let vks_type_a: Vec<&VerifyingKey<E>> = instances_type_a
-                .iter()
-                .map(|pred| pred.verify_key_ref())
-                .collect();
-            let vks_type_b: Vec<&VerifyingKey<E>> = instances_type_b
-                .iter()
-                .map(|pred| pred.verify_key_ref())
-                .collect();
+            let vks_type_a: Vec<&VerifyingKey<E>> =
+                instances_type_a.iter().map(|pred| pred.verify_key_ref()).collect();
+            let vks_type_b: Vec<&VerifyingKey<E>> =
+                instances_type_b.iter().map(|pred| pred.verify_key_ref()).collect();
             let merged_vks = BatchArgument::aggregate_verify_keys(&vks_type_a, &vks_type_b)?;
             // error path: inconsistent length between vks_type_a and vks_type_b
             assert!(BatchArgument::aggregate_verify_keys(&vks_type_a[1..], &vks_type_b).is_err());
@@ -571,26 +551,20 @@ mod test {
                 // =======================================
                 // instance inputs = partial verify inputs != satisfiability inputs
                 let wrong_public_inputs = [[F::rand(rng)].as_ref()].concat();
-                assert!(circuit
-                    .check_circuit_satisfiability(&wrong_public_inputs)
-                    .is_err(),);
+                assert!(circuit.check_circuit_satisfiability(&wrong_public_inputs).is_err(),);
 
                 // =======================================
                 // bad path: wrong number of pub inputs
                 // =======================================
                 let wrong_public_inputs =
                     [[field_switching(&shared_public_input); 3].as_ref()].concat();
-                assert!(circuit
-                    .check_circuit_satisfiability(&wrong_public_inputs)
-                    .is_err(),);
+                assert!(circuit.check_circuit_satisfiability(&wrong_public_inputs).is_err(),);
 
                 // =======================================
                 // bad path: wrong witness
                 // =======================================
                 *circuit.witness_mut(10) = F::from(0u32);
-                assert!(circuit
-                    .check_circuit_satisfiability(&public_inputs)
-                    .is_err());
+                assert!(circuit.check_circuit_satisfiability(&public_inputs).is_err());
             }
             // ==============================================
             // more bad path: wrong inputs length
@@ -643,9 +617,7 @@ mod test {
                 )?;
 
                 assert!(
-                    circuit
-                        .check_circuit_satisfiability(&public_inputs)
-                        .is_err(),
+                    circuit.check_circuit_satisfiability(&public_inputs).is_err(),
                     "{:?}",
                     circuit.check_circuit_satisfiability(public_inputs.as_ref())
                 );
@@ -666,9 +638,7 @@ mod test {
                 let wrong_public_inputs =
                     [[field_switching(&wrong_shared_public_input)].as_ref()].concat();
                 assert!(
-                    circuit
-                        .check_circuit_satisfiability(&wrong_public_inputs)
-                        .is_ok(),
+                    circuit.check_circuit_satisfiability(&wrong_public_inputs).is_ok(),
                     "{:?}",
                     circuit.check_circuit_satisfiability(wrong_public_inputs.as_ref())
                 );
@@ -797,14 +767,10 @@ mod test {
                 BatchArgument::batch_prove::<_, T>(rng, &instances_type_a, &instances_type_b)?;
 
             // 4. Aggregate verification keys
-            let vks_type_a: Vec<&VerifyingKey<E>> = instances_type_a
-                .iter()
-                .map(|pred| pred.verify_key_ref())
-                .collect();
-            let vks_type_b: Vec<&VerifyingKey<E>> = instances_type_b
-                .iter()
-                .map(|pred| pred.verify_key_ref())
-                .collect();
+            let vks_type_a: Vec<&VerifyingKey<E>> =
+                instances_type_a.iter().map(|pred| pred.verify_key_ref()).collect();
+            let vks_type_b: Vec<&VerifyingKey<E>> =
+                instances_type_b.iter().map(|pred| pred.verify_key_ref()).collect();
             let merged_vks = BatchArgument::aggregate_verify_keys(&vks_type_a, &vks_type_b)?;
 
             // 5. Build circuit

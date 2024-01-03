@@ -108,9 +108,7 @@ impl<F: FftField> ToeplitzMatrix<F> {
         extension_col.rotate_left(1);
         extension_col.reverse();
 
-        Ok(CirculantMatrix {
-            col: [self.col.clone(), extension_col].concat(),
-        })
+        Ok(CirculantMatrix { col: [self.col.clone(), extension_col].concat() })
     }
 
     /// Fast multiplication of a Toeplitz matrix by embedding it into a
@@ -160,9 +158,7 @@ impl<F: FftField> TryFrom<ToeplitzMatrix<F>> for CirculantMatrix<F> {
         expected_col.reverse();
         expected_col.rotate_right(1);
         if expected_col != t.col {
-            return Err(PrimitivesError::ParameterError(
-                "Not a Circulant Matrix".to_string(),
-            ));
+            return Err(PrimitivesError::ParameterError("Not a Circulant Matrix".to_string()));
         }
         Ok(Self { col: t.col })
     }
@@ -330,15 +326,8 @@ mod tests {
         const N: usize = 16;
 
         let rand_col: Vec<Fr> = (0..N).map(|_| Fr::rand(&mut rng)).collect();
-        let rand_row = (0..N)
-            .map(|i| {
-                if i == 0 {
-                    rand_col[0]
-                } else {
-                    Fr::rand(&mut rng)
-                }
-            })
-            .collect();
+        let rand_row =
+            (0..N).map(|i| if i == 0 { rand_col[0] } else { Fr::rand(&mut rng) }).collect();
         let toep_matrix = ToeplitzMatrix::new(rand_col, rand_row)?;
 
         let mut msgs = [G1Projective::default(); N];

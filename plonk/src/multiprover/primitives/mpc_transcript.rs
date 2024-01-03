@@ -46,14 +46,9 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
 {
     /// Constructor
     pub fn new(label: &'static [u8], fabric: MpcFabric<E::G1>) -> Self {
-        let base_transcript = Arc::new(Mutex::new(
-            <SolidityTranscript as PlonkTranscript<()>>::new(label),
-        ));
-        Self {
-            transcript: base_transcript,
-            latest_op_id: ResultId::default(),
-            fabric,
-        }
+        let base_transcript =
+            Arc::new(Mutex::new(<SolidityTranscript as PlonkTranscript<()>>::new(label)));
+        Self { transcript: base_transcript, latest_op_id: ResultId::default(), fabric }
     }
 
     /// Append the verification key and the public input to the transcript.
@@ -72,9 +67,7 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
             let inputs = args.map(Scalar::from).map(|x| x.inner()).collect_vec();
 
             let mut locked_transcript = transcript_ref.lock().unwrap();
-            locked_transcript
-                .append_vk_and_pub_input::<E, P>(&vk, &inputs)
-                .unwrap();
+            locked_transcript.append_vk_and_pub_input::<E, P>(&vk, &inputs).unwrap();
             // Dummy result
             ResultValue::Scalar(Scalar::zero())
         });
@@ -87,19 +80,18 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         let transcript_ref = self.transcript.clone();
         let msg_clone = msg.to_vec();
         let res: ScalarResult<E::G1> =
-            self.fabric
-                .new_gate_op(vec![self.latest_op_id], move |_args| {
-                    let mut locked_transcript = transcript_ref.lock().unwrap();
-                    <SolidityTranscript as PlonkTranscript<()>>::append_message(
-                        &mut locked_transcript,
-                        label,
-                        &msg_clone,
-                    )
-                    .unwrap();
+            self.fabric.new_gate_op(vec![self.latest_op_id], move |_args| {
+                let mut locked_transcript = transcript_ref.lock().unwrap();
+                <SolidityTranscript as PlonkTranscript<()>>::append_message(
+                    &mut locked_transcript,
+                    label,
+                    &msg_clone,
+                )
+                .unwrap();
 
-                    // Return a dummy result, this is unused
-                    ResultValue::Scalar(Scalar::zero())
-                });
+                // Return a dummy result, this is unused
+                ResultValue::Scalar(Scalar::zero())
+            });
 
         self.latest_op_id = res.op_ids()[0];
     }
@@ -180,15 +172,13 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
     pub fn get_and_append_challenge(&mut self, label: &'static [u8]) -> ScalarResult<E::G1> {
         let transcript_ref = self.transcript.clone();
         let res: ScalarResult<E::G1> =
-            self.fabric
-                .new_gate_op(vec![self.latest_op_id], move |_args| {
-                    let mut locked_transcript = transcript_ref.lock().unwrap();
-                    let challenge: E::ScalarField = locked_transcript
-                        .get_and_append_challenge::<E>(label)
-                        .unwrap();
+            self.fabric.new_gate_op(vec![self.latest_op_id], move |_args| {
+                let mut locked_transcript = transcript_ref.lock().unwrap();
+                let challenge: E::ScalarField =
+                    locked_transcript.get_and_append_challenge::<E>(label).unwrap();
 
-                    ResultValue::Scalar(Scalar::new(challenge))
-                });
+                ResultValue::Scalar(Scalar::new(challenge))
+            });
 
         self.latest_op_id = res.op_ids()[0];
         res
@@ -240,9 +230,7 @@ mod test {
     async fn test_transcript_coherence() {
         const N_OPS: usize = 100;
         let mut rng = thread_rng();
-        let ops = (0..N_OPS)
-            .map(|_| TranscriptOp::random_op(&mut rng))
-            .collect_vec();
+        let ops = (0..N_OPS).map(|_| TranscriptOp::random_op(&mut rng)).collect_vec();
 
         // Apply the ops to a base transcript
         let mut base_transcript = <SolidityTranscript as PlonkTranscript<()>>::new(b"test");
@@ -264,9 +252,8 @@ mod test {
         }
 
         // Squeeze the expected result after the ops
-        let base_res: <Bn254 as Pairing>::ScalarField = base_transcript
-            .get_and_append_challenge::<ark_bn254::Bn254>(b"final")
-            .unwrap();
+        let base_res: <Bn254 as Pairing>::ScalarField =
+            base_transcript.get_and_append_challenge::<ark_bn254::Bn254>(b"final").unwrap();
         let expected_res = Scalar::new(base_res);
 
         let (res1, res2) = execute_mock_mpc(|fabric| {

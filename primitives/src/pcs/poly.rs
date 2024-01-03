@@ -71,10 +71,7 @@ where
 
     /// Constructs a new polynomial from a list of coefficients
     pub fn from_coeff_vec(coeffs: Vec<T>) -> Self {
-        let mut result = Self {
-            coeffs,
-            _phantom: PhantomData,
-        };
+        let mut result = Self { coeffs, _phantom: PhantomData };
         result.truncate_leading_zeros();
         assert!(result.coeffs.last().map_or(true, |coeff| !coeff.is_zero()));
         result
@@ -168,12 +165,10 @@ where
 
     // Horner's method for polynomial evaluation with cost O(n).
     fn horner_evaluate(&self, point: &F) -> T {
-        self.coeffs
-            .iter()
-            .rfold(T::zero(), move |mut result, coeff| {
-                result *= *point;
-                result + *coeff
-            })
+        self.coeffs.iter().rfold(T::zero(), move |mut result, coeff| {
+            result *= *point;
+            result + *coeff
+        })
     }
 }
 
@@ -184,10 +179,7 @@ where
 {
     /// returns the zero polynomial
     fn zero() -> Self {
-        Self {
-            coeffs: Vec::new(),
-            _phantom: PhantomData,
-        }
+        Self { coeffs: Vec::new(), _phantom: PhantomData }
     }
 
     /// checks if the given polynomial is zero
@@ -299,12 +291,8 @@ pub(crate) mod tests {
 
             let g_1 = GeneralDensePolynomial::<G1Projective, Fr>::rand(degree, &mut rng);
             let mut g_2 = GeneralDensePolynomial::<G1Projective, Fr>::rand(degree, &mut rng);
-            let expected_g_3: Vec<G1Projective> = g_1
-                .coeffs
-                .iter()
-                .zip(g_2.coeffs.iter())
-                .map(|(a, b)| a + b)
-                .collect();
+            let expected_g_3: Vec<G1Projective> =
+                g_1.coeffs.iter().zip(g_2.coeffs.iter()).map(|(a, b)| a + b).collect();
             let g_3 = g_1.clone() + g_2.clone();
             assert_eq!(g_3.coeffs, expected_g_3);
 
@@ -347,18 +335,11 @@ pub(crate) mod tests {
             let roots = domain.elements();
             assert_eq!(
                 f.batch_evaluate_rou(&domain).unwrap()[..num_points],
-                roots
-                    .take(num_points)
-                    .map(|x| f.evaluate(&x))
-                    .collect::<Vec<_>>()
+                roots.take(num_points).map(|x| f.evaluate(&x)).collect::<Vec<_>>()
             );
             assert_eq!(
                 g.batch_evaluate_rou(&domain).unwrap()[..num_points],
-                domain
-                    .elements()
-                    .take(num_points)
-                    .map(|x| g.evaluate(&x))
-                    .collect::<Vec<_>>()
+                domain.elements().take(num_points).map(|x| g.evaluate(&x)).collect::<Vec<_>>()
             );
         }
     }

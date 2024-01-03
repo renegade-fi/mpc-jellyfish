@@ -18,8 +18,7 @@ pub struct CanonicalBytes(pub Vec<u8>);
 impl<T: ark_serialize::CanonicalSerialize> From<T> for CanonicalBytes {
     fn from(obj: T) -> CanonicalBytes {
         let mut bytes = Vec::new();
-        obj.serialize_compressed(&mut bytes)
-            .expect("fail to serialize to canonical bytes");
+        obj.serialize_compressed(&mut bytes).expect("fail to serialize to canonical bytes");
         CanonicalBytes(bytes)
     }
 }
@@ -78,10 +77,7 @@ pub mod canonical {
             T::deserialize_compressed_unchecked(tb64.as_ref())
                 .map_err(|e| D::Error::custom(format!("{e:?}")))
         } else {
-            Err(D::Error::custom(format!(
-                "incorrect tag (expected FIELD, got {})",
-                tb64.tag()
-            )))
+            Err(D::Error::custom(format!("incorrect tag (expected FIELD, got {})", tb64.tag())))
         }
     }
 }

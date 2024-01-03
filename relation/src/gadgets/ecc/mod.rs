@@ -203,20 +203,12 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let wire_vars_x = [b0.into(), b1.into(), 0, 0, selected_point.0];
         self.insert_gate(
             &wire_vars_x,
-            Box::new(QuaternaryPointSelectXGate {
-                x1: point1.0,
-                x2: point2.0,
-                x3: point3.0,
-            }),
+            Box::new(QuaternaryPointSelectXGate { x1: point1.0, x2: point2.0, x3: point3.0 }),
         )?;
         let wire_vars_y = [b0.into(), b1.into(), 0, 0, selected_point.1];
         self.insert_gate(
             &wire_vars_y,
-            Box::new(QuaternaryPointSelectYGate {
-                y1: point1.1,
-                y2: point2.1,
-                y3: point3.1,
-            }),
+            Box::new(QuaternaryPointSelectYGate { y1: point1.1, y2: point2.1, y3: point3.1 }),
         )?;
 
         Ok(selected_point)
@@ -347,9 +339,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let wire_vars = [x, x, y, y, 1];
         self.insert_gate(
             &wire_vars,
-            Box::new(EdwardsCurveEquationGate::<P> {
-                _phantom: PhantomData,
-            }),
+            Box::new(EdwardsCurveEquationGate::<P> { _phantom: PhantomData }),
         )?;
         Ok(())
     }
@@ -376,16 +366,12 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let x_coordinate_wire_vars = [x_1, y_2, x_2, y_1, x_3];
         self.insert_gate(
             &x_coordinate_wire_vars,
-            Box::new(CurvePointXAdditionGate::<P> {
-                _phantom: PhantomData,
-            }),
+            Box::new(CurvePointXAdditionGate::<P> { _phantom: PhantomData }),
         )?;
         let y_coordinate_wire_vars = [x_1, x_2, y_1, y_2, y_3];
         self.insert_gate(
             &y_coordinate_wire_vars,
-            Box::new(CurvePointYAdditionGate::<P> {
-                _phantom: PhantomData,
-            }),
+            Box::new(CurvePointYAdditionGate::<P> { _phantom: PhantomData }),
         )?;
         Ok(())
     }
@@ -402,9 +388,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
     ) -> Result<PointVariable, CircuitError> {
         let (x_1, y_1) = (self.witness(point_a.0)?, self.witness(point_a.1)?);
         let (x_2, y_2) = (self.witness(point_b.0)?, self.witness(point_b.1)?);
-        let eq_gate = EdwardsCurveEquationGate::<P> {
-            _phantom: PhantomData,
-        };
+        let eq_gate = EdwardsCurveEquationGate::<P> { _phantom: PhantomData };
         let d: F = eq_gate.q_ecc();
 
         let z = d * x_1 * y_1 * x_2 * y_2; // temporary intermediate value
@@ -1082,14 +1066,10 @@ mod test {
         check_base_list(bases1);
         check_base_list(bases2);
         check_base_list(bases3);
-        bases1
-            .iter()
-            .zip(bases2.iter())
-            .zip(bases3.iter())
-            .for_each(|((&b1, &b2), &b3)| {
-                assert!(b2 == b1.double());
-                assert!(b3 == b1 + b2);
-            });
+        bases1.iter().zip(bases2.iter()).zip(bases3.iter()).for_each(|((&b1, &b2), &b3)| {
+            assert!(b2 == b1.double());
+            assert!(b3 == b1 + b2);
+        });
 
         Ok(())
     }
@@ -1259,9 +1239,7 @@ mod test {
         *circuit.witness_mut(2) = F::rand(&mut rng);
         assert!(circuit.check_circuit_satisfiability(&[]).is_err());
         // Check variable out of bound error.
-        assert!(circuit
-            .variable_base_scalar_mul::<P>(circuit.num_vars(), &base_var)
-            .is_err());
+        assert!(circuit.variable_base_scalar_mul::<P>(circuit.num_vars(), &base_var).is_err());
         assert!(circuit
             .variable_base_scalar_mul::<P>(
                 s_var,

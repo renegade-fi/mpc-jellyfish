@@ -35,15 +35,7 @@ where
     ) -> Result<(), CircuitError> {
         self.check_vars_bound(wires)?;
 
-        self.insert_gate(
-            wires,
-            Box::new(QuadPolyGate {
-                q_lc: *q_lc,
-                q_mul: *q_mul,
-                q_o,
-                q_c,
-            }),
-        )?;
+        self.insert_gate(wires, Box::new(QuadPolyGate { q_lc: *q_lc, q_mul: *q_mul, q_o, q_c }))?;
         Ok(())
     }
 
@@ -76,12 +68,7 @@ where
 
         self.insert_gate(
             &wires,
-            Box::new(QuadPolyGate {
-                q_lc: *q_lc,
-                q_mul: *q_mul,
-                q_o: C::ScalarField::one(),
-                q_c,
-            }),
+            Box::new(QuadPolyGate { q_lc: *q_lc, q_mul: *q_mul, q_o: C::ScalarField::one(), q_c }),
         )?;
 
         Ok(output_var)

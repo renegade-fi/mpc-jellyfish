@@ -56,9 +56,7 @@ where
             &mut iter,
         )?;
         if iter.peek().is_some() {
-            return Err(PrimitivesError::ParameterError(
-                "Exceed merkle tree capacity".to_string(),
-            ));
+            return Err(PrimitivesError::ParameterError("Exceed merkle tree capacity".to_string()));
         }
         Ok(())
     }
@@ -138,19 +136,12 @@ mod mt_tests {
         let (elem, proof) = mock_mt.lookup(0).expect_ok().unwrap();
         assert_eq!(elem, &F::from(3u64));
         assert_eq!(proof.tree_height(), 3);
-        assert!(
-            RescueLightWeightMerkleTree::<F>::verify(&mt.root.value(), 0u64, &proof)
-                .unwrap()
-                .is_ok()
-        );
+        assert!(RescueLightWeightMerkleTree::<F>::verify(&mt.root.value(), 0u64, &proof)
+            .unwrap()
+            .is_ok());
 
         let mut bad_proof = proof.clone();
-        if let MerkleNode::Leaf {
-            value: _,
-            pos: _,
-            elem,
-        } = &mut bad_proof.proof[0]
-        {
+        if let MerkleNode::Leaf { value: _, pos: _, elem } = &mut bad_proof.proof[0] {
             *elem = F::from(4u64);
         } else {
             unreachable!()
@@ -160,12 +151,7 @@ mod mt_tests {
         assert!(result.unwrap().is_err());
 
         let mut forge_proof = MerkleProof::new(2, proof.proof);
-        if let MerkleNode::Leaf {
-            value: _,
-            pos,
-            elem,
-        } = &mut forge_proof.proof[0]
-        {
+        if let MerkleNode::Leaf { value: _, pos, elem } = &mut forge_proof.proof[0] {
             *pos = 2;
             *elem = F::from(0u64);
         } else {
@@ -188,17 +174,8 @@ mod mt_tests {
         let proof = mt.lookup(1).expect_ok().unwrap().1;
         let node = &proof.proof[0];
 
-        assert_eq!(
-            mt,
-            bincode::deserialize(&bincode::serialize(&mt).unwrap()).unwrap()
-        );
-        assert_eq!(
-            proof,
-            bincode::deserialize(&bincode::serialize(&proof).unwrap()).unwrap()
-        );
-        assert_eq!(
-            *node,
-            bincode::deserialize(&bincode::serialize(node).unwrap()).unwrap()
-        );
+        assert_eq!(mt, bincode::deserialize(&bincode::serialize(&mt).unwrap()).unwrap());
+        assert_eq!(proof, bincode::deserialize(&bincode::serialize(&proof).unwrap()).unwrap());
+        assert_eq!(*node, bincode::deserialize(&bincode::serialize(node).unwrap()).unwrap());
     }
 }

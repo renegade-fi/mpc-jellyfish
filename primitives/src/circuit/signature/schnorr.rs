@@ -180,13 +180,8 @@ where
         // entire circuit construction.
         let inst_desc_var = self.create_variable(instance_description)?;
         self.enforce_constant(inst_desc_var, instance_description)?;
-        let mut chal_input = vec![
-            inst_desc_var,
-            vk.0.get_x(),
-            vk.0.get_y(),
-            sig_point.get_x(),
-            sig_point.get_y(),
-        ];
+        let mut chal_input =
+            vec![inst_desc_var, vk.0.get_x(), vk.0.get_y(), sig_point.get_x(), sig_point.get_y()];
         chal_input.extend(msg);
 
         let challenge =

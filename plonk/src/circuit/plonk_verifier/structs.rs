@@ -111,10 +111,7 @@ pub(crate) struct ScalarsAndBasesVar<F: PrimeField> {
 
 impl<F: PrimeField> ScalarsAndBasesVar<F> {
     pub(crate) fn new() -> Self {
-        Self {
-            scalars: Vec::new(),
-            bases: Vec::new(),
-        }
+        Self { scalars: Vec::new(), bases: Vec::new() }
     }
 }
 

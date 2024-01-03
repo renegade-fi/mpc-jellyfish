@@ -114,10 +114,7 @@ where
                 &num_storage_nodes,
                 |b, _| {
                     // recover from only the first poly_degree shares
-                    b.iter(|| {
-                        advz.recover_payload(&shares[..poly_degree], &common)
-                            .unwrap()
-                    });
+                    b.iter(|| advz.recover_payload(&shares[..poly_degree], &common).unwrap());
                 },
             );
         }

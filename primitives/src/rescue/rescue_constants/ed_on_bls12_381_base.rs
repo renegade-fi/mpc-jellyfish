@@ -16,12 +16,8 @@ use ark_ed_on_bls12_381::Fq;
 impl RescueParameter for Fq {
     const A: u64 = 5;
     // 1/5%(q381-1)
-    const A_INV: &'static [u64] = &[
-        0x33333332CCCCCCCD,
-        0x217F0E679998F199,
-        0xE14A56699D73F002,
-        0x2E5F0FBADD72321C,
-    ];
+    const A_INV: &'static [u64] =
+        &[0x33333332CCCCCCCD, 0x217F0E679998F199, 0xE14A56699D73F002, 0x2E5F0FBADD72321C];
 
     // The following constants are from the output of
     //  rescue381.MDS

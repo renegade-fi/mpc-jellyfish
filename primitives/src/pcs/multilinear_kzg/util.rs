@@ -20,9 +20,7 @@ use super::MLE;
 #[cfg(any(test, feature = "test-srs"))]
 pub(crate) fn eq_eval<F: PrimeField>(x: &[F], y: &[F]) -> Result<F, PCSError> {
     if x.len() != y.len() {
-        return Err(PCSError::InvalidParameters(
-            "x and y have different length".to_string(),
-        ));
+        return Err(PCSError::InvalidParameters("x and y have different length".to_string()));
     }
     let start = start_timer!(|| "eq_eval");
     let mut res = F::one();
@@ -66,9 +64,7 @@ pub(crate) fn get_uni_domain<F: PrimeField>(
     let domain = match Radix2EvaluationDomain::<F>::new(uni_poly_degree) {
         Some(p) => p,
         None => {
-            return Err(PCSError::InvalidParameters(
-                "failed to build radix 2 domain".to_string(),
-            ))
+            return Err(PCSError::InvalidParameters("failed to build radix 2 domain".to_string()))
         },
     };
     Ok(domain)
@@ -104,9 +100,7 @@ pub(crate) fn compute_w_circ_l<F: PrimeField>(
     let domain = match Radix2EvaluationDomain::<F>::new(uni_degree) {
         Some(p) => p,
         None => {
-            return Err(PCSError::InvalidParameters(
-                "failed to build radix 2 domain".to_string(),
-            ))
+            return Err(PCSError::InvalidParameters("failed to build radix 2 domain".to_string()))
         },
     };
     for point in domain.elements() {
@@ -149,9 +143,7 @@ pub fn merge_polynomials<F: PrimeField>(
         scalars.extend_from_slice(poly.to_evaluations().as_slice());
     }
     scalars.extend_from_slice(vec![F::zero(); (1 << merged_nv) - scalars.len()].as_ref());
-    Ok(DenseMultilinearExtension::from_evaluations_vec(
-        merged_nv, scalars,
-    ))
+    Ok(DenseMultilinearExtension::from_evaluations_vec(merged_nv, scalars))
 }
 
 /// Given a list of points, build `l(points)` which is a list of univariate
@@ -165,14 +157,10 @@ pub(crate) fn build_l<F: PrimeField>(
     let mut uni_polys = Vec::new();
 
     // 1.1 build the indexes and the univariate polys that go through the indexes
-    let indexes: Vec<Vec<bool>> = (0..points.len())
-        .map(|x| bit_decompose(x as u64, prefix_len))
-        .collect();
+    let indexes: Vec<Vec<bool>> =
+        (0..points.len()).map(|x| bit_decompose(x as u64, prefix_len)).collect();
     for i in 0..prefix_len {
-        let eval: Vec<F> = indexes
-            .iter()
-            .map(|x| F::from(x[prefix_len - i - 1]))
-            .collect();
+        let eval: Vec<F> = indexes.iter().map(|x| F::from(x[prefix_len - i - 1])).collect();
 
         uni_polys.push(Evaluations::from_vec_and_domain(eval, *domain).interpolate());
     }
@@ -212,11 +200,8 @@ pub(crate) fn generate_evaluations<F: PrimeField>(
     let mut mle_values = vec![];
 
     for i in 0..uni_poly_degree {
-        let point: Vec<F> = uni_polys
-            .iter()
-            .rev()
-            .map(|poly| poly.evaluate(&domain.element(i)))
-            .collect();
+        let point: Vec<F> =
+            uni_polys.iter().rev().map(|poly| poly.evaluate(&domain.element(i))).collect();
 
         let mle_value = merge_poly.evaluate(&point).unwrap();
         mle_values.push(mle_value)
@@ -609,11 +594,7 @@ mod test {
 
             let point: Vec<Fr> = l.iter().rev().map(|poly| poly.evaluate(&r)).collect();
 
-            assert_eq!(
-                q_x.evaluate(&r),
-                w.evaluate(&point).unwrap(),
-                "q(r) != w(l(r))"
-            );
+            assert_eq!(q_x.evaluate(&r), w.evaluate(&point).unwrap(), "q(r) != w(l(r))");
         }
 
         {
@@ -655,12 +636,8 @@ mod test {
             // q_x(42) = 42675783400755005965526147011103024780845819057955866345013183657072368533932
             let q_x = compute_w_circ_l(&w, &l)?;
 
-            let point: Vec<Fr> = vec![
-                l[3].evaluate(&r),
-                l[2].evaluate(&r),
-                l[1].evaluate(&r),
-                l[0].evaluate(&r),
-            ];
+            let point: Vec<Fr> =
+                vec![l[3].evaluate(&r), l[2].evaluate(&r), l[1].evaluate(&r), l[0].evaluate(&r)];
 
             assert_eq!(
                 q_x.evaluate(&r),
@@ -668,11 +645,7 @@ mod test {
                     "42675783400755005965526147011103024780845819057955866345013183657072368533932"
                 ),
             );
-            assert_eq!(
-                q_x.evaluate(&r),
-                w.evaluate(&point).unwrap(),
-                "q(r) != w(l(r))"
-            );
+            assert_eq!(q_x.evaluate(&r), w.evaluate(&point).unwrap(), "q(r) != w(l(r))");
         }
         Ok(())
     }

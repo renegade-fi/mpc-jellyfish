@@ -42,10 +42,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let a_inv = self.create_variable(a_inv)?;
 
         // constraint 1: 1 - a * a^(-1) = y, i.e., a * a^(-1) + 1 * y = 1
-        self.mul_add_gate(
-            &[a, a_inv, self.one(), y.into(), self.one()],
-            &[F::one(), F::one()],
-        )?;
+        self.mul_add_gate(&[a, a_inv, self.one(), y.into(), self.one()], &[F::one(), F::one()])?;
         // constraint 2: multiplication y * a = 0
         self.mul_gate(y.into(), a, self.zero())?;
         Ok(y)

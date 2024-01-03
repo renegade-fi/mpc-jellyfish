@@ -50,10 +50,7 @@ where
 {
     /// Create a new plonk transcript. `_label` is omitted for efficiency.
     fn new(_label: &'static [u8]) -> Self {
-        RescueTranscript {
-            transcript: Vec::new(),
-            state: [F::zero(); STATE_SIZE],
-        }
+        RescueTranscript { transcript: Vec::new(), state: [F::zero(); STATE_SIZE] }
     }
 
     fn append_vk_and_pub_input<E, P>(

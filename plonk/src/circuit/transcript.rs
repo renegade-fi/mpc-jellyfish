@@ -258,23 +258,18 @@ mod tests {
             for i in 0..10 {
                 let msg = format!("message {}", i);
                 let vals = bytes_to_field_elements(msg.as_bytes());
-                let message_vars: Vec<Variable> = vals
-                    .iter()
-                    .map(|x| circuit.create_variable(*x).unwrap())
-                    .collect();
+                let message_vars: Vec<Variable> =
+                    vals.iter().map(|x| circuit.create_variable(*x).unwrap()).collect();
 
                 transcript.append_message(label, msg.as_bytes()).unwrap();
 
-                transcipt_var
-                    .append_message_vars(label, &message_vars)
-                    .unwrap();
+                transcipt_var.append_message_vars(label, &message_vars).unwrap();
             }
 
             let challenge = transcript.get_and_append_challenge::<E>(label).unwrap();
 
-            let challenge_var = transcipt_var
-                .get_and_append_challenge_var::<E>(label, &mut circuit)
-                .unwrap();
+            let challenge_var =
+                transcipt_var.get_and_append_challenge_var::<E>(label, &mut circuit).unwrap();
 
             assert_eq!(
                 circuit.witness(challenge_var).unwrap().into_bigint(),
@@ -323,20 +318,14 @@ mod tests {
 
         // build challenge from transcript and check for correctness
         transcript.append_vk_and_pub_input(&dummy_vk, &[]).unwrap();
-        transcript_var
-            .append_vk_and_pub_input_vars::<E>(&mut circuit, &dummy_vk_var, &[])
-            .unwrap();
+        transcript_var.append_vk_and_pub_input_vars::<E>(&mut circuit, &dummy_vk_var, &[]).unwrap();
 
         let challenge = transcript.get_and_append_challenge::<E>(label).unwrap();
 
-        let challenge_var = transcript_var
-            .get_and_append_challenge_var::<E>(label, &mut circuit)
-            .unwrap();
+        let challenge_var =
+            transcript_var.get_and_append_challenge_var::<E>(label, &mut circuit).unwrap();
 
-        assert_eq!(
-            circuit.witness(challenge_var).unwrap(),
-            field_switching(&challenge)
-        );
+        assert_eq!(circuit.witness(challenge_var).unwrap(), field_switching(&challenge));
 
         for _ in 0..10 {
             // inputs
@@ -344,9 +333,8 @@ mod tests {
                 (0..16).map(|_| E::ScalarField::rand(&mut rng)).collect();
 
             // sigma commitments
-            let sigma_comms: Vec<Commitment<E>> = (0..42)
-                .map(|_| Commitment(E::G1::rand(&mut rng).into_affine()))
-                .collect();
+            let sigma_comms: Vec<Commitment<E>> =
+                (0..42).map(|_| Commitment(E::G1::rand(&mut rng).into_affine())).collect();
             let mut sigma_comms_vars: Vec<PointVariable> = Vec::new();
             for e in sigma_comms.iter() {
                 // convert point into TE form
@@ -355,9 +343,8 @@ mod tests {
             }
 
             // selector commitments
-            let selector_comms: Vec<Commitment<E>> = (0..33)
-                .map(|_| Commitment(E::G1::rand(&mut rng).into_affine()))
-                .collect();
+            let selector_comms: Vec<Commitment<E>> =
+                (0..33).map(|_| Commitment(E::G1::rand(&mut rng).into_affine())).collect();
             let mut selector_comms_vars: Vec<PointVariable> = Vec::new();
             for e in selector_comms.iter() {
                 // convert point into TE form
@@ -398,14 +385,10 @@ mod tests {
 
             let challenge = transcript.get_and_append_challenge::<E>(label).unwrap();
 
-            let challenge_var = transcript_var
-                .get_and_append_challenge_var::<E>(label, &mut circuit)
-                .unwrap();
+            let challenge_var =
+                transcript_var.get_and_append_challenge_var::<E>(label, &mut circuit).unwrap();
 
-            assert_eq!(
-                circuit.witness(challenge_var).unwrap(),
-                field_switching(&challenge)
-            );
+            assert_eq!(circuit.witness(challenge_var).unwrap(), field_switching(&challenge));
         }
     }
 }

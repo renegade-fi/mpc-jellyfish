@@ -125,9 +125,7 @@ where
             .into());
         }
         if verify_keys.is_empty() {
-            return Err(
-                ParameterError("the number of instances cannot be zero".to_string()).into(),
-            );
+            return Err(ParameterError("the number of instances cannot be zero".to_string()).into());
         }
 
         let pcs_infos = parallelizable_slice_iter(verify_keys)
@@ -168,14 +166,7 @@ where
         circuits: &[&C],
         prove_keys: &[&ProvingKey<E>],
         extra_transcript_init_msg: Option<Vec<u8>>,
-    ) -> Result<
-        (
-            BatchProof<E>,
-            Vec<Oracles<E::ScalarField>>,
-            Challenges<E::ScalarField>,
-        ),
-        PlonkError,
-    >
+    ) -> Result<(BatchProof<E>, Vec<Oracles<E::ScalarField>>, Challenges<E::ScalarField>), PlonkError>
     where
         C: Arithmetization<E::ScalarField>,
         C: Circuit<E::ScalarField, Wire = E::ScalarField, Constant = E::ScalarField>,
@@ -491,11 +482,7 @@ where
         let h = h.into_affine();
         let beta_h = (h * beta).into_affine();
 
-        let pp = UniversalSrs {
-            powers_of_g,
-            h,
-            beta_h,
-        };
+        let pp = UniversalSrs { powers_of_g, h, beta_h };
         end_timer!(setup_time);
         Ok(pp)
     }
@@ -817,16 +804,10 @@ pub mod test {
         // check plookup proving key
         if plonk_type == PlonkType::UltraPlonk {
             let range_table_poly = circuit.compute_range_table_polynomial()?;
-            assert_eq!(
-                pk.plookup_pk.as_ref().unwrap().range_table_poly,
-                range_table_poly
-            );
+            assert_eq!(pk.plookup_pk.as_ref().unwrap().range_table_poly, range_table_poly);
 
             let key_table_poly = circuit.compute_key_table_polynomial()?;
-            assert_eq!(
-                pk.plookup_pk.as_ref().unwrap().key_table_poly,
-                key_table_poly
-            );
+            assert_eq!(pk.plookup_pk.as_ref().unwrap().key_table_poly, key_table_poly);
         }
 
         // check verifying key
@@ -835,20 +816,14 @@ pub mod test {
         assert_eq!(vk.selector_comms.len(), selectors.len());
         assert_eq!(vk.sigma_comms.len(), sigmas.len());
         assert_eq!(vk.sigma_comms.len(), num_wire_types);
-        selectors
-            .iter()
-            .zip(vk.selector_comms.iter())
-            .for_each(|(p, &p_comm)| {
-                let expected_comm = UnivariateKzgPCS::commit(&pk.commit_key, p).unwrap();
-                assert_eq!(expected_comm, p_comm);
-            });
-        sigmas
-            .iter()
-            .zip(vk.sigma_comms.iter())
-            .for_each(|(p, &p_comm)| {
-                let expected_comm = UnivariateKzgPCS::commit(&pk.commit_key, p).unwrap();
-                assert_eq!(expected_comm, p_comm);
-            });
+        selectors.iter().zip(vk.selector_comms.iter()).for_each(|(p, &p_comm)| {
+            let expected_comm = UnivariateKzgPCS::commit(&pk.commit_key, p).unwrap();
+            assert_eq!(expected_comm, p_comm);
+        });
+        sigmas.iter().zip(vk.sigma_comms.iter()).for_each(|(p, &p_comm)| {
+            let expected_comm = UnivariateKzgPCS::commit(&pk.commit_key, p).unwrap();
+            assert_eq!(expected_comm, p_comm);
+        });
         // check plookup verification key
         if plonk_type == PlonkType::UltraPlonk {
             let expected_comm = UnivariateKzgPCS::commit(
@@ -856,20 +831,14 @@ pub mod test {
                 &pk.plookup_pk.as_ref().unwrap().range_table_poly,
             )
             .unwrap();
-            assert_eq!(
-                expected_comm,
-                vk.plookup_vk.as_ref().unwrap().range_table_comm
-            );
+            assert_eq!(expected_comm, vk.plookup_vk.as_ref().unwrap().range_table_comm);
 
             let expected_comm = UnivariateKzgPCS::commit(
                 &pk.commit_key,
                 &pk.plookup_pk.as_ref().unwrap().key_table_poly,
             )
             .unwrap();
-            assert_eq!(
-                expected_comm,
-                vk.plookup_vk.as_ref().unwrap().key_table_comm
-            );
+            assert_eq!(expected_comm, vk.plookup_vk.as_ref().unwrap().key_table_comm);
         }
 
         Ok(())
@@ -949,11 +918,8 @@ pub mod test {
         let mut extra_msgs = vec![];
         for (i, cs) in circuits.iter().enumerate() {
             let pk_ref = if i < 3 { &pk1 } else { &pk2 };
-            let extra_msg = if i % 2 == 0 {
-                None
-            } else {
-                Some(format!("extra message: {}", i).into_bytes())
-            };
+            let extra_msg =
+                if i % 2 == 0 { None } else { Some(format!("extra message: {}", i).into_bytes()) };
             proofs.push(
                 PlonkKzgSnark::<E>::prove::<_, _, T>(rng, cs, pk_ref, extra_msg.clone()).unwrap(),
             );
@@ -1011,10 +977,8 @@ pub mod test {
 
         // 6. Batch verification
         let vks = vec![&vk1, &vk1, &vk1, &vk2, &vk2, &vk2];
-        let mut public_inputs_ref: Vec<&[E::ScalarField]> = public_inputs
-            .iter()
-            .map(|pub_input| &pub_input[..])
-            .collect();
+        let mut public_inputs_ref: Vec<&[E::ScalarField]> =
+            public_inputs.iter().map(|pub_input| &pub_input[..]).collect();
         let mut proofs_ref: Vec<&Proof<E>> = proofs.iter().collect();
         assert!(PlonkKzgSnark::<E>::batch_verify::<T>(
             &vks,
@@ -1057,10 +1021,8 @@ pub mod test {
         )
         .is_err());
 
-        assert!(
-            PlonkKzgSnark::<E>::batch_verify::<T>(&vks, &public_inputs_ref, &proofs_ref, &[],)
-                .is_err()
-        );
+        assert!(PlonkKzgSnark::<E>::batch_verify::<T>(&vks, &public_inputs_ref, &proofs_ref, &[],)
+            .is_err());
 
         // Empty params
         assert!(PlonkKzgSnark::<E>::batch_verify::<T>(&[], &[], &[], &[],).is_err());
@@ -1286,12 +1248,10 @@ pub mod test {
     ) -> Result<(), PlonkError> {
         let q_lc: Vec<&DensePolynomial<E::ScalarField>> =
             (0..GATE_WIDTH).map(|j| &pk.selectors[j]).collect();
-        let q_mul: Vec<&DensePolynomial<E::ScalarField>> = (GATE_WIDTH..GATE_WIDTH + 2)
-            .map(|j| &pk.selectors[j])
-            .collect();
-        let q_hash: Vec<&DensePolynomial<E::ScalarField>> = (GATE_WIDTH + 2..2 * GATE_WIDTH + 2)
-            .map(|j| &pk.selectors[j])
-            .collect();
+        let q_mul: Vec<&DensePolynomial<E::ScalarField>> =
+            (GATE_WIDTH..GATE_WIDTH + 2).map(|j| &pk.selectors[j]).collect();
+        let q_hash: Vec<&DensePolynomial<E::ScalarField>> =
+            (GATE_WIDTH + 2..2 * GATE_WIDTH + 2).map(|j| &pk.selectors[j]).collect();
         let q_o = &pk.selectors[2 * GATE_WIDTH + 2];
         let q_c = &pk.selectors[2 * GATE_WIDTH + 3];
         let q_ecc = &pk.selectors[2 * GATE_WIDTH + 4];
@@ -1365,10 +1325,7 @@ pub mod test {
         let domain = Radix2EvaluationDomain::<E::ScalarField>::new(pk.domain_size())
             .ok_or(PlonkError::DomainCreationError)?;
         for i in 0..domain.size() {
-            assert_eq!(
-                circuit_poly.evaluate(&domain.element(i)),
-                E::ScalarField::zero()
-            );
+            assert_eq!(circuit_poly.evaluate(&domain.element(i)), E::ScalarField::zero());
         }
 
         Ok(())
@@ -1385,26 +1342,17 @@ pub mod test {
         // check that \prod_i [w_i(X) + beta * k_i * X + gamma] * z(X) = \prod_i [w_i(X)
         // + beta * sigma_i(X) + gamma] * z(wX) on the vanishing set
         let one_poly = DensePolynomial::from_coefficients_vec(vec![E::ScalarField::one()]);
-        let poly_1 = oracles
-            .wire_polys
-            .iter()
-            .enumerate()
-            .fold(one_poly.clone(), |acc, (j, w)| {
-                let poly =
-                    &DensePolynomial::from_coefficients_vec(vec![gamma, beta * pk.k()[j]]) + w;
+        let poly_1 = oracles.wire_polys.iter().enumerate().fold(one_poly.clone(), |acc, (j, w)| {
+            let poly = &DensePolynomial::from_coefficients_vec(vec![gamma, beta * pk.k()[j]]) + w;
+            (&acc).mul(&poly)
+        });
+        let poly_2 =
+            oracles.wire_polys.iter().zip(pk.sigmas.iter()).fold(one_poly, |acc, (w, sigma)| {
+                let poly = w.clone()
+                    + sigma.mul(beta)
+                    + DensePolynomial::from_coefficients_vec(vec![gamma]);
                 (&acc).mul(&poly)
             });
-        let poly_2 =
-            oracles
-                .wire_polys
-                .iter()
-                .zip(pk.sigmas.iter())
-                .fold(one_poly, |acc, (w, sigma)| {
-                    let poly = w.clone()
-                        + sigma.mul(beta)
-                        + DensePolynomial::from_coefficients_vec(vec![gamma]);
-                    (&acc).mul(&poly)
-                });
 
         let domain = Radix2EvaluationDomain::<E::ScalarField>::new(pk.domain_size())
             .ok_or(PlonkError::DomainCreationError)?;
@@ -1417,10 +1365,7 @@ pub mod test {
         }
 
         // check z(X) = 1 at point 1
-        assert_eq!(
-            oracles.prod_perm_poly.evaluate(&domain.element(0)),
-            E::ScalarField::one()
-        );
+        assert_eq!(oracles.prod_perm_poly.evaluate(&domain.element(0)), E::ScalarField::one());
 
         Ok(())
     }
@@ -1439,16 +1384,10 @@ pub mod test {
         let h_polys = &oracles.plookup_oracles.h_polys;
 
         // check z(X) = 1 at point 1
-        assert_eq!(
-            prod_poly.evaluate(&domain.element(0)),
-            E::ScalarField::one()
-        );
+        assert_eq!(prod_poly.evaluate(&domain.element(0)), E::ScalarField::one());
 
         // check z(X) = 1 at point w^{n-1}
-        assert_eq!(
-            prod_poly.evaluate(&domain.element(n - 1)),
-            E::ScalarField::one()
-        );
+        assert_eq!(prod_poly.evaluate(&domain.element(n - 1)), E::ScalarField::one());
 
         // check h1(X) = h2(w * X) at point w^{n-1}
         assert_eq!(
@@ -1751,19 +1690,15 @@ pub mod test {
             .map(|&cs| cs.public_input())
             .collect::<Result<Vec<Vec<E::ScalarField>>, _>>(
         )?;
-        let pi_ref: Vec<&[E::ScalarField]> = public_inputs
-            .iter()
-            .map(|pub_input| &pub_input[..])
-            .collect();
+        let pi_ref: Vec<&[E::ScalarField]> =
+            public_inputs.iter().map(|pub_input| &pub_input[..]).collect();
         assert!(
             PlonkKzgSnark::<E>::verify_batch_proof::<T>(vks_ref, &pi_ref, &batch_proof,).is_ok()
         );
         let mut bad_pi_ref = pi_ref.clone();
         bad_pi_ref[0] = bad_pi_ref[1];
-        assert!(
-            PlonkKzgSnark::<E>::verify_batch_proof::<T>(vks_ref, &bad_pi_ref, &batch_proof,)
-                .is_err()
-        );
+        assert!(PlonkKzgSnark::<E>::verify_batch_proof::<T>(vks_ref, &bad_pi_ref, &batch_proof,)
+            .is_err());
 
         Ok(())
     }

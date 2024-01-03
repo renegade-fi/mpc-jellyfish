@@ -101,9 +101,7 @@ pub struct RescueVector<F> {
 impl<F: PrimeField> RescueVector<F> {
     /// zero vector
     pub fn zero() -> RescueVector<F> {
-        RescueVector {
-            vec: [F::zero(); STATE_SIZE],
-        }
+        RescueVector { vec: [F::zero(); STATE_SIZE] }
     }
 
     /// Return vector of the field elements
@@ -153,10 +151,7 @@ impl<F: PrimeField> RescueVector<F> {
     }
 
     fn add_assign_elems(&mut self, elems: &[F]) {
-        self.vec
-            .iter_mut()
-            .zip(elems.iter())
-            .for_each(|(a, b)| a.add_assign(b));
+        self.vec.iter_mut().zip(elems.iter()).for_each(|(a, b)| a.add_assign(b));
     }
 
     fn dot_product(&self, vector: &RescueVector<F>) -> F {
@@ -183,14 +178,7 @@ impl<F: RescueParameter> RescueVector<F> {
 impl<F: Copy> From<&[F]> for RescueVector<F> {
     fn from(field_elems: &[F]) -> RescueVector<F> {
         assert_eq!(field_elems.len(), STATE_SIZE);
-        RescueVector {
-            vec: [
-                field_elems[0],
-                field_elems[1],
-                field_elems[2],
-                field_elems[3],
-            ],
-        }
+        RescueVector { vec: [field_elems[0], field_elems[1], field_elems[2], field_elems[3]] }
     }
 }
 
@@ -215,10 +203,7 @@ impl<F: PrimeField> From<&[RescueVector<F>; STATE_SIZE]> for RescueMatrix<F> {
 impl<F: PrimeField> RescueMatrix<F> {
     fn mul_vec(&self, vector: &RescueVector<F>) -> RescueVector<F> {
         let mut result = [F::zero(); STATE_SIZE];
-        self.matrix
-            .iter()
-            .enumerate()
-            .for_each(|(i, row)| result[i] = row.dot_product(vector));
+        self.matrix.iter().enumerate().for_each(|(i, row)| result[i] = row.dot_product(vector));
         RescueVector { vec: result }
     }
 
@@ -262,9 +247,8 @@ impl<F: RescueParameter> Default for PRP<F> {
     fn default() -> Self {
         let mut key_injection = Vec::with_capacity(2 * ROUNDS);
         for bytes in F::KEY_INJECTION_LE.iter() {
-            key_injection.push(RescueVector::from_elems_le_bytes(
-                bytes[0], bytes[1], bytes[2], bytes[3],
-            ));
+            key_injection
+                .push(RescueVector::from_elems_le_bytes(bytes[0], bytes[1], bytes[2], bytes[3]));
         }
         PRP {
             mds: RescueMatrix::from(&[
@@ -381,14 +365,9 @@ impl<F: RescueParameter> From<PRP<F>> for Permutation<F> {
     fn from(rescue: PRP<F>) -> Self {
         let mut keys: Vec<RescueVector<F>> = Vec::with_capacity(2 * ROUNDS + 1);
         for key in F::PERMUTATION_ROUND_KEYS.iter() {
-            keys.push(RescueVector::from_elems_le_bytes(
-                key[0], key[1], key[2], key[3],
-            ))
+            keys.push(RescueVector::from_elems_le_bytes(key[0], key[1], key[2], key[3]))
         }
-        Permutation {
-            rescue_prp: rescue,
-            round_keys: keys,
-        }
+        Permutation { rescue_prp: rescue, round_keys: keys }
     }
 }
 
@@ -414,8 +393,7 @@ impl<F: RescueParameter> Permutation<F> {
     }
     /// Compute the permutation on RescueVector `input`
     pub fn eval(&self, input: &RescueVector<F>) -> RescueVector<F> {
-        self.rescue_prp
-            .prp_with_round_keys(self.round_keys.as_slice(), input)
+        self.rescue_prp.prp_with_round_keys(self.round_keys.as_slice(), input)
     }
 }
 
@@ -854,9 +832,7 @@ mod test_permutation {
         let output = RescueCRHF::<F>::sponge_no_padding(&input, 1).unwrap()[0];
 
         let zero = RescueVector::zero();
-        let mut state = RescueVector {
-            vec: [input[0], input[1], input[2], F::zero()],
-        };
+        let mut state = RescueVector { vec: [input[0], input[1], input[2], F::zero()] };
         state = rescue_prp.prp(&zero, &state);
         state.add_assign_elems(&input[3..6]);
         state = rescue_prp.prp(&zero, &state);
@@ -1017,33 +993,23 @@ mod test_permutation {
             10
         );
         assert_eq!(
-            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 0)
-                .unwrap()
-                .len(),
+            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 0).unwrap().len(),
             0
         );
         assert_eq!(
-            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 1)
-                .unwrap()
-                .len(),
+            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 1).unwrap().len(),
             1
         );
         assert_eq!(
-            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 2)
-                .unwrap()
-                .len(),
+            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 2).unwrap().len(),
             2
         );
         assert_eq!(
-            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 4)
-                .unwrap()
-                .len(),
+            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 4).unwrap().len(),
             4
         );
         assert_eq!(
-            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 10)
-                .unwrap()
-                .len(),
+            RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &input, 10).unwrap().len(),
             10
         );
     }

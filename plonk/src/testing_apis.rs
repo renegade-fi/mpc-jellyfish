@@ -78,17 +78,13 @@ pub struct ScalarsAndBases<E: Pairing> {
 
 impl<E: Pairing> From<structs::ScalarsAndBases<E>> for ScalarsAndBases<E> {
     fn from(other: structs::ScalarsAndBases<E>) -> Self {
-        Self {
-            base_scalar_map: other.base_scalar_map,
-        }
+        Self { base_scalar_map: other.base_scalar_map }
     }
 }
 
 impl<E: Pairing> From<ScalarsAndBases<E>> for structs::ScalarsAndBases<E> {
     fn from(other: ScalarsAndBases<E>) -> Self {
-        Self {
-            base_scalar_map: other.base_scalar_map,
-        }
+        Self { base_scalar_map: other.base_scalar_map }
     }
 }
 
@@ -155,17 +151,13 @@ pub struct Verifier<E: Pairing> {
 
 impl<E: Pairing> From<Verifier<E>> for verifier::Verifier<E> {
     fn from(other: Verifier<E>) -> Self {
-        Self {
-            domain: other.domain,
-        }
+        Self { domain: other.domain }
     }
 }
 
 impl<E: Pairing> From<verifier::Verifier<E>> for Verifier<E> {
     fn from(other: verifier::Verifier<E>) -> Self {
-        Self {
-            domain: other.domain,
-        }
+        Self { domain: other.domain }
     }
 }
 

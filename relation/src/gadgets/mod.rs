@@ -36,10 +36,7 @@ pub mod test_utils {
         // Check extended permutation polynomials
         let sigma_polys_1 = circuit_1.compute_extended_permutation_polynomials()?;
         let sigma_polys_2 = circuit_2.compute_extended_permutation_polynomials()?;
-        sigma_polys_1
-            .iter()
-            .zip(sigma_polys_2.iter())
-            .for_each(|(p1, p2)| assert_eq!(p1, p2));
+        sigma_polys_1.iter().zip(sigma_polys_2.iter()).for_each(|(p1, p2)| assert_eq!(p1, p2));
         Ok(())
     }
 }

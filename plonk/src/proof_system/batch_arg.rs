@@ -70,11 +70,7 @@ where
     ) -> Result<Instance<E>, PlonkError> {
         circuit.finalize_for_mergeable_circuit(circuit_type)?;
         let (prove_key, _) = PlonkKzgSnark::preprocess(srs, &circuit)?;
-        Ok(Instance {
-            prove_key,
-            circuit,
-            _circuit_type: circuit_type,
-        })
+        Ok(Instance { prove_key, circuit, _circuit_type: circuit_type })
     }
 
     /// Prove satisfiability of multiple instances in a batch.
@@ -165,10 +161,8 @@ where
         // blinding_factor * [beta]1
         let mut scalars_and_bases = pcs_info.comm_scalars_and_bases;
         scalars_and_bases.push(pcs_info.eval_point, pcs_info.opening_proof.0);
-        scalars_and_bases.push(
-            pcs_info.next_eval_point * pcs_info.u,
-            pcs_info.shifted_opening_proof.0,
-        );
+        scalars_and_bases
+            .push(pcs_info.next_eval_point * pcs_info.u, pcs_info.shifted_opening_proof.0);
         scalars_and_bases.push(-pcs_info.eval, *generator_g);
         scalars_and_bases.push(blinding_factor, *beta_g);
         let inner2 = scalars_and_bases.multi_scalar_mul();
@@ -331,20 +325,14 @@ mod test {
             BatchArgument::batch_prove::<_, T>(rng, &instances_type_a, &instances_type_b)?;
         // error path: inconsistent length between instances_type_a and
         // instances_type_b
-        assert!(
-            BatchArgument::batch_prove::<_, T>(rng, &instances_type_a[1..], &instances_type_b)
-                .is_err()
-        );
+        assert!(BatchArgument::batch_prove::<_, T>(rng, &instances_type_a[1..], &instances_type_b)
+            .is_err());
 
         // 4. Aggregate verification keys
-        let vks_type_a: Vec<&VerifyingKey<E>> = instances_type_a
-            .iter()
-            .map(|pred| pred.verify_key_ref())
-            .collect();
-        let vks_type_b: Vec<&VerifyingKey<E>> = instances_type_b
-            .iter()
-            .map(|pred| pred.verify_key_ref())
-            .collect();
+        let vks_type_a: Vec<&VerifyingKey<E>> =
+            instances_type_a.iter().map(|pred| pred.verify_key_ref()).collect();
+        let vks_type_b: Vec<&VerifyingKey<E>> =
+            instances_type_b.iter().map(|pred| pred.verify_key_ref()).collect();
         let merged_vks = BatchArgument::aggregate_verify_keys(&vks_type_a, &vks_type_b)?;
         // error path: inconsistent length between vks_type_a and vks_type_b
         assert!(BatchArgument::aggregate_verify_keys(&vks_type_a[1..], &vks_type_b).is_err());

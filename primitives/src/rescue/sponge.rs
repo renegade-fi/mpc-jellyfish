@@ -119,9 +119,7 @@ impl<F: RescueParameter> RescuePRFCore<F> {
         // ABSORB PHASE
         let mut state = RescueVector::zero();
         state.vec[STATE_SIZE - 1] = *key;
-        let mut r = Self {
-            sponge: RescueSponge::from_state(state, &Permutation::default()),
-        };
+        let mut r = Self { sponge: RescueSponge::from_state(state, &Permutation::default()) };
         r.sponge.absorb(&input);
 
         // SQUEEZE PHASE
@@ -133,10 +131,7 @@ impl<F: RescueParameter, const RATE: usize> SpongeExt for RescueSponge<F, RATE> 
     type State = RescueVector<F>;
 
     fn from_state(state: Self::State, permutation: &Self::Config) -> Self {
-        Self {
-            state,
-            permutation: permutation.clone(),
-        }
+        Self { state, permutation: permutation.clone() }
     }
 
     fn into_state(self) -> Self::State {
@@ -152,10 +147,7 @@ impl<T: RescueParameter + PrimeField, const RATE: usize> CryptographicSponge
 
     /// Initialize a new instance of the sponge.
     fn new(permutation: &Self::Config) -> Self {
-        Self {
-            state: RescueVector::default(),
-            permutation: permutation.clone(),
-        }
+        Self { state: RescueVector::default(), permutation: permutation.clone() }
     }
 
     /// Absorb an input into the sponge.
@@ -301,14 +293,8 @@ mod test {
 
     #[test]
     fn list_with_nonconstant_size_element() {
-        let lst1 = vec![
-            VariableSizeList(vec![1u8, 2, 3, 4]),
-            VariableSizeList(vec![5, 6]),
-        ];
-        let lst2 = vec![
-            VariableSizeList(vec![1u8, 2]),
-            VariableSizeList(vec![3, 4, 5, 6]),
-        ];
+        let lst1 = vec![VariableSizeList(vec![1u8, 2, 3, 4]), VariableSizeList(vec![5, 6])];
+        let lst2 = vec![VariableSizeList(vec![1u8, 2]), VariableSizeList(vec![3, 4, 5, 6])];
 
         assert_different_encodings::<Fr, _>(&lst1, &lst2);
     }

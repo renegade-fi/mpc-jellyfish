@@ -52,9 +52,7 @@ where
 {
     let (a, b) = (a.as_ref(), b.as_ref());
     if a.len() != b.len() {
-        return Err(
-            "Cannot compute hadmard product of two vectors of different length".to_string(),
-        );
+        return Err("Cannot compute hadmard product of two vectors of different length".to_string());
     }
 
     let res: Vec<B> = a.iter().zip(b.iter()).map(|(ai, &bi)| bi * ai).collect();

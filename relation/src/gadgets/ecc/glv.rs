@@ -145,9 +145,7 @@ where
     let g_y = b * (y_square + b);
     let h_y = y_square - b;
 
-    Projective::<P>::new(f_y * h_y, g_y * xy, F::one(), h_y * xy)
-        .into_affine()
-        .into()
+    Projective::<P>::new(f_y * h_y, g_y * xy, F::one(), h_y * xy).into_affine().into()
 }
 
 /// The circuit for computing the point endomorphism.
@@ -354,11 +352,7 @@ where
     let (k1, k2, is_k2_positive) = scalar_decomposition(&s_fr);
     let k1_int = fq_to_big_int!(k1);
     let k2_int = fq_to_big_int!(k2);
-    let k2_sign = if is_k2_positive {
-        BigInt::from(1)
-    } else {
-        BigInt::from(-1)
-    };
+    let k2_sign = if is_k2_positive { BigInt::from(1) } else { BigInt::from(-1) };
     let k2_with_sign = &k2_int * &k2_sign;
 
     // fr_order = r1 + 2^128 r2
@@ -438,10 +432,7 @@ where
         assert!(&lambda_1_int * &k2_int + &s_int < fq_int);
 
         // equation (g) tmp2 + lambda_2 * k2_sign * k2 + s2  = t * t_sign * r2
-        assert_eq!(
-            &tmp2_int + &lambda_2_int * &k2_with_sign,
-            &t_int_with_sign * &r2_int
-        );
+        assert_eq!(&tmp2_int + &lambda_2_int * &k2_with_sign, &t_int_with_sign * &r2_int);
 
         // all intermediate data are positive
         assert!(k1_int >= BigInt::zero());

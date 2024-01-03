@@ -109,10 +109,7 @@ where
 
         let pos = self.create_variable(merkle_proof.pos.clone().into())?;
 
-        Ok(Self::NonMembershipProofVar {
-            node_vars: nodes,
-            pos_var: pos,
-        })
+        Ok(Self::NonMembershipProofVar { node_vars: nodes, pos_var: pos })
     }
 }
 

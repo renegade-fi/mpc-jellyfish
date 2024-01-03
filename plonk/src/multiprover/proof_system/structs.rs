@@ -182,14 +182,10 @@ where
         let split_quot_poly_comms = poll_vec!(self.split_quot_poly_comms, ?);
         let opening_proof = poll_res!(&mut self.opening_proof, ?);
         let shifted_opening_proof = poll_res!(&mut self.shifted_opening_proof, ?);
-        let wires_evals = poll_vec!(self.poly_evals.wires_evals)
-            .iter()
-            .map(Scalar::inner)
-            .collect_vec();
-        let wire_sigma_evals = poll_vec!(self.poly_evals.wire_sigma_evals)
-            .iter()
-            .map(Scalar::inner)
-            .collect_vec();
+        let wires_evals =
+            poll_vec!(self.poly_evals.wires_evals).iter().map(Scalar::inner).collect_vec();
+        let wire_sigma_evals =
+            poll_vec!(self.poly_evals.wire_sigma_evals).iter().map(Scalar::inner).collect_vec();
         let perm_next_eval = poll_res!(&mut self.poly_evals.perm_next_eval).inner();
 
         Poll::Ready(Ok(Proof {
@@ -198,11 +194,7 @@ where
             split_quot_poly_comms,
             opening_proof,
             shifted_opening_proof,
-            poly_evals: ProofEvaluations {
-                wires_evals,
-                wire_sigma_evals,
-                perm_next_eval,
-            },
+            poly_evals: ProofEvaluations { wires_evals, wire_sigma_evals, perm_next_eval },
             plookup_proof: None,
         }))
     }

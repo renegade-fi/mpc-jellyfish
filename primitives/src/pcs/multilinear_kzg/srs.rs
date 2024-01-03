@@ -286,11 +286,7 @@ mod tests {
             eq_arr.push_front(remove_dummy_variable(&base, i)?);
             if i != 0 {
                 let mul = eq.pop_back().unwrap().evaluations;
-                base = base
-                    .into_iter()
-                    .zip(mul.into_iter())
-                    .map(|(a, b)| a * b)
-                    .collect();
+                base = base.into_iter().zip(mul.into_iter()).map(|(a, b)| a * b).collect();
             }
         }
 
@@ -305,19 +301,13 @@ mod tests {
         let window_size = FixedBase::get_mul_window_size(total_scalars);
         let g_table = FixedBase::get_window_table(scalar_bits, window_size, g);
 
-        let pp_g = E::G1::normalize_batch(&FixedBase::msm(
-            scalar_bits,
-            window_size,
-            &g_table,
-            &pp_powers,
-        ));
+        let pp_g =
+            E::G1::normalize_batch(&FixedBase::msm(scalar_bits, window_size, &g_table, &pp_powers));
 
         let mut start = 0;
         for i in 0..num_vars {
             let size = 1 << (num_vars - i);
-            let pp_k_g = Evaluations {
-                evals: pp_g[start..(start + size)].to_vec(),
-            };
+            let pp_k_g = Evaluations { evals: pp_g[start..(start + size)].to_vec() };
             // check correctness of pp_k_g
             let t_eval_0 = eq_eval(&vec![E::ScalarField::zero(); num_vars - i], &t[i..num_vars])?;
             assert_eq!((g * t_eval_0).into_affine(), pp_k_g.evals[0]);
@@ -325,9 +315,7 @@ mod tests {
             powers_of_g.push(pp_k_g);
             start += size;
         }
-        let gg = Evaluations {
-            evals: [g.into_affine()].to_vec(),
-        };
+        let gg = Evaluations { evals: [g.into_affine()].to_vec() };
         powers_of_g.push(gg);
 
         let pp = MultilinearProverParam {
@@ -347,10 +335,7 @@ mod tests {
         };
         end_timer!(vp_generation_timer);
         end_timer!(total_timer);
-        Ok(MultilinearUniversalParams {
-            prover_param: pp,
-            h_mask,
-        })
+        Ok(MultilinearUniversalParams { prover_param: pp, h_mask })
     }
 
     #[test]

@@ -190,9 +190,8 @@ mod tests {
         let p1 = Projective::<P>::rand(&mut rng).into_affine();
         let p2 = Projective::<P>::rand(&mut rng).into_affine();
         let expected: TEPoint<E> = (p1 + p2).into_affine().into();
-        let wrong_result: TEPoint<E> = (p1 + p2 + Projective::<P>::generator())
-            .into_affine()
-            .into();
+        let wrong_result: TEPoint<E> =
+            (p1 + p2 + Projective::<P>::generator()).into_affine().into();
         let p1: TEPoint<E> = p1.into();
         let p2: TEPoint<E> = p2.into();
 
@@ -201,39 +200,16 @@ mod tests {
         let var_p1 = circuit.create_emulated_te_point_variable(p1).unwrap();
         let var_p2 = circuit.create_emulated_te_point_variable(p2).unwrap();
         let var_result = circuit.emulated_te_ecc_add(&var_p1, &var_p2, d).unwrap();
-        assert_eq!(
-            circuit.emulated_te_point_witness(&var_result).unwrap(),
-            expected
-        );
-        let var_neutral = circuit
-            .create_emulated_te_point_variable(neutral.into())
-            .unwrap();
-        let var_neutral_result = circuit
-            .emulated_te_ecc_add(&var_p1, &var_neutral, d)
-            .unwrap();
-        assert_eq!(
-            circuit
-                .emulated_te_point_witness(&var_neutral_result)
-                .unwrap(),
-            p1
-        );
-        let var_neutral_result = circuit
-            .emulated_te_ecc_add(&var_neutral, &var_p1, d)
-            .unwrap();
-        assert_eq!(
-            circuit
-                .emulated_te_point_witness(&var_neutral_result)
-                .unwrap(),
-            p1
-        );
+        assert_eq!(circuit.emulated_te_point_witness(&var_result).unwrap(), expected);
+        let var_neutral = circuit.create_emulated_te_point_variable(neutral.into()).unwrap();
+        let var_neutral_result = circuit.emulated_te_ecc_add(&var_p1, &var_neutral, d).unwrap();
+        assert_eq!(circuit.emulated_te_point_witness(&var_neutral_result).unwrap(), p1);
+        let var_neutral_result = circuit.emulated_te_ecc_add(&var_neutral, &var_p1, d).unwrap();
+        assert_eq!(circuit.emulated_te_point_witness(&var_neutral_result).unwrap(), p1);
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
 
-        let var_wrong_result = circuit
-            .create_emulated_te_point_variable(wrong_result)
-            .unwrap();
-        circuit
-            .emulated_te_ecc_add_gate(&var_p1, &var_p2, &var_wrong_result, d)
-            .unwrap();
+        let var_wrong_result = circuit.create_emulated_te_point_variable(wrong_result).unwrap();
+        circuit.emulated_te_ecc_add_gate(&var_p1, &var_p2, &var_wrong_result, d).unwrap();
         assert!(circuit.check_circuit_satisfiability(&[]).is_err());
     }
 
@@ -254,20 +230,11 @@ mod tests {
 
         let mut circuit = PlonkCircuit::<F>::new_turbo_plonk();
 
-        let var_p1 = circuit
-            .create_emulated_te_point_variable(p1.into())
-            .unwrap();
-        let var_p2 = circuit
-            .create_emulated_te_point_variable(p2.into())
-            .unwrap();
+        let var_p1 = circuit.create_emulated_te_point_variable(p1.into()).unwrap();
+        let var_p2 = circuit.create_emulated_te_point_variable(p2.into()).unwrap();
         let b = circuit.create_boolean_variable(true).unwrap();
-        let var_p3 = circuit
-            .binary_emulated_te_point_vars_select(b, &var_p1, &var_p2)
-            .unwrap();
-        assert_eq!(
-            circuit.emulated_te_point_witness(&var_p3).unwrap(),
-            p2.into()
-        );
+        let var_p3 = circuit.binary_emulated_te_point_vars_select(b, &var_p1, &var_p2).unwrap();
+        assert_eq!(circuit.emulated_te_point_witness(&var_p3).unwrap(), p2.into());
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
         *circuit.witness_mut(var_p3.0 .0[0]) = F::zero();
         assert!(circuit.check_circuit_satisfiability(&[]).is_err());
@@ -290,22 +257,12 @@ mod tests {
 
         let mut circuit = PlonkCircuit::<F>::new_turbo_plonk();
 
-        let var_p1 = circuit
-            .create_emulated_te_point_variable(p1.into())
-            .unwrap();
-        let var_p2 = circuit
-            .create_emulated_te_point_variable(p2.into())
-            .unwrap();
-        let var_p3 = circuit
-            .create_emulated_te_point_variable(p1.into())
-            .unwrap();
-        circuit
-            .enforce_emulated_te_point_equal(&var_p1, &var_p3)
-            .unwrap();
+        let var_p1 = circuit.create_emulated_te_point_variable(p1.into()).unwrap();
+        let var_p2 = circuit.create_emulated_te_point_variable(p2.into()).unwrap();
+        let var_p3 = circuit.create_emulated_te_point_variable(p1.into()).unwrap();
+        circuit.enforce_emulated_te_point_equal(&var_p1, &var_p3).unwrap();
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
-        circuit
-            .enforce_emulated_te_point_equal(&var_p1, &var_p2)
-            .unwrap();
+        circuit.enforce_emulated_te_point_equal(&var_p1, &var_p2).unwrap();
         assert!(circuit.check_circuit_satisfiability(&[]).is_err());
     }
 }

@@ -93,10 +93,7 @@ where
     // x_j)
     //  3. Calculate l_i(x) = w_i * l(x) / (x - x_i)
     //  4. Return f(x) = \sum_i y_i * l_i(x)
-    let x = shares_iter
-        .clone()
-        .map(|share| *share.borrow().0.borrow())
-        .collect::<Vec<_>>();
+    let x = shares_iter.clone().map(|share| *share.borrow().0.borrow()).collect::<Vec<_>>();
     // Calculating l(x) = \prod (x - x_i)
     let mut l = vec![F::zero(); data_size + 1];
     l[0] = F::one();
@@ -207,9 +204,7 @@ mod test {
         let data = vec![F::from(1u64), F::from(2u64)];
         // Evaluation of the above polynomial on (1, 2, 3) is (3, 5, 7)
         let expected = vec![F::from(3u64), F::from(5u64), F::from(7u64)];
-        let code: Vec<F> = reed_solomon_erasure_encode(data.iter(), 1)
-            .unwrap()
-            .collect();
+        let code: Vec<F> = reed_solomon_erasure_encode(data.iter(), 1).unwrap().collect();
         assert_eq!(code, expected);
 
         for to_be_removed in 0..code.len() {
@@ -265,9 +260,7 @@ mod test {
         let payload = [3u64, 1, 4].map(|x| F::from(x));
         // Evaluation of the above polynomial on (1, 2, 3, 4, 5) is (8, 21, 42, 71, 108)
         let expected = [8u64, 21, 42, 71, 108].map(|x| F::from(x));
-        let code: Vec<F> = reed_solomon_erasure_encode(payload.iter(), 2)
-            .unwrap()
-            .collect();
+        let code: Vec<F> = reed_solomon_erasure_encode(payload.iter(), 2).unwrap().collect();
         assert_eq!(code, expected);
 
         let mut points = [1u64, 2, 3].map(|x| F::from(x));

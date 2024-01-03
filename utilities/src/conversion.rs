@@ -140,12 +140,10 @@ where
 
     // Result length is always less than `bytes` length for sufficiently large
     // `bytes`. Thus, the following should never panic.
-    let result_len = (field_bytes_len
-        .checked_add(bytes.len())
-        .expect("result len should fit into usize")
-        - 1)
-        / field_bytes_len
-        + 1;
+    let result_len =
+        (field_bytes_len.checked_add(bytes.len()).expect("result len should fit into usize") - 1)
+            / field_bytes_len
+            + 1;
 
     let result = once(F::from(bytes.len() as u64)) // the first field element encodes the bytes length as u64
         .chain(bytes.chunks(field_bytes_len).map(|field_elem_bytes| {
@@ -208,9 +206,8 @@ where
     ))
     .expect("result len conversion from u64 to usize should succeed");
 
-    let result_capacity = field_bytes_len
-        .checked_mul(elems.len())
-        .expect("result capacity should fit into usize");
+    let result_capacity =
+        field_bytes_len.checked_mul(elems.len()).expect("result capacity should fit into usize");
 
     // If `elems` was produced by `bytes_to_field_elements`
     // then the original bytes MUST end before the final field element
@@ -419,24 +416,14 @@ struct FieldToBytes<I, F> {
 
 enum FieldToBytesState<F> {
     New,
-    Typical {
-        bytes_iter: Take<IntoIter<u8>>,
-        next_elem: F,
-        next_next_elem: F,
-    },
-    Final {
-        bytes_iter: Take<IntoIter<u8>>,
-    },
+    Typical { bytes_iter: Take<IntoIter<u8>>, next_elem: F, next_next_elem: F },
+    Final { bytes_iter: Take<IntoIter<u8>> },
 }
 
 impl<I, F: PrimeField> FieldToBytes<I, F> {
     fn new(elems_iter: I) -> Self {
         let (primefield_bytes_len, ..) = compile_time_checks::<F>();
-        Self {
-            elems_iter,
-            state: FieldToBytesState::New,
-            primefield_bytes_len,
-        }
+        Self { elems_iter, state: FieldToBytesState::New, primefield_bytes_len }
     }
 
     fn elem_to_usize(elem: F) -> usize {
@@ -470,9 +457,7 @@ where
                 } else {
                     // length-0 iterator
                     // move to `Final` state with an empty iterator
-                    self.state = Final {
-                        bytes_iter: Vec::new().into_iter().take(0),
-                    };
+                    self.state = Final { bytes_iter: Vec::new().into_iter().take(0) };
                     return None;
                 };
 
@@ -503,18 +488,10 @@ where
                 // length >2 iterator
                 let mut bytes_iter = bytes_iter.take(self.primefield_bytes_len);
                 let ret = bytes_iter.next();
-                self.state = Typical {
-                    bytes_iter,
-                    next_elem,
-                    next_next_elem,
-                };
+                self.state = Typical { bytes_iter, next_elem, next_next_elem };
                 ret
             },
-            Typical {
-                bytes_iter,
-                next_elem,
-                next_next_elem,
-            } => {
+            Typical { bytes_iter, next_elem, next_next_elem } => {
                 let ret = bytes_iter.next();
                 if ret.is_some() {
                     return ret;

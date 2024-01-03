@@ -97,9 +97,7 @@ mod tests {
             assert!(RescuePRF::<$tr, 1, 15>::evaluate(&seed, &input).is_ok());
             // check correctness
             assert_eq!(
-                RescuePRF::<$tr, 1, 15>::evaluate(&seed, &input)
-                    .unwrap()
-                    .to_vec(),
+                RescuePRF::<$tr, 1, 15>::evaluate(&seed, &input).unwrap().to_vec(),
                 RescuePRFCore::full_state_keyed_sponge_with_zero_padding(&seed, &input, 15)
                     .unwrap()
             );

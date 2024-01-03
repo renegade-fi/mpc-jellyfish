@@ -60,9 +60,7 @@ impl<E: Pairing> MultiproverKzgCommitmentOpening<E> {
 impl<E: Pairing> MultiproverKzgCommitment<E> {
     /// Open the commitment
     pub fn open_authenticated(&self) -> MultiproverKzgCommitmentOpening<E> {
-        MultiproverKzgCommitmentOpening {
-            opening: self.commitment.open_authenticated(),
-        }
+        MultiproverKzgCommitmentOpening { opening: self.commitment.open_authenticated() }
     }
 }
 
@@ -101,9 +99,7 @@ pub struct MultiproverKzgProofOpening<E: Pairing> {
 impl<E: Pairing> MultiproverKzgProof<E> {
     /// Open the proof
     pub fn open_authenticated(&self) -> MultiproverKzgProofOpening<E> {
-        MultiproverKzgProofOpening {
-            opening: self.proof.open_authenticated(),
-        }
+        MultiproverKzgProofOpening { opening: self.proof.open_authenticated() }
     }
 }
 
@@ -115,9 +111,7 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let res = ready!(self.opening.poll_unpin(cx))
-            .map(|opening| UnivariateKzgProof {
-                proof: opening.to_affine(),
-            })
+            .map(|opening| UnivariateKzgProof { proof: opening.to_affine() })
             .map_err(|e| PCSError::Multiprover(e.to_string()));
 
         Poll::Ready(res)
@@ -212,13 +206,8 @@ impl<E: Pairing> MultiproverKZG<E> {
         prover_params: &UnivariateProverParam<E>,
         polynomials: &[AuthenticatedDensePoly<E::G1>],
         points: &[ScalarResult<E::G1>],
-    ) -> Result<
-        (
-            Vec<MultiproverKzgProof<E>>,
-            Vec<AuthenticatedScalarResult<E::G1>>,
-        ),
-        PCSError,
-    > {
+    ) -> Result<(Vec<MultiproverKzgProof<E>>, Vec<AuthenticatedScalarResult<E::G1>>), PCSError>
+    {
         if polynomials.len() != points.len() {
             return Err(PCSError::InvalidParameters(format!(
                 "poly length {} is different from points length {}",
@@ -241,10 +230,7 @@ impl<E: Pairing> MultiproverKZG<E> {
 
     /// Convert native prover params to prover params in the MPC framework
     fn convert_prover_params(pp: &UnivariateProverParam<E>) -> Vec<CurvePoint<E::G1>> {
-        pp.powers_of_g
-            .iter()
-            .map(|g| CurvePoint::from(g.into_group()))
-            .collect::<Vec<_>>()
+        pp.powers_of_g.iter().map(|g| CurvePoint::from(g.into_group())).collect::<Vec<_>>()
     }
 }
 
@@ -291,9 +277,7 @@ mod test {
     fn random_poly(degree_bound: usize) -> DensePolynomial<ScalarField> {
         let mut rng = test_rng();
         let degree = rng.gen_range(1..=degree_bound);
-        let coeffs = (0..=degree)
-            .map(|_| ScalarField::rand(&mut rng))
-            .collect_vec();
+        let coeffs = (0..=degree).map(|_| ScalarField::rand(&mut rng)).collect_vec();
 
         DensePolynomial::from_coefficients_vec(coeffs)
     }
@@ -365,12 +349,8 @@ mod test {
     #[tokio::test]
     async fn test_batch_commit_open() {
         const N_POLYS: usize = 10;
-        let polys = (0..N_POLYS)
-            .map(|_| random_poly(DEGREE_BOUND))
-            .collect_vec();
-        let points = (0..N_POLYS)
-            .map(|_| ScalarField::rand(&mut test_rng()))
-            .collect_vec();
+        let polys = (0..N_POLYS).map(|_| random_poly(DEGREE_BOUND)).collect_vec();
+        let points = (0..N_POLYS).map(|_| ScalarField::rand(&mut test_rng())).collect_vec();
 
         let pp = <UnivariateKzgPCS<TestCurve> as PolynomialCommitmentScheme>::gen_srs_for_testing(
             &mut test_rng(),
@@ -385,10 +365,8 @@ mod test {
             let points = points.clone();
 
             async move {
-                let shared_polys = polys
-                    .iter()
-                    .map(|poly| share_poly(poly, PARTY0, &fabric))
-                    .collect_vec();
+                let shared_polys =
+                    polys.iter().map(|poly| share_poly(poly, PARTY0, &fabric)).collect_vec();
                 let allocated_points = points
                     .iter()
                     .map(|point| fabric.allocate_scalar(Scalar::new(*point)))
@@ -399,18 +377,12 @@ mod test {
                     MultiproverKZG::<TestCurve>::batch_open(&ck, &shared_polys, &allocated_points)
                         .unwrap();
 
-                let comms_open = comms
-                    .into_iter()
-                    .map(|comm| comm.open_authenticated())
-                    .collect_vec();
-                let proofs_open = proofs
-                    .into_iter()
-                    .map(|proof| proof.open_authenticated())
-                    .collect_vec();
-                let evals_open = evals
-                    .into_iter()
-                    .map(|eval| eval.open_authenticated())
-                    .collect_vec();
+                let comms_open =
+                    comms.into_iter().map(|comm| comm.open_authenticated()).collect_vec();
+                let proofs_open =
+                    proofs.into_iter().map(|proof| proof.open_authenticated()).collect_vec();
+                let evals_open =
+                    evals.into_iter().map(|eval| eval.open_authenticated()).collect_vec();
 
                 (
                     futures::future::join_all(comms_open).await,

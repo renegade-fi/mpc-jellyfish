@@ -138,9 +138,7 @@ impl CanonicalDeserialize for BLSSignKey {
 
         let mut sk_bytes = [0u8; BLS_SIG_SK_SIZE];
         reader.read_exact(&mut sk_bytes)?;
-        SecretKey::deserialize(&sk_bytes)
-            .map(Self)
-            .map_err(|_| SerializationError::InvalidData)
+        SecretKey::deserialize(&sk_bytes).map(Self).map_err(|_| SerializationError::InvalidData)
     }
 }
 
@@ -234,9 +232,7 @@ impl CanonicalDeserialize for BLSVerKey {
 
 impl Valid for BLSVerKey {
     fn check(&self) -> Result<(), ark_serialize::SerializationError> {
-        self.0
-            .validate()
-            .map_err(|_| SerializationError::InvalidData)
+        self.0.validate().map_err(|_| SerializationError::InvalidData)
     }
 }
 
@@ -315,9 +311,7 @@ impl CanonicalDeserialize for BLSSignature {
 
 impl Valid for BLSSignature {
     fn check(&self) -> Result<(), ark_serialize::SerializationError> {
-        self.0
-            .validate(true)
-            .map_err(|_| SerializationError::InvalidData)
+        self.0.validate(true).map_err(|_| SerializationError::InvalidData)
     }
 }
 
@@ -373,11 +367,7 @@ impl SignatureScheme for BLSSignatureScheme {
         msg: M,
         _prng: &mut R,
     ) -> Result<Self::Signature, PrimitivesError> {
-        Ok(BLSSignature(sk.sign(
-            msg.as_ref(),
-            Self::CS_ID.as_bytes(),
-            &[],
-        )))
+        Ok(BLSSignature(sk.sign(msg.as_ref(), Self::CS_ID.as_bytes(), &[])))
     }
 
     /// Verify a signature.
@@ -413,10 +403,7 @@ impl BLSSignatureScheme {
         salt: &[u8],
         key_info: &[u8],
     ) -> Result<
-        (
-            <Self as SignatureScheme>::SigningKey,
-            <Self as SignatureScheme>::VerificationKey,
-        ),
+        (<Self as SignatureScheme>::SigningKey, <Self as SignatureScheme>::VerificationKey),
         PrimitivesError,
     > {
         let sk = SecretKey::key_gen_v5(ikm, salt, key_info)?;

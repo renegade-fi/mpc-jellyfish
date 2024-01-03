@@ -47,16 +47,12 @@ impl From<DecKey> for EncKey {
 }
 impl Default for EncKey {
     fn default() -> Self {
-        Self(crypto_kx::PublicKey::from(
-            [0u8; crypto_kx::PublicKey::BYTES],
-        ))
+        Self(crypto_kx::PublicKey::from([0u8; crypto_kx::PublicKey::BYTES]))
     }
 }
 impl fmt::Debug for EncKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("aead::EncKey")
-            .field(self.0.as_ref())
-            .finish()
+        f.debug_tuple("aead::EncKey").field(self.0.as_ref()).finish()
     }
 }
 
@@ -118,9 +114,7 @@ impl Default for DecKey {
 }
 impl fmt::Debug for DecKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("aead::DecKey")
-            .field(&self.0.to_bytes())
-            .finish()
+        f.debug_tuple("aead::DecKey").field(&self.0.to_bytes()).finish()
     }
 }
 
@@ -143,10 +137,7 @@ impl KeyPair {
     /// Randomly sample a key pair.
     pub fn generate<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
         let (enc_key, dec_key) = crypto_kx::Keypair::generate(rng).split();
-        Self {
-            enc_key: EncKey(enc_key),
-            dec_key: DecKey(dec_key),
-        }
+        Self { enc_key: EncKey(enc_key), dec_key: DecKey(dec_key) }
     }
 
     /// Getter for the public/encryption key
@@ -168,13 +159,7 @@ impl KeyPair {
             .rx;
         let cipher = XChaCha20Poly1305::new(shared_secret.as_ref().into());
         let plaintext = cipher
-            .decrypt(
-                &ciphertext.nonce,
-                Payload {
-                    msg: &ciphertext.ct,
-                    aad,
-                },
-            )
+            .decrypt(&ciphertext.nonce, Payload { msg: &ciphertext.ct, aad })
             .map_err(|e| PrimitivesError::FailedDecryption(format!("{e:?}")))?;
         Ok(plaintext)
     }
@@ -417,10 +402,7 @@ mod test {
 
         // serde for EncKey
         let bytes = bincode::serialize(keypair.enc_key_ref()).unwrap();
-        assert_eq!(
-            keypair.enc_key_ref(),
-            &bincode::deserialize(&bytes).unwrap()
-        );
+        assert_eq!(keypair.enc_key_ref(), &bincode::deserialize(&bytes).unwrap());
         // wrong byte length
         assert!(bincode::deserialize::<EncKey>(&bytes[1..]).is_err());
 
@@ -451,18 +433,12 @@ mod test {
         // when testing keypair, already tests serde on pk and sk
         let mut bytes = Vec::new();
         CanonicalSerialize::serialize_compressed(&keypair, &mut bytes).unwrap();
-        assert_eq!(
-            keypair,
-            KeyPair::deserialize_compressed(&bytes[..]).unwrap()
-        );
+        assert_eq!(keypair, KeyPair::deserialize_compressed(&bytes[..]).unwrap());
         assert!(KeyPair::deserialize_compressed(&bytes[1..]).is_err());
 
         let mut bytes = Vec::new();
         CanonicalSerialize::serialize_compressed(&ciphertext, &mut bytes).unwrap();
-        assert_eq!(
-            ciphertext,
-            Ciphertext::deserialize_compressed(&bytes[..]).unwrap()
-        );
+        assert_eq!(ciphertext, Ciphertext::deserialize_compressed(&bytes[..]).unwrap());
         assert!(Ciphertext::deserialize_compressed(&bytes[1..]).is_err());
     }
 }

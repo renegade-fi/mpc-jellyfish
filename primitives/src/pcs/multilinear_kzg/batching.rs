@@ -127,16 +127,11 @@ pub(super) fn batch_open_internal<E: Pairing>(
         q_x_evals.push(q_x_eval);
 
         // sanity check
-        let point: Vec<E::ScalarField> = uni_polys
-            .iter()
-            .rev()
-            .map(|poly| poly.evaluate(&domain.element(i)))
-            .collect();
+        let point: Vec<E::ScalarField> =
+            uni_polys.iter().rev().map(|poly| poly.evaluate(&domain.element(i))).collect();
         let mle_eval = merge_poly.evaluate(&point).unwrap();
         if mle_eval != q_x_eval {
-            return Err(PCSError::InvalidProver(
-                "Q(omega) does not match W(l(omega))".to_string(),
-            ));
+            return Err(PCSError::InvalidProver("Q(omega) does not match W(l(omega))".to_string()));
         }
     }
 
@@ -146,31 +141,18 @@ pub(super) fn batch_open_internal<E: Pairing>(
     q_x_evals.push(q_r_value);
 
     // 7. get a point `p := l(r)`
-    let point: Vec<E::ScalarField> = uni_polys
-        .iter()
-        .rev()
-        .map(|poly| poly.evaluate(&r))
-        .collect();
+    let point: Vec<E::ScalarField> = uni_polys.iter().rev().map(|poly| poly.evaluate(&r)).collect();
 
     // 8. output an opening of `w` over point `p`
     let (mle_opening, mle_eval) = open_internal(ml_prover_param, &merge_poly, &point)?;
 
     // 9. output value that is `w` evaluated at `p` (which should match `q(r)`)
     if mle_eval != q_r_value {
-        return Err(PCSError::InvalidProver(
-            "Q(r) does not match W(l(r))".to_string(),
-        ));
+        return Err(PCSError::InvalidProver("Q(r) does not match W(l(r))".to_string()));
     }
     end_timer!(open_timer);
 
-    Ok((
-        MultilinearKzgBatchProof {
-            proof: mle_opening,
-            q_x_commit,
-            q_x_opens,
-        },
-        q_x_evals,
-    ))
+    Ok((MultilinearKzgBatchProof { proof: mle_opening, q_x_commit, q_x_opens }, q_x_evals))
 }
 
 /// Verifies that the `batch_commitment` is a valid commitment
@@ -330,9 +312,7 @@ mod tests {
 
         let mut points = Vec::new();
         for poly in polys.iter() {
-            let point = (0..poly.num_vars())
-                .map(|_| Fr::rand(rng))
-                .collect::<Vec<Fr>>();
+            let point = (0..poly.num_vars()).map(|_| Fr::rand(rng)).collect::<Vec<Fr>>();
             points.push(point);
         }
 
@@ -347,14 +327,9 @@ mod tests {
         }
 
         // good path
-        assert!(batch_verify_internal(
-            &uni_vk,
-            &ml_vk,
-            &com,
-            &points,
-            &evaluations,
-            &batch_proof,
-        )?);
+        assert!(
+            batch_verify_internal(&uni_vk, &ml_vk, &com, &points, &evaluations, &batch_proof,)?
+        );
 
         // bad commitment
         assert!(!batch_verify_internal(
@@ -421,15 +396,13 @@ mod tests {
         let ml_params = MultilinearUniversalParams::<E>::gen_srs_for_testing(&mut rng, 15)?;
 
         // normal polynomials
-        let polys1: Vec<_> = (0..5)
-            .map(|_| MLE::from(DenseMultilinearExtension::rand(4, &mut rng)))
-            .collect();
+        let polys1: Vec<_> =
+            (0..5).map(|_| MLE::from(DenseMultilinearExtension::rand(4, &mut rng))).collect();
         test_batch_commit_helper(&uni_params, &ml_params, &polys1, &mut rng)?;
 
         // single-variate polynomials
-        let polys1: Vec<_> = (0..5)
-            .map(|_| MLE::from(DenseMultilinearExtension::rand(1, &mut rng)))
-            .collect();
+        let polys1: Vec<_> =
+            (0..5).map(|_| MLE::from(DenseMultilinearExtension::rand(1, &mut rng))).collect();
         test_batch_commit_helper(&uni_params, &ml_params, &polys1, &mut rng)?;
 
         Ok(())

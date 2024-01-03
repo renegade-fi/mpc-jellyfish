@@ -106,11 +106,9 @@ impl<E: Pairing> PolynomialCommitmentScheme for UnivariateKzgPCS<E> {
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros_and_convert_to_bigints(poly);
 
         let msm_time = start_timer!(|| "MSM to compute commitment to plaintext poly");
-        let commitment = E::G1::msm_bigint(
-            &prover_param.powers_of_g[num_leading_zeros..],
-            &plain_coeffs,
-        )
-        .into_affine();
+        let commitment =
+            E::G1::msm_bigint(&prover_param.powers_of_g[num_leading_zeros..], &plain_coeffs)
+                .into_affine();
         end_timer!(msm_time);
 
         end_timer!(commit_time);
@@ -211,9 +209,7 @@ impl<E: Pairing> PolynomialCommitmentScheme for UnivariateKzgPCS<E> {
         let pairing_inputs_r: Vec<E::G2Prepared> =
             vec![verifier_param.h.into(), verifier_param.beta_h.into()];
 
-        let res = E::multi_pairing(pairing_inputs_l, pairing_inputs_r)
-            .0
-            .is_one();
+        let res = E::multi_pairing(pairing_inputs_l, pairing_inputs_r).0.is_one();
 
         end_timer!(check_time, || format!("Result: {res}"));
         Ok(res)
@@ -243,11 +239,7 @@ impl<E: Pairing> PolynomialCommitmentScheme for UnivariateKzgPCS<E> {
         // Instead of multiplying g and gamma_g in each turn, we simply accumulate
         // their coefficients and perform a final multiplication at the end.
         let mut g_multiplier = E::ScalarField::zero();
-        for (((c, z), v), proof) in multi_commitment
-            .iter()
-            .zip(points)
-            .zip(values)
-            .zip(batch_proof)
+        for (((c, z), v), proof) in multi_commitment.iter().zip(points).zip(values).zip(batch_proof)
         {
             let w = proof.proof;
             let mut temp = w.mul(*z);
@@ -269,12 +261,10 @@ impl<E: Pairing> PolynomialCommitmentScheme for UnivariateKzgPCS<E> {
         end_timer!(to_affine_time);
 
         let pairing_time = start_timer!(|| "Performing product of pairings");
-        let result = E::multi_pairing(
-            [total_w, total_c],
-            [verifier_param.beta_h, verifier_param.h],
-        )
-        .0
-        .is_one();
+        let result =
+            E::multi_pairing([total_w, total_c], [verifier_param.beta_h, verifier_param.h])
+                .0
+                .is_one();
         end_timer!(pairing_time);
         end_timer!(check_time, || format!("Result: {result}"));
         Ok(result)
@@ -295,9 +285,7 @@ impl<E: Pairing> PolynomialCommitmentScheme for UnivariateKzgPCS<E> {
         let proofs: Vec<_> = h_poly
             .batch_evaluate(points)
             .into_iter()
-            .map(|g| UnivariateKzgProof {
-                proof: g.into_affine(),
-            })
+            .map(|g| UnivariateKzgProof { proof: g.into_affine() })
             .collect();
 
         // Evaluate at all points
@@ -319,9 +307,7 @@ impl<E: Pairing> UnivariatePCS for UnivariateKzgPCS<E> {
             .batch_evaluate_rou(domain)?
             .into_iter()
             .take(num_points)
-            .map(|g| UnivariateKzgProof {
-                proof: g.into_affine(),
-            })
+            .map(|g| UnivariateKzgProof { proof: g.into_affine() })
             .collect();
         Ok(proofs)
     }
@@ -353,11 +339,8 @@ where
     ) -> Result<GeneralDensePolynomial<E::G1, F>, PCSError> {
         // First, pad to power_of_two, since Toeplitz mul only works for 2^k
         let mut padded_coeffs: Vec<F> = poly_coeffs.to_vec();
-        let padded_degree = padded_coeffs
-            .len()
-            .saturating_sub(1)
-            .checked_next_power_of_two()
-            .ok_or_else(|| {
+        let padded_degree =
+            padded_coeffs.len().saturating_sub(1).checked_next_power_of_two().ok_or_else(|| {
                 PCSError::InvalidParameters(ark_std::format!(
                     "Next power of two overflows! Got: {}",
                     padded_coeffs.len().saturating_sub(1)
@@ -500,9 +483,7 @@ mod tests {
                 let point = E::ScalarField::rand(rng);
                 let (proof, value) = UnivariateKzgPCS::<E>::open(&ck, &p, &point)?;
 
-                assert!(UnivariateKzgPCS::<E>::verify(
-                    &vk, &comm, &point, &value, &proof
-                )?);
+                assert!(UnivariateKzgPCS::<E>::verify(&vk, &comm, &point, &value, &proof)?);
                 comms.push(comm);
                 values.push(value);
                 points.push(point);
@@ -541,11 +522,7 @@ mod tests {
 
         for degree in degrees {
             let num_points = rng.gen_range(5..30); // should allow more points than degree
-            ark_std::println!(
-                "Multi-opening: poly deg: {}, num of points: {}",
-                degree,
-                num_points
-            );
+            ark_std::println!("Multi-opening: poly deg: {}, num of points: {}", degree, num_points);
 
             // NOTE: THIS IS IMPORTANT FOR USER OF `multi_open()`!
             // since we will pad your polynomial degree to the next_power_of_two, you will
@@ -560,16 +537,14 @@ mod tests {
                 proofs.len() == evals.len() && proofs.len() == num_points,
                 "fn multi_open() should return the correct number of proofs and evals"
             );
-            points
-                .iter()
-                .zip(proofs.into_iter())
-                .zip(evals.into_iter())
-                .for_each(|((point, proof), eval)| {
+            points.iter().zip(proofs.into_iter()).zip(evals.into_iter()).for_each(
+                |((point, proof), eval)| {
                     assert_eq!(
                         UnivariateKzgPCS::<E>::open(&ck, &poly, point).unwrap(),
                         (proof, eval)
                     );
-                });
+                },
+            );
             // Second, test roots-of-unity points
             let domain: Radix2EvaluationDomain<Fr> =
                 UnivariateKzgPCS::<E>::multi_open_rou_eval_domain(degree, num_points)?;

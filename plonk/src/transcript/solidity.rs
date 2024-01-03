@@ -36,10 +36,7 @@ pub struct SolidityTranscript {
 impl<F> PlonkTranscript<F> for SolidityTranscript {
     /// Create a new plonk transcript. `label` is omitted for efficiency.
     fn new(_label: &'static [u8]) -> Self {
-        SolidityTranscript {
-            transcript: Vec::new(),
-            state: [0u8; KECCAK256_STATE_SIZE],
-        }
+        SolidityTranscript { transcript: Vec::new(), state: [0u8; KECCAK256_STATE_SIZE] }
     }
 
     /// Append the message to the transcript. `_label` is omitted for

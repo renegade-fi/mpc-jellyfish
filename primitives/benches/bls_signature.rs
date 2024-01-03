@@ -42,10 +42,9 @@ fn bench_aggregate<S: AggregateableSignatureSchemes, T: criterion::measurement::
     benchmark_group.bench_function(format!("aggregate_verification_{}", msgs.len()), |b| {
         b.iter(|| S::aggregate_verify(&pp, &vks, msgs, &agg_sig).unwrap())
     });
-    benchmark_group.bench_function(
-        format!("multi_signature_verification_{}", msgs.len()),
-        |b| b.iter(|| S::multi_sig_verify(&pp, &vks, msgs[0], &multi_sig).unwrap()),
-    );
+    benchmark_group.bench_function(format!("multi_signature_verification_{}", msgs.len()), |b| {
+        b.iter(|| S::multi_sig_verify(&pp, &vks, msgs[0], &multi_sig).unwrap())
+    });
 }
 
 #[allow(clippy::let_unit_value)]

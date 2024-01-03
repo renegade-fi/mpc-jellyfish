@@ -35,12 +35,8 @@ impl BLSVRFScheme {
     /// Creates a new BLS VRF instance with the given ciphersuite.
     pub fn new(cs_id: BLSVRFCipherSuite) -> Self {
         match cs_id {
-            BLSVRFCipherSuite::VRF_BLS_12_381_SHA256 => Self {
-                hasher: Box::new(Sha256::new()),
-            },
-            BLSVRFCipherSuite::VRF_BLS_12_381_SHA512 => Self {
-                hasher: Box::new(Sha512::new()),
-            },
+            BLSVRFCipherSuite::VRF_BLS_12_381_SHA256 => Self { hasher: Box::new(Sha256::new()) },
+            BLSVRFCipherSuite::VRF_BLS_12_381_SHA512 => Self { hasher: Box::new(Sha512::new()) },
         }
     }
 }

@@ -48,12 +48,12 @@ impl<F, P, N> LookupResult<F, P, N> {
     pub fn expect_ok(self) -> Result<(F, P), PrimitivesError> {
         match self {
             LookupResult::Ok(x, proof) => Ok((x, proof)),
-            LookupResult::NotInMemory => Err(PrimitivesError::InternalError(
-                "Expected Ok, found NotInMemory".to_string(),
-            )),
-            LookupResult::NotFound(_) => Err(PrimitivesError::InternalError(
-                "Expected Ok, found NotFound".to_string(),
-            )),
+            LookupResult::NotInMemory => {
+                Err(PrimitivesError::InternalError("Expected Ok, found NotInMemory".to_string()))
+            },
+            LookupResult::NotFound(_) => {
+                Err(PrimitivesError::InternalError("Expected Ok, found NotFound".to_string()))
+            },
         }
     }
 
@@ -61,9 +61,9 @@ impl<F, P, N> LookupResult<F, P, N> {
     pub fn expect_not_found(self) -> Result<N, PrimitivesError> {
         match self {
             LookupResult::NotFound(n) => Ok(n),
-            LookupResult::Ok(..) => Err(PrimitivesError::InternalError(
-                "Expected NotFound, found Ok".to_string(),
-            )),
+            LookupResult::Ok(..) => {
+                Err(PrimitivesError::InternalError("Expected NotFound, found Ok".to_string()))
+            },
             LookupResult::NotInMemory => Err(PrimitivesError::InternalError(
                 "Expected NotFound, found NotInMemory".to_string(),
             )),
@@ -74,9 +74,9 @@ impl<F, P, N> LookupResult<F, P, N> {
     pub fn expect_not_in_memory(self) -> Result<(), PrimitivesError> {
         match self {
             LookupResult::NotInMemory => Ok(()),
-            LookupResult::Ok(..) => Err(PrimitivesError::InternalError(
-                "Expected NotInMemory, found Ok".to_string(),
-            )),
+            LookupResult::Ok(..) => {
+                Err(PrimitivesError::InternalError("Expected NotInMemory, found Ok".to_string()))
+            },
             LookupResult::NotFound(..) => Err(PrimitivesError::InternalError(
                 "Expected NotInMemory, found NotFound".to_string(),
             )),

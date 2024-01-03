@@ -79,10 +79,8 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         online_oracles.pub_input_poly = pi_poly;
 
         // Open the commitments and append them to the transcript
-        let wires_poly_comms_vec = wires_poly_comms
-            .iter()
-            .map(|comm| comm.open_authenticated())
-            .collect_vec();
+        let wires_poly_comms_vec =
+            wires_poly_comms.iter().map(|comm| comm.open_authenticated()).collect_vec();
         transcript.append_commitments(b"witness_poly_comms", &wires_poly_comms_vec);
 
         // Though we don't use plookup in the multiprover setting, we still squeeze a
@@ -114,10 +112,8 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
             num_wire_types,
         )?;
 
-        let split_quote_poly_comm_open = split_quot_poly_comms
-            .iter()
-            .map(|comm| comm.open_authenticated())
-            .collect_vec();
+        let split_quote_poly_comm_open =
+            split_quot_poly_comms.iter().map(|comm| comm.open_authenticated()).collect_vec();
         transcript.append_commitments(b"quot_poly_comms", &split_quote_poly_comm_open);
 
         // --- Round 4 --- //
@@ -251,10 +247,7 @@ pub mod test_helpers {
         let b0 = Scalar::from(m as u64 * 2) * &one;
         let b1 = Scalar::from(a0 as u64 * 2 + m as u64 * 4 - 1) * &one;
 
-        let b = [
-            cs.create_public_variable(b0)?,
-            cs.create_public_variable(b1)?,
-        ];
+        let b = [cs.create_public_variable(b0)?, cs.create_public_variable(b1)?];
 
         let c = cs.create_public_variable(
             (cs.witness(b[1])? + cs.witness(a[0])?) * (cs.witness(b[1])? - cs.witness(a[0])?),

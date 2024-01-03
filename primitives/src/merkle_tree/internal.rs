@@ -56,11 +56,7 @@ where
     pub(crate) fn value(&self) -> T {
         match self {
             Self::Empty => T::default(),
-            Self::Leaf {
-                value,
-                pos: _,
-                elem: _,
-            } => *value,
+            Self::Leaf { value, pos: _, elem: _ } => *value,
             Self::Branch { value, children: _ } => *value,
             Self::ForgettenSubtree { value } => *value,
         }
@@ -100,11 +96,7 @@ pub struct MerkleTreeCommitment<T: NodeValue> {
 
 impl<T: NodeValue> MerkleTreeCommitment<T> {
     pub fn new(digest: T, height: usize, num_leaves: u64) -> Self {
-        MerkleTreeCommitment {
-            digest,
-            height,
-            num_leaves,
-        }
+        MerkleTreeCommitment { digest, height, num_leaves }
     }
 }
 
@@ -155,11 +147,7 @@ where
     }
 
     pub fn new(pos: I, proof: MerklePath<E, I, T>) -> Self {
-        MerkleProof {
-            pos,
-            proof,
-            _phantom_arity: PhantomData,
-        }
+        MerkleProof { pos, proof, _phantom_arity: PhantomData }
     }
 
     pub fn index(&self) -> &I {
@@ -191,9 +179,7 @@ where
     let capacity = BigUint::from(Arity::to_u64()).pow(height as u32);
 
     if BigUint::from(num_leaves) > capacity {
-        Err(PrimitivesError::ParameterError(
-            "Too many data for merkle tree".to_string(),
-        ))
+        Err(PrimitivesError::ParameterError("Too many data for merkle tree".to_string()))
     } else if num_leaves > 0 {
         let mut cur_nodes = leaves
             .into_iter()
@@ -225,9 +211,7 @@ where
                 .into_iter()
                 .map(|chunk| {
                     let children = chunk
-                        .pad_using(Arity::to_usize(), |_| {
-                            Box::new(MerkleNode::<E, I, T>::Empty)
-                        })
+                        .pad_using(Arity::to_usize(), |_| Box::new(MerkleNode::<E, I, T>::Empty))
                         .collect::<Vec<_>>();
                     Ok(Box::new(MerkleNode::<E, I, T>::Branch {
                         value: digest_branch::<E, H, I, T>(&children)?,
@@ -261,9 +245,7 @@ where
     })?;
 
     if num_leaves > capacity {
-        Err(PrimitivesError::ParameterError(
-            "Too many data for merkle tree".to_string(),
-        ))
+        Err(PrimitivesError::ParameterError("Too many data for merkle tree".to_string()))
     } else if num_leaves > 0 {
         let mut cur_nodes = leaves
             .into_iter()
@@ -295,9 +277,7 @@ where
             })
             .collect::<Result<Vec<_>, PrimitivesError>>()?;
         for i in 1..cur_nodes.len() - 1 {
-            cur_nodes[i] = Box::new(MerkleNode::ForgettenSubtree {
-                value: cur_nodes[i].value(),
-            })
+            cur_nodes[i] = Box::new(MerkleNode::ForgettenSubtree { value: cur_nodes[i].value() })
         }
         for _ in 1..height {
             cur_nodes = cur_nodes
@@ -306,9 +286,7 @@ where
                 .into_iter()
                 .map(|chunk| {
                     let children = chunk
-                        .pad_using(Arity::to_usize(), |_| {
-                            Box::new(MerkleNode::<E, I, T>::Empty)
-                        })
+                        .pad_using(Arity::to_usize(), |_| Box::new(MerkleNode::<E, I, T>::Empty))
                         .collect::<Vec<_>>();
                     Ok(Box::new(MerkleNode::<E, I, T>::Branch {
                         value: digest_branch::<E, H, I, T>(&children)?,
@@ -317,9 +295,8 @@ where
                 })
                 .collect::<Result<Vec<_>, PrimitivesError>>()?;
             for i in 1..cur_nodes.len() - 1 {
-                cur_nodes[i] = Box::new(MerkleNode::ForgettenSubtree {
-                    value: cur_nodes[i].value(),
-                })
+                cur_nodes[i] =
+                    Box::new(MerkleNode::ForgettenSubtree { value: cur_nodes[i].value() })
             }
         }
         Ok((cur_nodes[0].clone(), num_leaves))
@@ -454,10 +431,7 @@ where
                     proof,
                 )?;
                 // Remember `*self`.
-                *self = Self::Branch {
-                    value: *value,
-                    children,
-                };
+                *self = Self::Branch { value: *value, children };
                 Ok(())
             },
             (Self::ForgettenSubtree { .. }, node) => {
@@ -534,11 +508,9 @@ where
                     },
                 }
             },
-            MerkleNode::Leaf {
-                elem,
-                value: _,
-                pos: _,
-            } => LookupResult::Ok(elem, vec![self.clone()]),
+            MerkleNode::Leaf { elem, value: _, pos: _ } => {
+                LookupResult::Ok(elem, vec![self.clone()])
+            },
             _ => LookupResult::NotInMemory,
         }
     }
@@ -558,11 +530,7 @@ where
         let pos = pos.borrow();
         let elem = elem.borrow();
         match self {
-            MerkleNode::Leaf {
-                elem: node_elem,
-                value,
-                pos,
-            } => {
+            MerkleNode::Leaf { elem: node_elem, value, pos } => {
                 let ret = ark_std::mem::replace(node_elem, elem.clone());
                 *value = H::digest_leaf(pos, elem)?;
                 Ok(LookupResult::Ok(ret, ()))
@@ -600,10 +568,7 @@ where
                         traversal_path,
                         elem,
                     )?;
-                    MerkleNode::Branch {
-                        value: digest_branch::<E, H, I, T>(&children)?,
-                        children,
-                    }
+                    MerkleNode::Branch { value: digest_branch::<E, H, I, T>(&children)?, children }
                 };
                 Ok(LookupResult::NotFound(()))
             },
@@ -632,11 +597,7 @@ where
         match self {
             MerkleNode::Branch { value, children } => {
                 let mut cnt = 0u64;
-                let mut frontier = if at_frontier {
-                    traversal_path[height - 1]
-                } else {
-                    0
-                };
+                let mut frontier = if at_frontier { traversal_path[height - 1] } else { 0 };
                 let cap = Arity::to_usize();
                 while data.peek().is_some() && frontier < cap {
                     let increment = children[frontier].extend_internal::<H, Arity>(
@@ -665,11 +626,7 @@ where
                     Ok(1)
                 } else {
                     let mut cnt = 0u64;
-                    let mut frontier = if at_frontier {
-                        traversal_path[height - 1]
-                    } else {
-                        0
-                    };
+                    let mut frontier = if at_frontier { traversal_path[height - 1] } else { 0 };
                     let cap = Arity::to_usize();
                     let mut children = vec![Box::new(MerkleNode::Empty); cap];
                     while data.peek().is_some() && frontier < cap {
@@ -722,11 +679,7 @@ where
         match self {
             MerkleNode::Branch { value, children } => {
                 let mut cnt = 0u64;
-                let mut frontier = if at_frontier {
-                    traversal_path[height - 1]
-                } else {
-                    0
-                };
+                let mut frontier = if at_frontier { traversal_path[height - 1] } else { 0 };
                 let cap = Arity::to_usize();
                 while data.peek().is_some() && frontier < cap {
                     if frontier > 0 && !children[frontier - 1].is_forgotten() {
@@ -761,11 +714,7 @@ where
                     Ok(1)
                 } else {
                     let mut cnt = 0u64;
-                    let mut frontier = if at_frontier {
-                        traversal_path[height - 1]
-                    } else {
-                        0
-                    };
+                    let mut frontier = if at_frontier { traversal_path[height - 1] } else { 0 };
                     let cap = Arity::to_usize();
                     let mut children = vec![Box::new(MerkleNode::Empty); cap];
                     while data.peek().is_some() && frontier < cap {
@@ -820,12 +769,7 @@ where
         H: DigestAlgorithm<E, I, T>,
         Arity: Unsigned,
     {
-        if let MerkleNode::<E, I, T>::Leaf {
-            value: _,
-            pos,
-            elem,
-        } = &self.proof[0]
-        {
+        if let MerkleNode::<E, I, T>::Leaf { value: _, pos, elem } = &self.proof[0] {
             let init = H::digest_leaf(pos, elem)?;
             let computed_root = self
                 .pos
@@ -851,9 +795,7 @@ where
                 Ok(Err(()))
             }
         } else {
-            Err(PrimitivesError::ParameterError(
-                "Invalid proof type".to_string(),
-            ))
+            Err(PrimitivesError::ParameterError("Invalid proof type".to_string()))
         }
     }
 
@@ -889,9 +831,7 @@ where
                 })?;
             Ok(computed_root == *expected_root)
         } else {
-            Err(PrimitivesError::ParameterError(
-                "Invalid proof type".to_string(),
-            ))
+            Err(PrimitivesError::ParameterError("Invalid proof type".to_string()))
         }
     }
 }

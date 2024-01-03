@@ -36,10 +36,8 @@ use mpc_relation::{constants::GATE_WIDTH, traits::*};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
-type CommitmentsAndPolys<E> = (
-    Vec<Commitment<E>>,
-    Vec<DensePolynomial<<E as Pairing>::ScalarField>>,
-);
+type CommitmentsAndPolys<E> =
+    (Vec<Commitment<E>>, Vec<DensePolynomial<<E as Pairing>::ScalarField>>);
 
 /// A Plonk IOP prover.
 pub(crate) struct Prover<E: Pairing> {
@@ -60,10 +58,7 @@ impl<E: Pairing> Prover<E> {
             domain_size * domain_size_ratio(domain_size, num_wire_types),
         )
         .ok_or(PlonkError::DomainCreationError)?;
-        Ok(Self {
-            domain,
-            quot_domain,
-        })
+        Ok(Self { domain, quot_domain })
     }
 
     /// Round 1:
@@ -110,14 +105,8 @@ impl<E: Pairing> Prover<E> {
         cs: &C,
         tau: E::ScalarField,
         mask: bool,
-    ) -> Result<
-        (
-            CommitmentsAndPolys<E>,
-            Vec<E::ScalarField>,
-            Vec<E::ScalarField>,
-        ),
-        PlonkError,
-    > {
+    ) -> Result<(CommitmentsAndPolys<E>, Vec<E::ScalarField>, Vec<E::ScalarField>), PlonkError>
+    {
         let merged_lookup_table = cs.compute_merged_lookup_table(tau)?;
         let (sorted_vec, h_1_poly, h_2_poly) =
             cs.compute_lookup_sorted_vec_polynomials(tau, &merged_lookup_table)?;
@@ -173,7 +162,7 @@ impl<E: Pairing> Prover<E> {
     ) -> Result<(Commitment<E>, DensePolynomial<E::ScalarField>), PlonkError> {
         if sorted_vec.is_none() {
             return Err(
-                ParameterError("Run Plookup with empty sorted lookup vectors".to_string()).into(),
+                ParameterError("Run Plookup with empty sorted lookup vectors".to_string()).into()
             );
         }
 
@@ -239,15 +228,10 @@ impl<E: Pairing> Prover<E> {
             .take(num_wire_types - 1)
             .map(|poly| poly.evaluate(&challenges.zeta))
             .collect();
-        let perm_next_eval = online_oracles
-            .prod_perm_poly
-            .evaluate(&(challenges.zeta * self.domain.group_gen));
+        let perm_next_eval =
+            online_oracles.prod_perm_poly.evaluate(&(challenges.zeta * self.domain.group_gen));
 
-        ProofEvaluations {
-            wires_evals,
-            wire_sigma_evals,
-            perm_next_eval,
-        }
+        ProofEvaluations { wires_evals, wire_sigma_evals, perm_next_eval }
     }
 
     /// Round 4.5 (Plookup): Compute and return evaluations of Plookup-related
@@ -285,10 +269,7 @@ impl<E: Pairing> Prover<E> {
         let q_dom_sep_eval = q_dom_sep_poly_ref.evaluate(&challenges.zeta);
 
         let zeta_mul_g = challenges.zeta * self.domain.group_gen;
-        let prod_next_eval = online_oracles
-            .plookup_oracles
-            .prod_lookup_poly
-            .evaluate(&zeta_mul_g);
+        let prod_next_eval = online_oracles.plookup_oracles.prod_lookup_poly.evaluate(&zeta_mul_g);
         let range_table_next_eval = range_table_poly_ref.evaluate(&zeta_mul_g);
         let key_table_next_eval = key_table_poly_ref.evaluate(&zeta_mul_g);
         let h_1_next_eval = online_oracles.plookup_oracles.h_polys[0].evaluate(&zeta_mul_g);
@@ -513,10 +494,11 @@ impl<E: Pairing> Prover<E> {
         eval_point: &E::ScalarField,
     ) -> Result<Commitment<E>, PlonkError> {
         // Compute the aggregated polynomial
-        let (batch_poly, _) = polys_ref.iter().fold(
-            (DensePolynomial::zero(), E::ScalarField::one()),
-            |(acc, coeff), &poly| (acc + Self::mul_poly(poly, &coeff), coeff * r),
-        );
+        let (batch_poly, _) = polys_ref
+            .iter()
+            .fold((DensePolynomial::zero(), E::ScalarField::one()), |(acc, coeff), &poly| {
+                (acc + Self::mul_poly(poly, &coeff), coeff * r)
+            });
 
         // Compute opening witness polynomial and its commitment
         let divisor =
@@ -560,10 +542,7 @@ impl<E: Pairing> Prover<E> {
         let alpha_3 = challenges.alpha.square() * challenges.alpha;
         let alpha_7 = alpha_3.square() * challenges.alpha;
         // TODO: figure out if the unwrap is safe/map error?
-        let coset = self
-            .quot_domain
-            .get_coset(E::ScalarField::GENERATOR)
-            .unwrap();
+        let coset = self.quot_domain.get_coset(E::ScalarField::GENERATOR).unwrap();
         // enumerate proving instances
         for (oracles, pk) in online_oracles.iter().zip(pks.iter()) {
             // lookup_flag = 1 if support Plookup argument.
@@ -626,9 +605,8 @@ impl<E: Pairing> Prover<E> {
             let quot_poly_coset_evals: Vec<E::ScalarField> =
                 parallelizable_slice_iter(&(0..m).collect::<Vec<_>>())
                     .map(|&i| {
-                        let w: Vec<E::ScalarField> = (0..num_wire_types)
-                            .map(|j| wire_polys_coset_fft[j][i])
-                            .collect();
+                        let w: Vec<E::ScalarField> =
+                            (0..num_wire_types).map(|j| wire_polys_coset_fft[j][i]).collect();
                         let w_next: Vec<E::ScalarField> = (0..num_wire_types)
                             .map(|j| wire_polys_coset_fft[j][(i + domain_size_ratio) % m])
                             .collect();
@@ -680,10 +658,7 @@ impl<E: Pairing> Prover<E> {
                     })
                     .collect();
 
-            for (a, b) in quot_poly_coset_evals_sum
-                .iter_mut()
-                .zip(quot_poly_coset_evals.iter())
-            {
+            for (a, b) in quot_poly_coset_evals_sum.iter_mut().zip(quot_poly_coset_evals.iter()) {
                 *a += alpha_base * b;
             }
             // update the random combiner for aggregating multiple proving instances
@@ -694,9 +669,7 @@ impl<E: Pairing> Prover<E> {
             }
         }
         // Compute the coefficient form of the quotient polynomial
-        Ok(DensePolynomial::from_coefficients_vec(
-            coset.ifft(&quot_poly_coset_evals_sum),
-        ))
+        Ok(DensePolynomial::from_coefficients_vec(coset.ifft(&quot_poly_coset_evals_sum)))
     }
 
     // Compute the i-th coset evaluation of the circuit part of the quotient
@@ -712,12 +685,10 @@ impl<E: Pairing> Prover<E> {
         // TODO: (binyi) get the order from a function.
         let q_lc: Vec<E::ScalarField> =
             (0..GATE_WIDTH).map(|j| selectors_coset_fft[j][i]).collect();
-        let q_mul: Vec<E::ScalarField> = (GATE_WIDTH..GATE_WIDTH + 2)
-            .map(|j| selectors_coset_fft[j][i])
-            .collect();
-        let q_hash: Vec<E::ScalarField> = (GATE_WIDTH + 2..2 * GATE_WIDTH + 2)
-            .map(|j| selectors_coset_fft[j][i])
-            .collect();
+        let q_mul: Vec<E::ScalarField> =
+            (GATE_WIDTH..GATE_WIDTH + 2).map(|j| selectors_coset_fft[j][i]).collect();
+        let q_hash: Vec<E::ScalarField> =
+            (GATE_WIDTH + 2..2 * GATE_WIDTH + 2).map(|j| selectors_coset_fft[j][i]).collect();
         let q_o = selectors_coset_fft[2 * GATE_WIDTH + 2][i];
         let q_c = selectors_coset_fft[2 * GATE_WIDTH + 3][i];
         let q_ecc = selectors_coset_fft[2 * GATE_WIDTH + 4][i];
@@ -765,9 +736,8 @@ impl<E: Pairing> Prover<E> {
         // Delay the division of Z_H(X).
         //
         // Extended permutation values
-        let sigmas: Vec<E::ScalarField> = (0..num_wire_types)
-            .map(|j| sigmas_coset_fft[j][i])
-            .collect();
+        let sigmas: Vec<E::ScalarField> =
+            (0..num_wire_types).map(|j| sigmas_coset_fft[j][i]).collect();
 
         // Compute the 1st term.
         let mut result_1 = challenges.alpha
@@ -776,11 +746,9 @@ impl<E: Pairing> Prover<E> {
             });
         // Minus the 2nd term.
         result_1 -= challenges.alpha
-            * w.iter()
-                .zip(sigmas.iter())
-                .fold(*z_xw, |acc, (&w, &sigma)| {
-                    acc * (w + sigma * challenges.beta + challenges.gamma)
-                });
+            * w.iter().zip(sigmas.iter()).fold(*z_xw, |acc, (&w, &sigma)| {
+                acc * (w + sigma * challenges.beta + challenges.gamma)
+            });
 
         // The check that z(x) = 1 at point 1.
         // (z(x)-1) * L1(x) * alpha^2 / Z_H(x) = (z(x)-1) * alpha^2 / (n * (x - 1))
@@ -976,18 +944,15 @@ impl<E: Pairing> Prover<E> {
         // with t_lowest_i(X) = t_lowest_i(X) - 0 + b_now_i * X^(n+2)
         // and t_highest_i(X) = t_highest_i(X) - b_last_i
         let mut last_randomizer = E::ScalarField::zero();
-        split_quot_polys
-            .iter_mut()
-            .take(num_wire_types - 1)
-            .for_each(|poly| {
-                let now_randomizer = E::ScalarField::rand(prng);
+        split_quot_polys.iter_mut().take(num_wire_types - 1).for_each(|poly| {
+            let now_randomizer = E::ScalarField::rand(prng);
 
-                poly.coeffs[0] -= last_randomizer;
-                assert_eq!(poly.degree(), n + 1);
-                poly.coeffs.push(now_randomizer);
+            poly.coeffs[0] -= last_randomizer;
+            assert_eq!(poly.degree(), n + 1);
+            poly.coeffs.push(now_randomizer);
 
-                last_randomizer = now_randomizer;
-            });
+            last_randomizer = now_randomizer;
+        });
         // mask the highest splitting poly
         split_quot_polys[num_wire_types - 1].coeffs[0] -= last_randomizer;
 
@@ -1152,9 +1117,7 @@ impl<E: Pairing> Prover<E> {
         coeff: &E::ScalarField,
     ) -> DensePolynomial<E::ScalarField> {
         DensePolynomial::<E::ScalarField>::from_coefficients_vec(
-            parallelizable_slice_iter(&poly.coeffs)
-                .map(|c| *coeff * c)
-                .collect(),
+            parallelizable_slice_iter(&poly.coeffs).map(|c| *coeff * c).collect(),
         )
     }
 }

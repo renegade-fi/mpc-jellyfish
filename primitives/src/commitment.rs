@@ -88,9 +88,7 @@ impl<F: RescueParameter, const INPUT_LEN: usize, const INPUT_LEN_PLUS_ONE: usize
         if <Self as CommitmentScheme>::commit(input, r)? == *comm {
             Ok(())
         } else {
-            Err(PrimitivesError::VerificationError(String::from(
-                "Commitment verification failed",
-            )))
+            Err(PrimitivesError::VerificationError(String::from("Commitment verification failed")))
         }
     }
 }
@@ -132,22 +130,16 @@ mod test {
 
             // smaller input size
             let bad_input = [input[0], input[1]];
-            assert!(
-                FixedLengthRescueCommitment::<$tr, 2, 3>::verify(&bad_input, Some(&blind), &c)
-                    .is_err()
-            );
+            assert!(FixedLengthRescueCommitment::<$tr, 2, 3>::verify(&bad_input, Some(&blind), &c)
+                .is_err());
             // bad blinding factor
             let bad_blind = blind + $tr::from(1u8);
-            assert!(
-                FixedLengthRescueCommitment::<$tr, 3, 4>::verify(&input, Some(&bad_blind), &c)
-                    .is_err()
-            );
+            assert!(FixedLengthRescueCommitment::<$tr, 3, 4>::verify(&input, Some(&bad_blind), &c)
+                .is_err());
             // bad input
             let bad_input = [$tr::from(2u64), $tr::from(1u64), $tr::from(3u64)];
-            assert!(
-                FixedLengthRescueCommitment::<$tr, 3, 4>::verify(&bad_input, Some(&blind), &c)
-                    .is_err()
-            );
+            assert!(FixedLengthRescueCommitment::<$tr, 3, 4>::verify(&bad_input, Some(&blind), &c)
+                .is_err());
         };
     }
 

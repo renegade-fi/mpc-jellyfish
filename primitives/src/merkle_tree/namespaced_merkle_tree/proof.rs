@@ -249,18 +249,12 @@ where
             }
         }
         // Verify that the proof contains the left boundary of the namespace
-        if self
-            .verify_left_namespace_boundary(root, namespace)
-            .is_err()
-        {
+        if self.verify_left_namespace_boundary(root, namespace).is_err() {
             return Ok(Err(()));
         }
 
         // Verify that the proof contains the right boundary of the namespace
-        if self
-            .verify_right_namespace_boundary(root, namespace)
-            .is_err()
-        {
+        if self.verify_right_namespace_boundary(root, namespace).is_err() {
             return Ok(Err(()));
         }
 

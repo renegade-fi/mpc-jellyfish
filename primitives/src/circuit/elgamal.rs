@@ -94,27 +94,23 @@ where
         // nonce == 0
         let mut counter_var = zero_var;
 
-        output_vars
-            .iter_mut()
-            .try_for_each(|output_chunk_vars| -> Result<(), CircuitError> {
-                let stream_chunk_vars = self.prp_with_round_keys(
-                    &RescueStateVar::from([counter_var, zero_var, zero_var, zero_var]),
-                    mds_states,
-                    &round_keys_var,
-                )?;
+        output_vars.iter_mut().try_for_each(|output_chunk_vars| -> Result<(), CircuitError> {
+            let stream_chunk_vars = self.prp_with_round_keys(
+                &RescueStateVar::from([counter_var, zero_var, zero_var, zero_var]),
+                mds_states,
+                &round_keys_var,
+            )?;
 
-                // Increment the counter
-                counter_var = self.add_constant(counter_var, &F::one())?;
+            // Increment the counter
+            counter_var = self.add_constant(counter_var, &F::one())?;
 
-                for (output_chunk_var, stream_chunk_var) in output_chunk_vars
-                    .array_mut()
-                    .iter_mut()
-                    .zip(stream_chunk_vars.array().iter())
-                {
-                    *output_chunk_var = self.add(*output_chunk_var, *stream_chunk_var)?;
-                }
-                Ok(())
-            })?;
+            for (output_chunk_var, stream_chunk_var) in
+                output_chunk_vars.array_mut().iter_mut().zip(stream_chunk_vars.array().iter())
+            {
+                *output_chunk_var = self.add(*output_chunk_var, *stream_chunk_var)?;
+            }
+            Ok(())
+        })?;
 
         Ok(output_vars)
     }
@@ -218,10 +214,7 @@ where
         let symm_ctxts = self.apply_counter_mode_stream(&symm_key_vars, data_vars)?;
         let base = Affine::<P>::generator();
         let ephemeral = self.fixed_base_scalar_mul(r, &base)?;
-        Ok(ElGamalHybridCtxtVars {
-            ephemeral,
-            symm_ctxts,
-        })
+        Ok(ElGamalHybridCtxtVars { ephemeral, symm_ctxts })
     }
 
     fn create_enc_key_variable(&mut self, pk: &EncKey<P>) -> Result<EncKeyVars, CircuitError> {
@@ -241,10 +234,7 @@ where
             .iter()
             .map(|&msg| self.create_variable(msg))
             .collect::<Result<Vec<_>, CircuitError>>()?;
-        Ok(ElGamalHybridCtxtVars {
-            ephemeral,
-            symm_ctxts,
-        })
+        Ok(ElGamalHybridCtxtVars { ephemeral, symm_ctxts })
     }
 }
 
@@ -303,9 +293,8 @@ mod tests {
             data_vars.push(circuit.create_rescue_state_variable(&block_vector).unwrap());
         }
 
-        let ctxts_vars = circuit
-            .apply_counter_mode_stream_no_padding(&key_var, data_vars.as_slice())
-            .unwrap();
+        let ctxts_vars =
+            circuit.apply_counter_mode_stream_no_padding(&key_var, data_vars.as_slice()).unwrap();
 
         let encrypted_data = apply_counter_mode_stream::<F>(&key, &data, &F::zero(), Encrypt);
 
@@ -355,10 +344,8 @@ mod tests {
         // the input size is a non multiple of STATE_SIZE
         let data: Vec<F> = (0..5 * STATE_SIZE + 1).map(|i| F::from(i as u32)).collect();
         let input_len = data.len();
-        let data_vars: Vec<Variable> = data
-            .iter()
-            .map(|x| circuit.create_variable(*x).unwrap())
-            .collect();
+        let data_vars: Vec<Variable> =
+            data.iter().map(|x| circuit.create_variable(*x).unwrap()).collect();
 
         let r = P::ScalarField::rand(&mut prng);
         let enc_rand_var = circuit.create_variable(fr_to_fq::<F, P>(&r)).unwrap();
@@ -426,9 +413,7 @@ mod tests {
         // Prepare ciphertext
         let rng = &mut jf_utils::test_rng();
         let data: Vec<F> = (0..5 * STATE_SIZE + 1).map(|i| F::from(i as u32)).collect();
-        let ctxts = KeyPair::<P>::generate(rng)
-            .enc_key_ref()
-            .encrypt(rng, &data);
+        let ctxts = KeyPair::<P>::generate(rng).enc_key_ref().encrypt(rng, &data);
         // Create circuit
         let mut circuit = PlonkCircuit::new_turbo_plonk();
         let ctxts_var = circuit.create_ciphertext_variable(&ctxts).unwrap();

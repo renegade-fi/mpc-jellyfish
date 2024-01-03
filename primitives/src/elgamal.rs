@@ -144,9 +144,7 @@ where
         }
         let key = Affine::new(scalars[0], scalars[1]);
 
-        let ephemeral = EncKey {
-            key: key.into_group(),
-        };
+        let ephemeral = EncKey { key: key.into_group() };
         let mut data = vec![];
         data.extend_from_slice(&scalars[2..]);
         Ok(Self { ephemeral, data })
@@ -163,9 +161,7 @@ where
 {
     /// Key generation algorithm for public key encryption scheme
     pub fn generate<R: CryptoRng + RngCore>(rng: &mut R) -> KeyPair<P> {
-        let dec = DecKey {
-            key: P::ScalarField::rand(rng),
-        };
+        let dec = DecKey { key: P::ScalarField::rand(rng) };
         let enc = EncKey::from(&dec);
         KeyPair { enc, dec }
     }
@@ -202,9 +198,7 @@ impl<P: Config> UniformRand for EncKey<P> {
     where
         R: Rng + RngCore + ?Sized,
     {
-        EncKey {
-            key: Projective::<P>::rand(rng),
-        }
+        EncKey { key: Projective::<P>::rand(rng) }
     }
 }
 
@@ -222,12 +216,8 @@ where
         let perm = Permutation::default();
         // TODO check if ok to use (x,y,0,0) as a key, since
         // key = perm(x,y,0,0) doesn't buy us anything.
-        let key = perm.eval(&RescueVector::from(&[
-            shared_key.x,
-            shared_key.y,
-            F::zero(),
-            F::zero(),
-        ]));
+        let key =
+            perm.eval(&RescueVector::from(&[shared_key.x, shared_key.y, F::zero(), F::zero()]));
         // since key was just sampled and to be used only once, we can allow NONCE = 0
         Ciphertext {
             ephemeral: ephemeral_key_pair.enc_key(),
@@ -264,12 +254,8 @@ where
     fn decrypt(&self, ctext: &Ciphertext<P>) -> Vec<P::BaseField> {
         let perm = Permutation::default();
         let shared_key = (ctext.ephemeral.key * self.key).into_affine();
-        let key = perm.eval(&RescueVector::from(&[
-            shared_key.x,
-            shared_key.y,
-            F::zero(),
-            F::zero(),
-        ]));
+        let key =
+            perm.eval(&RescueVector::from(&[shared_key.x, shared_key.y, F::zero(), F::zero()]));
         // since key was just samples and to be used only once, we can have NONCE = 0
         apply_counter_mode_stream::<F>(&key, ctext.data.as_slice(), &F::zero(), Decrypt)
     }
@@ -321,12 +307,7 @@ where
     let round_fn = |(idx, output_chunk): (usize, &mut [F])| {
         let stream_chunk = prp.prp_with_round_keys(
             &round_keys,
-            &RescueVector::from(&[
-                nonce.add(F::from(idx as u64)),
-                F::zero(),
-                F::zero(),
-                F::zero(),
-            ]),
+            &RescueVector::from(&[nonce.add(F::from(idx as u64)), F::zero(), F::zero(), F::zero()]),
         );
         for (output_elem, stream_elem) in output_chunk.iter_mut().zip(stream_chunk.elems().iter()) {
             match direction {
@@ -337,17 +318,11 @@ where
     };
     #[cfg(feature = "parallel")]
     {
-        output
-            .par_chunks_exact_mut(STATE_SIZE)
-            .enumerate()
-            .for_each(round_fn);
+        output.par_chunks_exact_mut(STATE_SIZE).enumerate().for_each(round_fn);
     }
     #[cfg(not(feature = "parallel"))]
     {
-        output
-            .chunks_exact_mut(STATE_SIZE)
-            .enumerate()
-            .for_each(round_fn);
+        output.chunks_exact_mut(STATE_SIZE).enumerate().for_each(round_fn);
     }
     // remove dummy padding elements
     output.truncate(data.len());

@@ -53,10 +53,7 @@ where
     ) -> Result<RescueNonNativeStateVar<F>, CircuitError> {
         let permutation = Permutation::<T>::default();
         let keys = permutation.round_keys_ref();
-        let keys = keys
-            .iter()
-            .map(|key| RescueVector::from(key.elems().as_slice()))
-            .collect_vec();
+        let keys = keys.iter().map(|key| RescueVector::from(key.elems().as_slice())).collect_vec();
         let mds_matrix = permutation.mds_matrix_ref();
 
         self.permutation_with_const_round_keys(input_var, mds_matrix, keys.as_slice())
@@ -90,12 +87,9 @@ where
         let rate = STATE_SIZE - 1;
         let data_len = compute_len_to_next_multiple(data_vars.len() + 1, rate);
 
-        let data_vars = [
-            data_vars,
-            &[one_var],
-            vec![zero_var; data_len - data_vars.len() - 1].as_ref(),
-        ]
-        .concat();
+        let data_vars =
+            [data_vars, &[one_var], vec![zero_var; data_len - data_vars.len() - 1].as_ref()]
+                .concat();
 
         RescueNonNativeGadget::<T, F>::rescue_sponge_no_padding(self, &data_vars, num_output)
     }
@@ -212,10 +206,8 @@ where
         let modulus = FpElem::new(&t_modulus, m, two_power_m)?;
 
         // set key
-        let mut state = RescueNonNativeStateVar {
-            state: [zero_var, zero_var, zero_var, key],
-            modulus,
-        };
+        let mut state =
+            RescueNonNativeStateVar { state: [zero_var, zero_var, zero_var, key], modulus };
 
         // absorb phase
         let chunks = data_vars.chunks_exact(STATE_SIZE);
@@ -246,11 +238,7 @@ where
         let t = FpElem::new(&t_modulus, m, None)?;
 
         // move rescue state to the plonk field
-        let state_f: Vec<F> = state
-            .elems()
-            .iter()
-            .map(|x| field_switching::<T, F>(x))
-            .collect();
+        let state_f: Vec<F> = state.elems().iter().map(|x| field_switching::<T, F>(x)).collect();
 
         // create vars for states
         let mut state_split_var = [FpElemVar::<F>::default(); STATE_SIZE];
@@ -258,10 +246,7 @@ where
             *var = FpElemVar::new_from_field_element(self, f, m, Some(t.two_power_m()))?;
         }
 
-        Ok(RescueNonNativeStateVar {
-            state: state_split_var,
-            modulus: t,
-        })
+        Ok(RescueNonNativeStateVar { state: state_split_var, modulus: t })
     }
 
     fn key_schedule(
@@ -364,36 +349,23 @@ where
         )?;
 
         // move constant to the plonk field
-        let constant_f: Vec<F> = constant
-            .elems()
-            .iter()
-            .map(|x| field_switching::<T, F>(x))
-            .collect();
+        let constant_f: Vec<F> =
+            constant.elems().iter().map(|x| field_switching::<T, F>(x)).collect();
 
         let constant_split: Vec<FpElem<F>> = constant_f
             .iter()
             .map(|x| {
-                FpElem::new(
-                    x,
-                    input_var.state[0].param_m(),
-                    Some(input_var.state[0].two_power_m()),
-                )
+                FpElem::new(x, input_var.state[0].param_m(), Some(input_var.state[0].two_power_m()))
             })
             .collect::<Result<Vec<FpElem<F>>, _>>()?;
 
         // add constant to input
         let mut state = [FpElemVar::default(); STATE_SIZE];
-        for (z, (x, y)) in state
-            .iter_mut()
-            .zip(input_var.state.iter().zip(constant_split.iter()))
-        {
+        for (z, (x, y)) in state.iter_mut().zip(input_var.state.iter().zip(constant_split.iter())) {
             *z = self.mod_add_constant(x, y, &input_var.modulus)?
         }
 
-        Ok(RescueNonNativeStateVar {
-            state,
-            modulus: input_var.modulus,
-        })
+        Ok(RescueNonNativeStateVar { state, modulus: input_var.modulus })
     }
 
     fn pow_alpha_inv_state(
@@ -410,10 +382,7 @@ where
             *e = PermutationGadget::<RescueNonNativeStateVar<F>, T, F>::pow_alpha_inv(self, *f)?;
         }
 
-        Ok(RescueNonNativeStateVar {
-            state,
-            modulus: input_var.modulus,
-        })
+        Ok(RescueNonNativeStateVar { state, modulus: input_var.modulus })
     }
 
     fn affine_transform(
@@ -437,10 +406,8 @@ where
             .map(|x| x.witness(self))
             .collect::<Result<Vec<F>, CircuitError>>()?;
 
-        let input_val_fields_elems_t: Vec<T> = input_val_fields_elems_f
-            .iter()
-            .map(|x| field_switching::<F, T>(x))
-            .collect();
+        let input_val_fields_elems_t: Vec<T> =
+            input_val_fields_elems_f.iter().map(|x| field_switching::<F, T>(x)).collect();
 
         let input_val = RescueVector::from(input_val_fields_elems_t.as_slice());
 
@@ -449,11 +416,7 @@ where
             .elems()
             .iter()
             .map(|x| {
-                FpElem::new(
-                    &field_switching::<T, F>(x),
-                    m,
-                    Some(input_fp_elem[0].two_power_m()),
-                )
+                FpElem::new(&field_switching::<T, F>(x), m, Some(input_fp_elem[0].two_power_m()))
             })
             .collect::<Result<Vec<FpElem<F>>, _>>()?;
 
@@ -498,10 +461,7 @@ where
             self.enforce_equal(output_fp_elem[i].components().0, output_var2.components().0)?;
             self.enforce_equal(output_fp_elem[i].components().1, output_var2.components().1)?;
         }
-        Ok(RescueNonNativeStateVar {
-            state: output_fp_elem,
-            modulus: input_var.modulus,
-        })
+        Ok(RescueNonNativeStateVar { state: output_fp_elem, modulus: input_var.modulus })
     }
 
     fn non_linear_transform(
@@ -525,10 +485,8 @@ where
             .map(|x| x.witness(self))
             .collect::<Result<Vec<F>, CircuitError>>()?;
 
-        let input_val_fields_elems_t: Vec<T> = input_val_fields_elems_f
-            .iter()
-            .map(|x| field_switching::<F, T>(x))
-            .collect();
+        let input_val_fields_elems_t: Vec<T> =
+            input_val_fields_elems_f.iter().map(|x| field_switching::<F, T>(x)).collect();
 
         if T::A == 11 {
             // generate the `power 11 vector` and its wires
@@ -559,9 +517,7 @@ where
             // parameter for bn254 and bls12-381 curves.
             // The target use case of this non-native circuit is
             // bls12-377 which only requires alpha = 11.
-            Err(CircuitError::ParameterError(
-                "incorrect Rescue parameters".to_string(),
-            ))
+            Err(CircuitError::ParameterError("incorrect Rescue parameters".to_string()))
         }
     }
 
@@ -592,9 +548,7 @@ where
             // parameter for bn254 and bls12-381 curves.
             // The target use case of this non-native circuit is
             // bls12-377 which only requires alpha = 11.
-            Err(CircuitError::ParameterError(
-                "incorrect Rescue parameters".to_string(),
-            ))
+            Err(CircuitError::ParameterError("incorrect Rescue parameters".to_string()))
         }
     }
 
@@ -613,9 +567,7 @@ where
         )?;
 
         if left_state_var.modulus != right_state_var.modulus {
-            return Err(CircuitError::ParameterError(
-                "Rescue modulus do not match".to_string(),
-            ));
+            return Err(CircuitError::ParameterError("Rescue modulus do not match".to_string()));
         }
         let modulus = left_state_var.modulus;
 
@@ -749,15 +701,10 @@ mod tests {
         let input_var = circuit.create_rescue_state_variable(&state).unwrap();
         let out_var = circuit.add_constant_state(&input_var, &constant).unwrap();
 
-        let out_value: Vec<T> = (0..STATE_SIZE)
-            .map(|i| constant.elems()[i] + state.elems()[i])
-            .collect();
+        let out_value: Vec<T> =
+            (0..STATE_SIZE).map(|i| constant.elems()[i] + state.elems()[i]).collect();
 
-        check_state(
-            &circuit,
-            &out_var,
-            &RescueVector::<T>::from(out_value.as_slice()),
-        );
+        check_state(&circuit, &out_var, &RescueVector::<T>::from(out_value.as_slice()));
 
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
 
@@ -792,15 +739,9 @@ mod tests {
         )
         .unwrap();
 
-        let out_value: Vec<T> = (0..STATE_SIZE)
-            .map(|i| state.elems()[i].pow(T::A_INV))
-            .collect();
+        let out_value: Vec<T> = (0..STATE_SIZE).map(|i| state.elems()[i].pow(T::A_INV)).collect();
 
-        check_state(
-            &circuit,
-            &out_var,
-            &RescueVector::from(out_value.as_slice()),
-        );
+        check_state(&circuit, &out_var, &RescueVector::from(out_value.as_slice()));
 
         check_circuit_satisfiability(&mut circuit, out_value, out_var);
     }
@@ -817,9 +758,7 @@ mod tests {
 
         let input_var = circuit.create_rescue_state_variable(&state_in).unwrap();
 
-        let out_var = circuit
-            .affine_transform(&input_var, &matrix, &constant)
-            .unwrap();
+        let out_var = circuit.affine_transform(&input_var, &matrix, &constant).unwrap();
 
         let mut out_value = state_in;
         out_value.linear(&matrix, &constant);
@@ -840,9 +779,7 @@ mod tests {
 
         let input_var = circuit.create_rescue_state_variable(&state_in).unwrap();
 
-        let out_var = circuit
-            .non_linear_transform(&input_var, &matrix, &constant)
-            .unwrap();
+        let out_var = circuit.non_linear_transform(&input_var, &matrix, &constant).unwrap();
 
         let mut out_value = state_in;
         out_value.non_linear(&matrix, &constant);
@@ -883,12 +820,8 @@ mod tests {
     fn test_add_state_helper<T: RescueParameter, F: PrimeField>() {
         let mut circuit = PlonkCircuit::<F>::new_ultra_plonk(RANGE_BIT_LEN_FOR_TEST);
 
-        let state1 = RescueVector::from(&[
-            T::from(12_u32),
-            T::from(7_u32),
-            T::from(4_u32),
-            T::from(3_u32),
-        ]);
+        let state1 =
+            RescueVector::from(&[T::from(12_u32), T::from(7_u32), T::from(4_u32), T::from(3_u32)]);
 
         let state2 = RescueVector::from(&[
             T::from(1_u32),
@@ -906,15 +839,10 @@ mod tests {
         )
         .unwrap();
 
-        let out_value: Vec<T> = (0..STATE_SIZE)
-            .map(|i| state1.elems()[i] + state2.elems()[i])
-            .collect();
+        let out_value: Vec<T> =
+            (0..STATE_SIZE).map(|i| state1.elems()[i] + state2.elems()[i]).collect();
 
-        check_state(
-            &circuit,
-            &out_var,
-            &RescueVector::from(out_value.as_slice()),
-        );
+        check_state(&circuit, &out_var, &RescueVector::from(out_value.as_slice()));
 
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
 
@@ -1188,10 +1116,7 @@ mod tests {
         let expected_hash =
             RescueCRHF::sponge_no_padding(&[input_vec_t[0], input_vec_t[1], input_vec_t[2]], 1)
                 .unwrap()[0];
-        assert_eq!(
-            field_switching::<T, F>(&expected_hash),
-            out_var.witness(&circuit).unwrap()
-        );
+        assert_eq!(field_switching::<T, F>(&expected_hash), out_var.witness(&circuit).unwrap());
 
         // Check constraints
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
@@ -1253,19 +1178,14 @@ mod tests {
 
         // make data_vars of bad lenth
         let mut data_vars = data_vars;
-        let zero_var = FpElemVar::zero(
-            &circuit,
-            data_vars[0].param_m(),
-            Some(key_var.two_power_m()),
-        );
+        let zero_var =
+            FpElemVar::zero(&circuit, data_vars[0].param_m(), Some(key_var.two_power_m()));
         data_vars.push(zero_var);
-        assert!(
-            RescueNonNativeGadget::<T, F>::rescue_full_state_keyed_sponge_no_padding(
-                &mut circuit,
-                key_var,
-                &data_vars
-            )
-            .is_err()
-        );
+        assert!(RescueNonNativeGadget::<T, F>::rescue_full_state_keyed_sponge_no_padding(
+            &mut circuit,
+            key_var,
+            &data_vars
+        )
+        .is_err());
     }
 }

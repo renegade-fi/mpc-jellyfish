@@ -101,11 +101,8 @@ where
         non_native_field_info.m,
         non_native_field_info.two_power_m,
     )?;
-    let one_fp_elem = FpElem::new(
-        &F::one(),
-        non_native_field_info.m,
-        non_native_field_info.two_power_m,
-    )?;
+    let one_fp_elem =
+        FpElem::new(&F::one(), non_native_field_info.m, non_native_field_info.two_power_m)?;
     let zeta_n_fp_elem_var_rec = circuit.mod_add_constant(
         &zeta_n_minus_one_fp_elem_var,
         &one_fp_elem,
@@ -160,11 +157,7 @@ where
     )?;
     left.enforce_equal(circuit, &zeta_n_minus_one_fp_elem_var)?;
 
-    Ok([
-        zeta_n_fp_elem_var,
-        zeta_n_minus_one_fp_elem_var,
-        lagrange_1_eval_fp_elem_var,
-    ])
+    Ok([zeta_n_fp_elem_var, zeta_n_minus_one_fp_elem_var, lagrange_1_eval_fp_elem_var])
 }
 
 /// Evaluate public input polynomial at point `z`.
@@ -194,9 +187,7 @@ where
 {
     // the circuit is already merged
     if !circuit_is_merged {
-        return Err(CircuitError::ParameterError(
-            "Circuit should already been merged".to_string(),
-        ));
+        return Err(CircuitError::ParameterError("Circuit should already been merged".to_string()));
     }
     let len = pub_inputs_fp_elem_var.len() >> 1;
 
@@ -387,14 +378,10 @@ where
         // =====================================================
 
         // \prod_i=1..m-1 (w_{j,i} + beta * sigma_{j,i} + gamma)
-        let mut prod = FpElemVar::one(
-            circuit,
-            non_native_field_info.m,
-            non_native_field_info.two_power_m,
-        );
-        for (w_j_i_var, sigma_j_i_var) in poly_evals.wires_evals[..GATE_WIDTH]
-            .iter()
-            .zip(poly_evals.wire_sigma_evals.iter())
+        let mut prod =
+            FpElemVar::one(circuit, non_native_field_info.m, non_native_field_info.two_power_m);
+        for (w_j_i_var, sigma_j_i_var) in
+            poly_evals.wires_evals[..GATE_WIDTH].iter().zip(poly_evals.wire_sigma_evals.iter())
         {
             let beta_sigma_j_i = circuit.mod_mul(
                 &challenges.beta,
@@ -423,11 +410,8 @@ where
         // tmp = alpha *
         //  \prod_i=1..m-1 (w_{j,i} + beta * sigma_{j,i} + gamma)
         //  * (w_{j,m} + gamma) * z_j(xw)
-        tmp = circuit.mod_mul(
-            &tmp,
-            &challenges.alphas[0],
-            &non_native_field_info.modulus_fp_elem,
-        )?;
+        tmp =
+            circuit.mod_mul(&tmp, &challenges.alphas[0], &non_native_field_info.modulus_fp_elem)?;
         tmp = circuit.mod_mul(&tmp, &prod, &non_native_field_info.modulus_fp_elem)?;
         let tmp_fr = field_switching::<_, E::ScalarField>(&tmp.witness(circuit)?);
 
@@ -451,9 +435,7 @@ where
 
         // preparing data for second statement
         let r_0_component = circuit.mod_mul(
-            alpha_bases_elem_var
-                .next()
-                .ok_or(PlonkError::IteratorOutOfRange)?,
+            alpha_bases_elem_var.next().ok_or(PlonkError::IteratorOutOfRange)?,
             &r_plonk_j_fp_elem_var,
             &non_native_field_info.modulus_fp_elem,
         )?;
@@ -527,9 +509,8 @@ where
         // where a_bar, b_bar and c_bar are in w_evals
         // ============================================
 
-        let current_alpha_bases = alpha_bases_elem_var
-            .next()
-            .ok_or(PlonkError::IteratorOutOfRange)?;
+        let current_alpha_bases =
+            alpha_bases_elem_var.next().ok_or(PlonkError::IteratorOutOfRange)?;
 
         let mut coeff_fp_elem_var = alpha_2_mul_l1;
         let w_evals = &batch_proof.poly_evals_vec[i].wires_evals;
@@ -551,11 +532,8 @@ where
             )?;
             prod = circuit.mod_mul(&prod, &sum, &non_native_field_info.modulus_fp_elem)?;
         }
-        coeff_fp_elem_var = circuit.mod_add(
-            &coeff_fp_elem_var,
-            &prod,
-            &non_native_field_info.modulus_fp_elem,
-        )?;
+        coeff_fp_elem_var =
+            circuit.mod_add(&coeff_fp_elem_var, &prod, &non_native_field_info.modulus_fp_elem)?;
         // multiply the final results with alpha_base
         coeff_fp_elem_var = circuit.mod_mul(
             &coeff_fp_elem_var,
@@ -564,9 +542,7 @@ where
         )?;
         // Add permutation product polynomial commitment.
         scalars_and_bases.scalars.push(coeff_fp_elem_var);
-        scalars_and_bases
-            .bases
-            .push(batch_proof.prod_perm_poly_comms_vec[i]);
+        scalars_and_bases.bases.push(batch_proof.prod_perm_poly_comms_vec[i]);
 
         // ============================================
         // Compute coefficient for the last wire sigma polynomial commitment.
@@ -582,11 +558,7 @@ where
             &non_native_field_info.modulus_fp_elem,
         )?;
 
-        for (&x_bar, sigma_i) in w_evals
-            .iter()
-            .take(num_wire_types - 1)
-            .zip(sigma_evals.iter())
-        {
+        for (&x_bar, sigma_i) in w_evals.iter().take(num_wire_types - 1).zip(sigma_evals.iter()) {
             let beta_times_s_bar_sigma_1 = circuit.mod_mul(
                 &challenges.beta,
                 sigma_i,
@@ -656,33 +628,21 @@ where
         ));
         // q_scalars[12]
         // = w_evals[0] * w_evals[1] * w_evals[2] * w_evals[3] * w_evals[4];
-        let mut tmp = circuit.mod_mul(
-            &w_evals[0],
-            &w_evals[1],
-            &non_native_field_info.modulus_fp_elem,
-        )?;
+        let mut tmp =
+            circuit.mod_mul(&w_evals[0], &w_evals[1], &non_native_field_info.modulus_fp_elem)?;
         tmp = circuit.mod_mul(&tmp, &w_evals[2], &non_native_field_info.modulus_fp_elem)?;
         tmp = circuit.mod_mul(&tmp, &w_evals[3], &non_native_field_info.modulus_fp_elem)?;
         tmp = circuit.mod_mul(&tmp, &w_evals[4], &non_native_field_info.modulus_fp_elem)?;
         q_scalars_fp_elem_vars.push(tmp);
 
-        for (i, (s, &poly)) in q_scalars_fp_elem_vars
-            .iter()
-            .zip(vk.selector_comms.iter())
-            .enumerate()
+        for (i, (s, &poly)) in
+            q_scalars_fp_elem_vars.iter().zip(vk.selector_comms.iter()).enumerate()
         {
             // inverse the bases for w_eval[10]
-            let bases = if i == 10 {
-                circuit.inverse_point(&poly)?
-            } else {
-                poly
-            };
+            let bases = if i == 10 { circuit.inverse_point(&poly)? } else { poly };
 
-            let tmp = circuit.mod_mul(
-                s,
-                current_alpha_bases,
-                &non_native_field_info.modulus_fp_elem,
-            )?;
+            let tmp =
+                circuit.mod_mul(s, current_alpha_bases, &non_native_field_info.modulus_fp_elem)?;
             scalars_and_bases.scalars.push(tmp);
             scalars_and_bases.bases.push(bases);
         }
@@ -708,20 +668,14 @@ where
 
     let mut coeff = poly_evals[1];
     let tmp = circuit.inverse_point(
-        batch_proof
-            .split_quot_poly_comms
-            .first()
-            .ok_or(CircuitError::IndexError)?,
+        batch_proof.split_quot_poly_comms.first().ok_or(CircuitError::IndexError)?,
     )?;
     scalars_and_bases.scalars.push(poly_evals[1]);
     scalars_and_bases.bases.push(tmp);
 
     for &poly in batch_proof.split_quot_poly_comms.iter().skip(1) {
-        coeff = circuit.mod_mul(
-            &coeff,
-            &zeta_to_n_plus_2,
-            &non_native_field_info.modulus_fp_elem,
-        )?;
+        coeff =
+            circuit.mod_mul(&coeff, &zeta_to_n_plus_2, &non_native_field_info.modulus_fp_elem)?;
         let poly = circuit.inverse_point(&poly)?;
         scalars_and_bases.scalars.push(coeff);
         scalars_and_bases.bases.push(poly);
@@ -789,10 +743,7 @@ mod test {
 
             // check the correctness
             let tmp = eval_results[0].convert_to_var(&mut circuit).unwrap();
-            assert_eq!(
-                field_switching::<_, E::BaseField>(&zeta_n),
-                circuit.witness(tmp).unwrap(),
-            );
+            assert_eq!(field_switching::<_, E::BaseField>(&zeta_n), circuit.witness(tmp).unwrap(),);
 
             let tmp = eval_results[1].convert_to_var(&mut circuit).unwrap();
             assert_eq!(

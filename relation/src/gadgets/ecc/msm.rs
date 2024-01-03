@@ -207,11 +207,7 @@ where
     // ================================================
     // set up parameters
     // ================================================
-    let c = if scalar_bit_length < 32 {
-        3
-    } else {
-        ln_without_floats(scalar_bit_length)
-    };
+    let c = if scalar_bit_length < 32 { 3 } else { ln_without_floats(scalar_bit_length) };
 
     // ================================================
     // compute lookup tables and window sums
@@ -267,18 +263,15 @@ where
     let lowest = *window_sums.first().unwrap();
 
     // We're traversing windows from high to low.
-    let b = &window_sums[1..]
-        .iter()
-        .rev()
-        .fold(point_zero_var, |mut total, sum_i| {
-            // total += sum_i
-            total = circuit.ecc_add::<P>(&total, sum_i).unwrap();
-            for _ in 0..c {
-                // double
-                total = circuit.ecc_add::<P>(&total, &total).unwrap();
-            }
-            total
-        });
+    let b = &window_sums[1..].iter().rev().fold(point_zero_var, |mut total, sum_i| {
+        // total += sum_i
+        total = circuit.ecc_add::<P>(&total, sum_i).unwrap();
+        for _ in 0..c {
+            // double
+            total = circuit.ecc_add::<P>(&total, &total).unwrap();
+        }
+        total
+    });
     circuit.ecc_add::<P>(&lowest, b)
 }
 
@@ -292,10 +285,8 @@ fn create_point_lookup_gates<F>(
 where
     F: PrimeField,
 {
-    let table_vars: Vec<(Variable, Variable)> = table_point_vars
-        .iter()
-        .map(|p| (p.get_x(), p.get_y()))
-        .collect();
+    let table_vars: Vec<(Variable, Variable)> =
+        table_point_vars.iter().map(|p| (p.get_x(), p.get_y())).collect();
     let lookup_vars: Vec<(Variable, Variable, Variable)> = lookup_scalar_vars
         .iter()
         .zip(lookup_point_vars.iter())

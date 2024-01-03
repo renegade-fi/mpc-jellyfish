@@ -14,11 +14,8 @@ pub fn multi_pairing<E>(g1_elems: &[E::G1Affine], g2_elems: &[E::G2Affine]) -> P
 where
     E: Pairing,
 {
-    let (inputs_g1, inputs_g2): (Vec<E::G1Prepared>, Vec<E::G2Prepared>) = g1_elems
-        .iter()
-        .zip(g2_elems.iter())
-        .map(|(g1, g2)| ((*g1).into(), (*g2).into()))
-        .unzip();
+    let (inputs_g1, inputs_g2): (Vec<E::G1Prepared>, Vec<E::G2Prepared>) =
+        g1_elems.iter().zip(g2_elems.iter()).map(|(g1, g2)| ((*g1).into(), (*g2).into())).unzip();
 
     E::multi_pairing(inputs_g1, inputs_g2)
 }
@@ -65,11 +62,8 @@ mod test {
         assert_eq!(multi_pairing::<E>(&[g1, f1], &[g2, f2]), ht);
 
         // equality test
-        assert!(multi_pairing::<E>(
-            &[g1, (g1 * -E::ScalarField::one()).into_affine()],
-            &[g2, g2]
-        )
-        .0
-        .is_one());
+        assert!(multi_pairing::<E>(&[g1, (g1 * -E::ScalarField::one()).into_affine()], &[g2, g2])
+            .0
+            .is_one());
     }
 }

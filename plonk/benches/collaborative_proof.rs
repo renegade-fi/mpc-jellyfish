@@ -71,11 +71,8 @@ fn bench_singleprover(c: &mut Criterion) {
 
 /// Benchmark a collaborative proof on a test circuit
 fn bench_multiprover(c: &mut Criterion) {
-    let runtime = RuntimeBuilder::new_multi_thread()
-        .worker_threads(3)
-        .enable_all()
-        .build()
-        .unwrap();
+    let runtime =
+        RuntimeBuilder::new_multi_thread().worker_threads(3).enable_all().build().unwrap();
 
     let pk = setup_pk();
 
@@ -103,10 +100,7 @@ fn bench_multiprover(c: &mut Criterion) {
 /// Return the latency excluding the MPC setup time
 async fn multiprover_prove(pk: &ProvingKey<TestCurve>) -> Duration {
     // These values are fine tuned
-    let size = ExecutorSizeHints {
-        n_ops: 5_000,
-        n_results: 5_000_000,
-    };
+    let size = ExecutorSizeHints { n_ops: 5_000, n_results: 5_000_000 };
 
     let (elapsed1, elapsed2) = execute_mock_mpc_with_size_hint(
         |fabric| {

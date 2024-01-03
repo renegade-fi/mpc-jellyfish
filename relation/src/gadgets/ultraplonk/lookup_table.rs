@@ -38,32 +38,18 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let table_ctr = F::from(self.table_gate_ids_mut().len() as u64);
         for i in 0..n {
             let (q_dom_sep, key, val0, val1) = match i < lookup_vars.len() {
-                true => (
-                    table_ctr,
-                    lookup_vars[i].0,
-                    lookup_vars[i].1,
-                    lookup_vars[i].2,
-                ),
+                true => (table_ctr, lookup_vars[i].0, lookup_vars[i].1, lookup_vars[i].2),
                 false => (F::zero(), self.zero(), self.zero(), self.zero()),
             };
             let (table_dom_sep, table_key, table_val0, table_val1) = match i < table_vars.len() {
-                true => (
-                    table_ctr,
-                    F::from(i as u64),
-                    table_vars[i].0,
-                    table_vars[i].1,
-                ),
+                true => (table_ctr, F::from(i as u64), table_vars[i].0, table_vars[i].1),
                 false => (F::zero(), F::zero(), self.zero(), self.zero()),
             };
             let wire_vars = [key, val0, val1, table_val0, table_val1];
 
             self.insert_gate(
                 &wire_vars,
-                Box::new(LookupGate {
-                    q_dom_sep,
-                    table_dom_sep,
-                    table_key,
-                }),
+                Box::new(LookupGate { q_dom_sep, table_dom_sep, table_key }),
             )?;
         }
         *self.num_table_elems_mut() += n;
@@ -102,18 +88,15 @@ mod test {
         }
         // create lookup variables
         let mut lookup_vars = vec![];
-        table_vars
-            .iter()
-            .enumerate()
-            .try_for_each(|(i, (idx0, idx1))| {
-                let val0 = circuit.witness(*idx0)?;
-                let val1 = circuit.witness(*idx1)?;
-                let key_var = circuit.create_variable(F::from(i as u32))?;
-                let val0_var = circuit.create_variable(val0)?;
-                let val1_var = circuit.create_variable(val1)?;
-                lookup_vars.push((key_var, val0_var, val1_var));
-                Ok(())
-            })?;
+        table_vars.iter().enumerate().try_for_each(|(i, (idx0, idx1))| {
+            let val0 = circuit.witness(*idx0)?;
+            let val1 = circuit.witness(*idx1)?;
+            let key_var = circuit.create_variable(F::from(i as u32))?;
+            let val0_var = circuit.create_variable(val0)?;
+            let val1_var = circuit.create_variable(val1)?;
+            lookup_vars.push((key_var, val0_var, val1_var));
+            Ok(())
+        })?;
         // add lookup variables and tables
         circuit.create_table_and_lookup_variables(&lookup_vars, &table_vars)?;
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
@@ -139,12 +122,8 @@ mod test {
         // out-of-bound variables
         let bad_lookup_vars = vec![(circuit.num_vars(), circuit.zero(), circuit.zero())];
         let bad_table_vars = vec![(circuit.num_vars(), circuit.zero())];
-        assert!(circuit
-            .create_table_and_lookup_variables(&bad_lookup_vars, &table_vars)
-            .is_err());
-        assert!(circuit
-            .create_table_and_lookup_variables(&lookup_vars, &bad_table_vars)
-            .is_err());
+        assert!(circuit.create_table_and_lookup_variables(&bad_lookup_vars, &table_vars).is_err());
+        assert!(circuit.create_table_and_lookup_variables(&lookup_vars, &bad_table_vars).is_err());
 
         // A lookup over a separate table should not satisfy the circuit.
         let mut circuit: PlonkCircuit<F> = PlonkCircuit::new_ultra_plonk(4);

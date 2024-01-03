@@ -55,11 +55,7 @@ where
             None => F::from(2u8).pow([m as u64]),
         };
         let (p1, p0) = div_rem(p, &two_power_m);
-        Ok(Self {
-            p: (p0, p1),
-            m,
-            two_power_m,
-        })
+        Ok(Self { p: (p0, p1), m, two_power_m })
     }
 
     /// Convert into a single field element.
@@ -114,11 +110,7 @@ impl<F: PrimeField> FpElemVar<F> {
             &[F::one(), fp_elem.two_power_m, F::zero(), F::zero()],
         )?;
 
-        Ok(Self {
-            vars: (var0, var1),
-            m,
-            two_power_m: fp_elem.two_power_m,
-        })
+        Ok(Self { vars: (var0, var1), m, two_power_m: fp_elem.two_power_m })
     }
 
     /// Convert into a single variable with value `witness[vars.0] + 2^m *
@@ -228,9 +220,7 @@ impl<F: PrimeField> FpElemVar<F> {
         other: &Self,
     ) -> Result<(), CircuitError> {
         if self.m != other.m || self.two_power_m != other.two_power_m {
-            return Err(CircuitError::ParameterError(
-                "m or two_power_m do not match".to_string(),
-            ));
+            return Err(CircuitError::ParameterError("m or two_power_m do not match".to_string()));
         }
         circuit.enforce_equal(self.components().0, other.components().0)?;
         circuit.enforce_equal(self.components().1, other.components().1)
@@ -466,10 +456,8 @@ impl<F: PrimeField> PlonkCircuit<F> {
             )));
         }
 
-        let x_vars: Vec<Variable> = x
-            .iter()
-            .map(|y| y.convert_to_var(self))
-            .collect::<Result<Vec<Variable>, _>>()?;
+        let x_vars: Vec<Variable> =
+            x.iter().map(|y| y.convert_to_var(self)).collect::<Result<Vec<Variable>, _>>()?;
 
         let num_range_blocks = self.num_range_blocks()?;
         let res = self.mod_add_internal(x_vars.as_ref(), p.field_elem(), num_range_blocks)?;
@@ -647,11 +635,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let q_c = p.two_power_m.double();
         self.quad_poly_gate(&wires, &q_lin, &q_mul, q_o, q_c)?;
 
-        Ok(FpElemVar {
-            vars: (z0_var, z1_var),
-            m: p.m,
-            two_power_m: p.two_power_m,
-        })
+        Ok(FpElemVar { vars: (z0_var, z1_var), m: p.m, two_power_m: p.two_power_m })
     }
 
     /// Modular multiplication gate:
@@ -825,11 +809,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let q_c = p.two_power_m.double();
         self.quad_poly_gate(&wires, &q_lin, &q_mul, q_o, q_c)?;
 
-        Ok(FpElemVar {
-            vars: (z0_var, z1_var),
-            m: p.m,
-            two_power_m: p.two_power_m,
-        })
+        Ok(FpElemVar { vars: (z0_var, z1_var), m: p.m, two_power_m: p.two_power_m })
     }
 
     /// Negate an FpElemVar mod p where p is a public variable which is
@@ -849,9 +829,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let p_int: BigUint = to_big_int!(p);
         let x_int = &x0_int + &two_power_m_int * &x1_int;
         if x_int >= p_int {
-            return Err(CircuitError::FieldAlgebraError(
-                "non native field overflow".to_string(),
-            ));
+            return Err(CircuitError::FieldAlgebraError("non native field overflow".to_string()));
         }
         let x_negate = F::from(p_int - x_int);
 
@@ -1035,9 +1013,7 @@ mod test {
         // input witnesses are larger than the modulus
         let range_size = F::from(RANGE_SIZE_FOR_TEST as u32);
         let bad_x_var = circuit.create_variable(range_size * p)?;
-        assert!(circuit
-            .mod_add_internal(&[bad_x_var, bad_x_var], p, 10)
-            .is_err());
+        assert!(circuit.mod_add_internal(&[bad_x_var, bad_x_var], p, 10).is_err());
 
         // check that circuit config is independent of witness values
         let elems1: Vec<F> = (0..3)
@@ -1121,18 +1097,14 @@ mod test {
             FpElemVar::new_unchecked(&mut circuit, zero_var, m + 1, Some(p_split.two_power_m))?;
         let y_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m, Some(p_split.two_power_m))?;
-        assert!(circuit
-            .mod_mul(&x_split_vars, &y_split_vars, &p_split)
-            .is_err());
+        assert!(circuit.mod_mul(&x_split_vars, &y_split_vars, &p_split).is_err());
         // p.m is not a multiple of RANGE_BIT_LEN_FOR_TEST
         let p_split_bad = FpElem::new(&p, m + 1, Some(p_split.two_power_m))?;
         let x_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m + 1, Some(p_split.two_power_m))?;
         let y_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m + 1, Some(p_split.two_power_m))?;
-        assert!(circuit
-            .mod_mul(&x_split_vars, &y_split_vars, &p_split_bad)
-            .is_err());
+        assert!(circuit.mod_mul(&x_split_vars, &y_split_vars, &p_split_bad).is_err());
 
         // p.two_power_m is not  2^m
         let p_split_bad = FpElem::new(&p, m, Some(p_split.two_power_m + F::one()))?;
@@ -1140,9 +1112,7 @@ mod test {
             FpElemVar::new_unchecked(&mut circuit, zero_var, m, Some(p_split.two_power_m))?;
         let y_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m, Some(p_split.two_power_m))?;
-        assert!(circuit
-            .mod_mul(&x_split_vars, &y_split_vars, &p_split_bad)
-            .is_err());
+        assert!(circuit.mod_mul(&x_split_vars, &y_split_vars, &p_split_bad).is_err());
 
         // check that circuit config is independent of witness values
         let x1 = p - F::from(rng.gen_range(1..u128::MAX));
@@ -1228,18 +1198,14 @@ mod test {
             FpElemVar::new_unchecked(&mut circuit, zero_var, m + 1, Some(p_split.two_power_m))?;
         let y = p - F::from(rng.gen_range(1..u128::MAX));
         let y_split = FpElem::new(&y, m, Some(p_split.two_power_m))?;
-        assert!(circuit
-            .mod_mul_constant(&x_split_vars, &y_split, &p_split)
-            .is_err());
+        assert!(circuit.mod_mul_constant(&x_split_vars, &y_split, &p_split).is_err());
         // p.m is not a multiple of RANGE_BIT_LEN_FOR_TEST
         let p_split_bad = FpElem::new(&p, m + 1, Some(p_split.two_power_m))?;
         let x_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m + 1, Some(p_split.two_power_m))?;
         let y = p - F::from(rng.gen_range(1..u128::MAX));
         let y_split = FpElem::new(&y, m + 1, Some(p_split.two_power_m))?;
-        assert!(circuit
-            .mod_mul_constant(&x_split_vars, &y_split, &p_split_bad)
-            .is_err());
+        assert!(circuit.mod_mul_constant(&x_split_vars, &y_split, &p_split_bad).is_err());
 
         // p.two_power_m is not  2^m
         let p_split_bad = FpElem::new(&p, m, Some(p_split.two_power_m + F::one()))?;
@@ -1247,9 +1213,7 @@ mod test {
             FpElemVar::new_unchecked(&mut circuit, zero_var, m, Some(p_split.two_power_m))?;
         let y = p - F::from(rng.gen_range(1..u128::MAX));
         let y_split = FpElem::new(&y, m, Some(p_split.two_power_m))?;
-        assert!(circuit
-            .mod_mul_constant(&x_split_vars, &y_split, &p_split_bad)
-            .is_err());
+        assert!(circuit.mod_mul_constant(&x_split_vars, &y_split, &p_split_bad).is_err());
 
         // check that circuit config is independent of witness values
         let x1 = p - F::from(rng.gen_range(1..u128::MAX));
@@ -1330,27 +1294,21 @@ mod test {
             FpElemVar::new_unchecked(&mut circuit, zero_var, m + 1, Some(p_split.two_power_m))?;
         let y_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m, Some(p_split.two_power_m))?;
-        assert!(circuit
-            .mod_add(&x_split_vars, &y_split_vars, &p_split)
-            .is_err());
+        assert!(circuit.mod_add(&x_split_vars, &y_split_vars, &p_split).is_err());
         // p.m is not a multiple of RANGE_BIT_LEN_FOR_TEST
         let p_split_bad = FpElem::new(&p, m + 1, Some(p_split.two_power_m))?;
         let x_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m + 1, Some(p_split.two_power_m))?;
         let y_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m + 1, Some(p_split.two_power_m))?;
-        assert!(circuit
-            .mod_add(&x_split_vars, &y_split_vars, &p_split_bad)
-            .is_err());
+        assert!(circuit.mod_add(&x_split_vars, &y_split_vars, &p_split_bad).is_err());
         // p.two_power_m is not 2^m
         let p_split_bad = FpElem::new(&p, m, Some(p_split.two_power_m + F::one()))?;
         let x_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m, Some(p_split.two_power_m))?;
         let y_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m, Some(p_split.two_power_m))?;
-        assert!(circuit
-            .mod_add(&x_split_vars, &y_split_vars, &p_split_bad)
-            .is_err());
+        assert!(circuit.mod_add(&x_split_vars, &y_split_vars, &p_split_bad).is_err());
 
         // check that circuit config is independent of witness values
         let x1 = p - F::from(rng.gen_range(1..u128::MAX));
@@ -1463,15 +1421,10 @@ mod test {
         let zero_var = circuit.zero();
         let x_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m + 1, Some(p_split.two_power_m))?;
-        let y_split = FpElem::new(
-            &(p - F::from(rng.gen_range(1..u128::MAX))),
-            m,
-            Some(p_split.two_power_m),
-        )?;
+        let y_split =
+            FpElem::new(&(p - F::from(rng.gen_range(1..u128::MAX))), m, Some(p_split.two_power_m))?;
 
-        assert!(circuit
-            .mod_add_constant(&x_split_vars, &y_split, &p_split)
-            .is_err());
+        assert!(circuit.mod_add_constant(&x_split_vars, &y_split, &p_split).is_err());
         // p.m is not a multiple of RANGE_BIT_LEN_FOR_TEST
         let p_split_bad = FpElem::new(&p, m + 1, Some(p_split.two_power_m))?;
         let x_split_vars =
@@ -1481,21 +1434,14 @@ mod test {
             m + 1,
             Some(p_split.two_power_m),
         )?;
-        assert!(circuit
-            .mod_add_constant(&x_split_vars, &y_split, &p_split_bad)
-            .is_err());
+        assert!(circuit.mod_add_constant(&x_split_vars, &y_split, &p_split_bad).is_err());
         // p.two_power_m is not 2^m
         let p_split_bad = FpElem::new(&p, m, Some(p_split.two_power_m + F::one()))?;
         let x_split_vars =
             FpElemVar::new_unchecked(&mut circuit, zero_var, m, Some(p_split.two_power_m))?;
-        let y_split = FpElem::new(
-            &(p - F::from(rng.gen_range(1..u128::MAX))),
-            m,
-            Some(p_split.two_power_m),
-        )?;
-        assert!(circuit
-            .mod_add_constant(&x_split_vars, &y_split, &p_split_bad)
-            .is_err());
+        let y_split =
+            FpElem::new(&(p - F::from(rng.gen_range(1..u128::MAX))), m, Some(p_split.two_power_m))?;
+        assert!(circuit.mod_add_constant(&x_split_vars, &y_split, &p_split_bad).is_err());
 
         // check that circuit config is independent of witness values
         let x1 = p - F::from(rng.gen_range(1..u128::MAX));

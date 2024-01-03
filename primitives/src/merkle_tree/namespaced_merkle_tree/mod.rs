@@ -167,10 +167,7 @@ where
         let leaves =
             NMT::<E, H, Arity, N, T>::update_namespace_metadata(&mut namespace_ranges, elems)?;
         let inner = <InnerTree<E, H, T, N, Arity> as MerkleTreeScheme>::from_elems(height, leaves)?;
-        Ok(NMT {
-            inner,
-            namespace_ranges,
-        })
+        Ok(NMT { inner, namespace_ranges })
     }
 
     fn height(&self) -> usize {
@@ -418,10 +415,7 @@ mod nmt_tests {
 
         // Ensure that sorted internal nodes are digested correctly
         let hash = Hasher::digest(&hashes).unwrap();
-        assert_eq!(
-            (hash.min_namespace, hash.max_namespace),
-            (0, num_leaves - 1)
-        );
+        assert_eq!((hash.min_namespace, hash.max_namespace), (0, num_leaves - 1));
 
         // Ensure that digest errors when internal nodes are not sorted by namespace
         hashes[0] = hashes[hashes.len() - 1];
@@ -489,84 +483,45 @@ mod nmt_tests {
         assert_eq!(fetched_leaves, leaves);
 
         // Check namespace proof on the left boundary
-        assert!(tree
-            .verify_namespace_proof(&left_proof, first_ns)
-            .unwrap()
-            .is_ok());
+        assert!(tree.verify_namespace_proof(&left_proof, first_ns).unwrap().is_ok());
 
         // Check namespace proof on the right boundary
-        assert!(tree
-            .verify_namespace_proof(&right_proof, last_ns)
-            .unwrap()
-            .is_ok());
+        assert!(tree.verify_namespace_proof(&right_proof, last_ns).unwrap().is_ok());
 
         // Check namespace proof for some internal namespace
-        assert!(tree
-            .verify_namespace_proof(&internal_proof, internal_ns)
-            .unwrap()
-            .is_ok());
+        assert!(tree.verify_namespace_proof(&internal_proof, internal_ns).unwrap().is_ok());
 
         // Assert that namespace proof fails for a different namespace
-        assert!(tree
-            .verify_namespace_proof(&left_proof, 2)
-            .unwrap()
-            .is_err());
+        assert!(tree.verify_namespace_proof(&left_proof, 2).unwrap().is_err());
 
         // Sanity check that the leaves returned by the proof are correct
-        let internal_leaves: Vec<Leaf> = internal_proof
-            .get_namespace_leaves()
-            .into_iter()
-            .copied()
-            .collect();
+        let internal_leaves: Vec<Leaf> =
+            internal_proof.get_namespace_leaves().into_iter().copied().collect();
         let raw_leaves_for_ns = &leaves[1..4];
         assert_eq!(raw_leaves_for_ns, internal_leaves);
 
         // Check that a namespace proof fails if one of the leaves is removed
         internal_proof.proofs.remove(1);
-        assert!(tree
-            .verify_namespace_proof(&internal_proof, internal_ns)
-            .unwrap()
-            .is_err());
+        assert!(tree.verify_namespace_proof(&internal_proof, internal_ns).unwrap().is_err());
 
         // Check the simple absence proof case when the namespace falls outside of the
         // tree range (namespace > root.max_namespace)
         let absence_proof = tree.get_namespace_proof(last_ns + 1);
-        let leaves: Vec<Leaf> = absence_proof
-            .get_namespace_leaves()
-            .into_iter()
-            .cloned()
-            .collect();
-        assert!(tree
-            .verify_namespace_proof(&absence_proof, last_ns + 1)
-            .unwrap()
-            .is_ok());
+        let leaves: Vec<Leaf> = absence_proof.get_namespace_leaves().into_iter().cloned().collect();
+        assert!(tree.verify_namespace_proof(&absence_proof, last_ns + 1).unwrap().is_ok());
         assert_eq!(leaves, []);
 
         // Check the simple absence proof case when the namespace falls outside of the
         // tree range (namespace < root.min_namespace)
         let absence_proof = tree.get_namespace_proof(first_ns - 1);
-        let leaves: Vec<Leaf> = absence_proof
-            .get_namespace_leaves()
-            .into_iter()
-            .cloned()
-            .collect();
-        assert!(tree
-            .verify_namespace_proof(&absence_proof, first_ns - 1)
-            .unwrap()
-            .is_ok());
+        let leaves: Vec<Leaf> = absence_proof.get_namespace_leaves().into_iter().cloned().collect();
+        assert!(tree.verify_namespace_proof(&absence_proof, first_ns - 1).unwrap().is_ok());
         assert_eq!(leaves, []);
 
         // Check absence proof case when the namespace falls inside of the tree range
         let absence_proof = tree.get_namespace_proof(3);
-        let leaves: Vec<Leaf> = absence_proof
-            .get_namespace_leaves()
-            .into_iter()
-            .cloned()
-            .collect();
-        assert!(tree
-            .verify_namespace_proof(&absence_proof, 3)
-            .unwrap()
-            .is_ok());
+        let leaves: Vec<Leaf> = absence_proof.get_namespace_leaves().into_iter().cloned().collect();
+        assert!(tree.verify_namespace_proof(&absence_proof, 3).unwrap().is_ok());
         assert_eq!(leaves, []);
 
         // Ensure that the absence proof fails when the boundaries are not provided
@@ -581,9 +536,6 @@ mod nmt_tests {
         // boundary proofs is incorrect
         let mut malicious_proof = absence_proof;
         malicious_proof.right_boundary_proof = malicious_proof.left_boundary_proof.clone();
-        assert!(tree
-            .verify_namespace_proof(&malicious_proof, 3)
-            .unwrap()
-            .is_err());
+        assert!(tree.verify_namespace_proof(&malicious_proof, 3).unwrap().is_err());
     }
 }

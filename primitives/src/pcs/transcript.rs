@@ -55,11 +55,7 @@ pub struct IOPTranscript<F: PrimeField> {
 impl<F: PrimeField> IOPTranscript<F> {
     /// Create a new IOP transcript.
     pub fn new(label: &'static [u8]) -> Self {
-        Self {
-            transcript: Transcript::new(label),
-            is_empty: true,
-            phantom: PhantomData,
-        }
+        Self { transcript: Transcript::new(label), is_empty: true, phantom: PhantomData }
     }
 
     /// Append the message to the transcript.
@@ -90,9 +86,7 @@ impl<F: PrimeField> IOPTranscript<F> {
     pub fn get_and_append_challenge(&mut self, label: &'static [u8]) -> Result<F, TranscriptError> {
         //  we need to reject when transcript is empty
         if self.is_empty {
-            return Err(TranscriptError::InvalidTranscript(
-                "transcript is empty".to_string(),
-            ));
+            return Err(TranscriptError::InvalidTranscript("transcript is empty".to_string()));
         }
 
         let mut buf = [0u8; 64];
@@ -114,9 +108,7 @@ impl<F: PrimeField> IOPTranscript<F> {
     ) -> Result<(), TranscriptError> {
         //  we need to reject when transcript is empty
         if self.is_empty {
-            return Err(TranscriptError::InvalidTranscript(
-                "transcript is empty".to_string(),
-            ));
+            return Err(TranscriptError::InvalidTranscript("transcript is empty".to_string()));
         }
 
         self.transcript.challenge_bytes(label, dest);

@@ -215,10 +215,7 @@ fn constrain_sibling_order<F: RescueParameter>(
     let left_node = circuit.mux(node_is_left, node, sib1)?;
     let right_node = circuit.mux(node_is_right, node, sib2)?;
     let left_plus_right = circuit.add(left_node, right_node)?;
-    let mid_node = circuit.lc(
-        &[node, sib1, sib2, left_plus_right],
-        &[one, one, one, one.neg()],
-    )?;
+    let mid_node = circuit.lc(&[node, sib1, sib2, left_plus_right], &[one, one, one, one.neg()])?;
     Ok([left_node, mid_node, right_node])
 }
 
@@ -341,9 +338,7 @@ where
         &mut self,
         merkle_proof: &<T as MerkleTreeScheme>::MembershipProof,
     ) -> Result<Merkle3AryMembershipProofVar, CircuitError> {
-        let path = merkle_proof
-            .index()
-            .to_traversal_path(merkle_proof.tree_height() - 1);
+        let path = merkle_proof.index().to_traversal_path(merkle_proof.tree_height() - 1);
 
         let elem = match merkle_proof.elem() {
             Some(elem) => elem,
@@ -385,10 +380,7 @@ where
             self.enforce_bool(left_plus_right)?;
         }
 
-        Ok(Merkle3AryMembershipProofVar {
-            node_vars: nodes,
-            elem_var,
-        })
+        Ok(Merkle3AryMembershipProofVar { node_vars: nodes, elem_var })
     }
 
     fn create_root_variable(
@@ -489,15 +481,11 @@ mod test {
                 constrain_sibling_order(circuit, node, sib1, sib2, node_is_left, node_is_right)
                     .unwrap();
 
-            let output: Vec<F> = out_vars[..]
-                .iter()
-                .map(|&idx| circuit.witness(idx).unwrap())
-                .collect();
+            let output: Vec<F> =
+                out_vars[..].iter().map(|&idx| circuit.witness(idx).unwrap()).collect();
 
-            let expected_output: Vec<F> = expected_output_vars
-                .iter()
-                .map(|v| circuit.witness(*v).unwrap())
-                .collect();
+            let expected_output: Vec<F> =
+                expected_output_vars.iter().map(|v| circuit.witness(*v).unwrap()).collect();
 
             assert_eq!(output, expected_output);
 
@@ -519,31 +507,13 @@ mod test {
         }
 
         let (mut circuit, node, sib1, sib2) = gen_permutation_circuit_and_vars::<F>();
-        check_permute(
-            &mut circuit,
-            false,
-            true,
-            &[node, sib1, sib2],
-            &[sib1, sib2, node],
-        );
+        check_permute(&mut circuit, false, true, &[node, sib1, sib2], &[sib1, sib2, node]);
 
         let (mut circuit, node, sib1, sib2) = gen_permutation_circuit_and_vars::<F>();
-        check_permute(
-            &mut circuit,
-            true,
-            false,
-            &[node, sib1, sib2],
-            &[node, sib1, sib2],
-        );
+        check_permute(&mut circuit, true, false, &[node, sib1, sib2], &[node, sib1, sib2]);
 
         let (mut circuit, node, sib1, sib2) = gen_permutation_circuit_and_vars::<F>();
-        check_permute(
-            &mut circuit,
-            false,
-            false,
-            &[node, sib1, sib2],
-            &[sib1, node, sib2],
-        );
+        check_permute(&mut circuit, false, false, &[node, sib1, sib2], &[sib1, node, sib2]);
     }
 
     #[test]

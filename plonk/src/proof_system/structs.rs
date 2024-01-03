@@ -132,10 +132,8 @@ where
             let shifted_opening_proof = Commitment(Affine::new(value[ptr], value[ptr + 1]));
             ptr += 2;
 
-            let poly_evals_scalars: Vec<E::ScalarField> = value[ptr..]
-                .iter()
-                .map(|f| fq_to_fr::<E::BaseField, P>(f))
-                .collect();
+            let poly_evals_scalars: Vec<E::ScalarField> =
+                value[ptr..].iter().map(|f| fq_to_fr::<E::BaseField, P>(f)).collect();
             let poly_evals = poly_evals_scalars.try_into()?;
 
             Ok(Self {
@@ -203,10 +201,7 @@ where
             group1_to_fields::<E, _>(proof.prod_perm_poly_comm.0),
             group1_to_fields::<E, _>(proof.opening_proof.0),
             group1_to_fields::<E, _>(proof.shifted_opening_proof.0),
-            poly_evals_scalars
-                .iter()
-                .map(|s| fr_to_fq::<E::BaseField, P>(s))
-                .collect::<Vec<_>>(),
+            poly_evals_scalars.iter().map(|s| fr_to_fq::<E::BaseField, P>(s)).collect::<Vec<_>>(),
         ]
         .concat()
     }
@@ -427,27 +422,16 @@ impl<F: Field> TryFrom<Vec<F>> for ProofEvaluations<F> {
             let wires_evals = value[..l / 2].to_vec();
             let wire_sigma_evals = value[l / 2..l - 1].to_vec();
             let perm_next_eval = value[l - 1];
-            Ok(Self {
-                wires_evals,
-                wire_sigma_evals,
-                perm_next_eval,
-            })
+            Ok(Self { wires_evals, wire_sigma_evals, perm_next_eval })
         } else {
-            Err(SnarkError::ParameterError(
-                "Wrong number of scalars for proof evals.".to_string(),
-            ))
+            Err(SnarkError::ParameterError("Wrong number of scalars for proof evals.".to_string()))
         }
     }
 }
 
 impl<F: Field> From<ProofEvaluations<F>> for Vec<F> {
     fn from(evals: ProofEvaluations<F>) -> Self {
-        [
-            evals.wires_evals,
-            evals.wire_sigma_evals,
-            vec![evals.perm_next_eval],
-        ]
-        .concat()
+        [evals.wires_evals, evals.wire_sigma_evals, vec![evals.perm_next_eval]].concat()
     }
 }
 
@@ -705,9 +689,7 @@ where
                 .map(|cm| group1_to_fields::<E, _>(cm.0))
                 .collect::<Vec<_>>()
                 .concat(),
-            vk.k.iter()
-                .map(|fr| fr_to_fq::<E::BaseField, P1>(fr))
-                .collect(),
+            vk.k.iter().map(|fr| fr_to_fq::<E::BaseField, P1>(fr)).collect(),
             // NOTE: only adding g, h, beta_h since only these are used.
             group1_to_fields::<E, P1>(vk.open_key.g),
             group2_to_fields::<E, F, P2>(vk.open_key.h),
@@ -798,9 +780,7 @@ impl<E: Pairing> VerifyingKey<E> {
             .into());
         }
         if self.plookup_vk.is_some() || other_vk.plookup_vk.is_some() {
-            return Err(
-                ParameterError("cannot merge UltraPlonk verifying keys".to_string()).into(),
-            );
+            return Err(ParameterError("cannot merge UltraPlonk verifying keys".to_string()).into());
         }
         let sigma_comms: Vec<Commitment<E>> = self
             .sigma_comms
@@ -872,16 +852,11 @@ pub(crate) struct ScalarsAndBases<E: Pairing> {
 
 impl<E: Pairing> ScalarsAndBases<E> {
     pub(crate) fn new() -> Self {
-        Self {
-            base_scalar_map: HashMap::new(),
-        }
+        Self { base_scalar_map: HashMap::new() }
     }
     /// Insert a base point and the corresponding scalar.
     pub(crate) fn push(&mut self, scalar: E::ScalarField, base: E::G1Affine) {
-        let entry_scalar = self
-            .base_scalar_map
-            .entry(base)
-            .or_insert_with(E::ScalarField::zero);
+        let entry_scalar = self.base_scalar_map.entry(base).or_insert_with(E::ScalarField::zero);
         *entry_scalar += scalar;
     }
 

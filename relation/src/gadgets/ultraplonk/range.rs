@@ -175,9 +175,7 @@ mod test {
         // bit_len = 0
         assert!(circuit.range_gate_with_lookup(zero_var, 0).is_err());
         // Check variable out of bound error.
-        assert!(circuit
-            .range_gate_with_lookup(circuit.num_vars(), bit_len)
-            .is_err());
+        assert!(circuit.range_gate_with_lookup(circuit.num_vars(), bit_len).is_err());
         // TurboPlonk shouldn't be able to use the gate
         let mut circuit: PlonkCircuit<F> = PlonkCircuit::new_turbo_plonk();
         assert!(circuit.range_gate_with_lookup(0, bit_len).is_err());

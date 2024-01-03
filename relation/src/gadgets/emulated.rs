@@ -93,11 +93,8 @@ impl<F: PrimeField> PlonkCircuit<F> {
         &self,
         var: &EmulatedVariable<E>,
     ) -> Result<E, CircuitError> {
-        let values = var
-            .0
-            .iter()
-            .map(|&v| self.witness(v))
-            .collect::<Result<Vec<_>, CircuitError>>()?;
+        let values =
+            var.0.iter().map(|&v| self.witness(v)).collect::<Result<Vec<_>, CircuitError>>()?;
         to_emulated_field(&values)
     }
 
@@ -222,9 +219,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
             self.enforce_in_range(next_carry_out, E::B + log_num_vals)?;
 
             // k * E::MODULUS part, waiting for summation
-            let mut stack = (0..=i)
-                .map(|j| (k.0[j], neg_modulus[i - j]))
-                .collect::<Vec<_>>();
+            let mut stack = (0..=i).map(|j| (k.0[j], neg_modulus[i - j])).collect::<Vec<_>>();
             // carry out from last limb
             stack.push((carry_out, F::one()));
             stack.push((next_carry_out, -b_pow));
@@ -362,9 +357,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
             self.enforce_in_range(next_carry_out, E::B + log_num_vals)?;
 
             // k * E::MODULUS part, waiting for summation
-            let mut stack = (0..=i)
-                .map(|j| (k.0[j], neg_modulus[i - j]))
-                .collect::<Vec<_>>();
+            let mut stack = (0..=i).map(|j| (k.0[j], neg_modulus[i - j])).collect::<Vec<_>>();
             // a * b part
             (0..=i).for_each(|j| stack.push((a.0[j], b_limbs[i - j])));
             // carry out from last limb
@@ -648,10 +641,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         a: &EmulatedVariable<E>,
     ) -> Result<BoolVar, CircuitError> {
         self.check_vars_bound(&a.0[..])?;
-        let c =
-            a.0.iter()
-                .map(|&a| self.is_zero(a))
-                .collect::<Result<Vec<_>, _>>()?;
+        let c = a.0.iter().map(|&a| self.is_zero(a)).collect::<Result<Vec<_>, _>>()?;
         self.logic_and_all(&c)
     }
 
@@ -670,10 +660,8 @@ impl<F: PrimeField> PlonkCircuit<F> {
         let a2 = a.0.get(2).unwrap_or(&zero);
         let a3 = a.0.get(3).unwrap_or(&zero);
 
-        let mut result = self.lc(
-            &[*a0, *a1, *a2, *a3],
-            &[F::one(), b_pow, double_b_pow, triple_b_pow],
-        )?;
+        let mut result =
+            self.lc(&[*a0, *a1, *a2, *a3], &[F::one(), b_pow, double_b_pow, triple_b_pow])?;
 
         if E::NUM_LIMBS > 4 {
             let mut cur_pow = triple_b_pow * b_pow;
@@ -793,30 +781,19 @@ mod tests {
         assert_eq!(circuit.emulated_witness(&var_x).unwrap(), x);
         assert_eq!(circuit.emulated_witness(&var_y).unwrap(), y);
         assert_eq!(circuit.emulated_witness(&var_z).unwrap(), expected);
-        assert!(circuit
-            .check_circuit_satisfiability(&from_emulated_field(x))
-            .is_ok());
+        assert!(circuit.check_circuit_satisfiability(&from_emulated_field(x)).is_ok());
 
         let var_y_z = circuit.emulated_mul(&var_y, &var_z).unwrap();
         assert_eq!(circuit.emulated_witness(&var_y_z).unwrap(), expected * y);
-        assert!(circuit
-            .check_circuit_satisfiability(&from_emulated_field(x))
-            .is_ok());
+        assert!(circuit.check_circuit_satisfiability(&from_emulated_field(x)).is_ok());
 
         let var_z = circuit.emulated_mul_constant(&var_z, expected).unwrap();
-        assert_eq!(
-            circuit.emulated_witness(&var_z).unwrap(),
-            expected * expected
-        );
-        assert!(circuit
-            .check_circuit_satisfiability(&from_emulated_field(x))
-            .is_ok());
+        assert_eq!(circuit.emulated_witness(&var_z).unwrap(), expected * expected);
+        assert!(circuit.check_circuit_satisfiability(&from_emulated_field(x)).is_ok());
 
         let var_z = circuit.create_emulated_variable(E::one()).unwrap();
         circuit.emulated_mul_gate(&var_x, &var_y, &var_z).unwrap();
-        assert!(circuit
-            .check_circuit_satisfiability(&from_emulated_field(x))
-            .is_err());
+        assert!(circuit.check_circuit_satisfiability(&from_emulated_field(x)).is_err());
     }
 
     #[test]
@@ -835,9 +812,7 @@ mod tests {
         let overflow = E::from(E::MODULUS.into() - 1u64);
         let var_y = circuit.create_emulated_variable(overflow).unwrap();
         let b = circuit.create_boolean_variable(true).unwrap();
-        let var_z = circuit
-            .conditional_select_emulated(b, &var_x, &var_y)
-            .unwrap();
+        let var_z = circuit.conditional_select_emulated(b, &var_x, &var_y).unwrap();
         assert_eq!(circuit.emulated_witness(&var_z).unwrap(), overflow);
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
         *circuit.witness_mut(var_z.0[0]) = F::zero();

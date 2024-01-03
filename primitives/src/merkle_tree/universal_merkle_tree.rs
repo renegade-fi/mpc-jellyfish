@@ -46,9 +46,7 @@ where
         let pos = pos.borrow();
         let elem = elem.borrow();
         let traversal_path = pos.to_traversal_path(self.height);
-        let ret = self
-            .root
-            .update_internal::<H, Arity>(self.height, pos, &traversal_path, elem)?;
+        let ret = self.root.update_internal::<H, Arity>(self.height, pos, &traversal_path, elem)?;
         if let LookupResult::NotFound(_) = ret {
             self.num_leaves += 1;
         }
@@ -84,9 +82,7 @@ where
             ));
         }
         if *pos != proof.pos {
-            return Err(PrimitivesError::ParameterError(
-                "Inconsistent proof index".to_string(),
-            ));
+            return Err(PrimitivesError::ParameterError("Inconsistent proof index".to_string()));
         }
         proof.verify_non_membership_proof::<H>(&self.root.value())
     }
@@ -140,31 +136,28 @@ where
         if matches!(&proof.proof[0], MerkleNode::Empty) {
             let empty_value = T::default();
             let mut path_values = vec![empty_value];
-            traversal_path
-                .iter()
-                .zip(proof.proof.iter().skip(1))
-                .try_fold(
-                    empty_value,
-                    |val: T, (branch, node)| -> Result<T, PrimitivesError> {
-                        match node {
-                            MerkleNode::Branch { value: _, children } => {
-                                let mut data: Vec<_> =
-                                    children.iter().map(|node| node.value()).collect();
-                                data[*branch] = val;
-                                let digest = H::digest(&data)?;
-                                path_values.push(digest);
-                                Ok(digest)
-                            },
-                            MerkleNode::Empty => {
-                                path_values.push(empty_value);
-                                Ok(empty_value)
-                            },
-                            _ => Err(PrimitivesError::ParameterError(
-                                "Incompatible proof for this merkle tree".to_string(),
-                            )),
-                        }
-                    },
-                )?;
+            traversal_path.iter().zip(proof.proof.iter().skip(1)).try_fold(
+                empty_value,
+                |val: T, (branch, node)| -> Result<T, PrimitivesError> {
+                    match node {
+                        MerkleNode::Branch { value: _, children } => {
+                            let mut data: Vec<_> =
+                                children.iter().map(|node| node.value()).collect();
+                            data[*branch] = val;
+                            let digest = H::digest(&data)?;
+                            path_values.push(digest);
+                            Ok(digest)
+                        },
+                        MerkleNode::Empty => {
+                            path_values.push(empty_value);
+                            Ok(empty_value)
+                        },
+                        _ => Err(PrimitivesError::ParameterError(
+                            "Incompatible proof for this merkle tree".to_string(),
+                        )),
+                    }
+                },
+            )?;
             self.root.remember_internal::<H, Arity>(
                 self.height,
                 &traversal_path,
@@ -172,9 +165,7 @@ where
                 &proof.proof,
             )
         } else {
-            Err(PrimitivesError::ParameterError(
-                "Invalid proof type".to_string(),
-            ))
+            Err(PrimitivesError::ParameterError("Invalid proof type".to_string()))
         }
     }
 }
@@ -236,10 +227,7 @@ mod mt_tests {
         let mt = RescueSparseMerkleTree::<BigUint, F>::from_kv_set(10, &hashmap).unwrap();
         assert_eq!(mt.num_leaves(), hashmap.len() as u64);
 
-        let mut proof = mt
-            .universal_lookup(BigUint::from(3u64))
-            .expect_not_found()
-            .unwrap();
+        let mut proof = mt.universal_lookup(BigUint::from(3u64)).expect_not_found().unwrap();
         let verify_result = mt.non_membership_verify(BigUint::from(3u64), &proof);
         assert!(verify_result.is_ok() && verify_result.unwrap());
 
@@ -297,19 +285,14 @@ mod mt_tests {
     fn test_universal_mt_forget_remember_helper<F: RescueParameter>() {
         let mut mt = RescueSparseMerkleTree::<BigUint, F>::from_kv_set(
             10,
-            [
-                (BigUint::from(0u64), F::from(1u64)),
-                (BigUint::from(2u64), F::from(3u64)),
-            ],
+            [(BigUint::from(0u64), F::from(1u64)), (BigUint::from(2u64), F::from(3u64))],
         )
         .unwrap();
         let root = mt.commitment().digest();
 
         // Look up and forget an element that is in the tree.
-        let (lookup_elem, lookup_mem_proof) = mt
-            .universal_lookup(BigUint::from(0u64))
-            .expect_ok()
-            .unwrap();
+        let (lookup_elem, lookup_mem_proof) =
+            mt.universal_lookup(BigUint::from(0u64)).expect_ok().unwrap();
         let lookup_elem = *lookup_elem;
         let (elem, mem_proof) = mt.universal_forget(0u64.into()).expect_ok().unwrap();
         assert_eq!(lookup_elem, elem);
@@ -332,26 +315,15 @@ mod mt_tests {
         .is_ok());
 
         // Forgetting or looking up an element that is already forgotten should fail.
-        assert!(matches!(
-            mt.universal_forget(0u64.into()),
-            LookupResult::NotInMemory
-        ));
-        assert!(matches!(
-            mt.universal_lookup(BigUint::from(0u64)),
-            LookupResult::NotInMemory
-        ));
+        assert!(matches!(mt.universal_forget(0u64.into()), LookupResult::NotInMemory));
+        assert!(matches!(mt.universal_lookup(BigUint::from(0u64)), LookupResult::NotInMemory));
 
         // We should still be able to look up an element that is not forgotten.
-        let (elem, proof) = mt
-            .universal_lookup(BigUint::from(2u64))
-            .expect_ok()
-            .unwrap();
+        let (elem, proof) = mt.universal_lookup(BigUint::from(2u64)).expect_ok().unwrap();
         assert_eq!(elem, &3u64.into());
-        assert!(
-            RescueSparseMerkleTree::<BigUint, F>::verify(&root, BigUint::from(2u64), &proof)
-                .unwrap()
-                .is_ok()
-        );
+        assert!(RescueSparseMerkleTree::<BigUint, F>::verify(&root, BigUint::from(2u64), &proof)
+            .unwrap()
+            .is_ok());
 
         // Look up and forget an empty sub-tree.
         let lookup_non_mem_proof = match mt.universal_lookup(BigUint::from(1u64)) {
@@ -364,12 +336,8 @@ mod mt_tests {
         };
         assert_eq!(lookup_non_mem_proof, non_mem_proof);
         assert_eq!(non_mem_proof.tree_height(), 11);
-        assert!(mt
-            .non_membership_verify(BigUint::from(1u64), &lookup_non_mem_proof)
-            .unwrap());
-        assert!(mt
-            .non_membership_verify(BigUint::from(1u64), &non_mem_proof)
-            .unwrap());
+        assert!(mt.non_membership_verify(BigUint::from(1u64), &lookup_non_mem_proof).unwrap());
+        assert!(mt.non_membership_verify(BigUint::from(1u64), &non_mem_proof).unwrap());
 
         // Forgetting an empty sub-tree will never actually cause any new entries to be
         // forgotten, since empty sub-trees are _already_ treated as if they
@@ -377,9 +345,7 @@ mod mt_tests {
         // though we "forgot" it, the empty sub-tree is still in memory.
         match mt.universal_lookup(BigUint::from(1u64)) {
             LookupResult::NotFound(proof) => {
-                assert!(mt
-                    .non_membership_verify(BigUint::from(1u64), &proof)
-                    .unwrap());
+                assert!(mt.non_membership_verify(BigUint::from(1u64), &proof).unwrap());
             },
             res => {
                 panic!("expected NotFound, got {:?}", res);
@@ -387,34 +353,18 @@ mod mt_tests {
         }
 
         // We should still be able to look up an element that is not forgotten.
-        let (elem, proof) = mt
-            .universal_lookup(BigUint::from(2u64))
-            .expect_ok()
-            .unwrap();
+        let (elem, proof) = mt.universal_lookup(BigUint::from(2u64)).expect_ok().unwrap();
         assert_eq!(elem, &3u64.into());
-        assert!(
-            RescueSparseMerkleTree::<BigUint, F>::verify(&root, BigUint::from(2u64), &proof)
-                .unwrap()
-                .is_ok()
-        );
+        assert!(RescueSparseMerkleTree::<BigUint, F>::verify(&root, BigUint::from(2u64), &proof)
+            .unwrap()
+            .is_ok());
 
         // Now if we forget the last entry, which is the only thing keeping the root
         // branch in memory, every entry will be forgotten.
-        mt.universal_forget(BigUint::from(2u64))
-            .expect_ok()
-            .unwrap();
-        assert!(matches!(
-            mt.universal_lookup(BigUint::from(0u64)),
-            LookupResult::NotInMemory
-        ));
-        assert!(matches!(
-            mt.universal_lookup(BigUint::from(1u64)),
-            LookupResult::NotInMemory
-        ));
-        assert!(matches!(
-            mt.universal_lookup(BigUint::from(2u64)),
-            LookupResult::NotInMemory
-        ));
+        mt.universal_forget(BigUint::from(2u64)).expect_ok().unwrap();
+        assert!(matches!(mt.universal_lookup(BigUint::from(0u64)), LookupResult::NotInMemory));
+        assert!(matches!(mt.universal_lookup(BigUint::from(1u64)), LookupResult::NotInMemory));
+        assert!(matches!(mt.universal_lookup(BigUint::from(2u64)), LookupResult::NotInMemory));
 
         // Remember should fail if the proof is invalid.
         let mut bad_mem_proof = mem_proof.clone();
@@ -423,8 +373,7 @@ mod mt_tests {
         } else {
             panic!("expected membership proof to end in a Leaf");
         }
-        mt.remember(0u64.into(), F::from(1u64), &bad_mem_proof)
-            .unwrap_err();
+        mt.remember(0u64.into(), F::from(1u64), &bad_mem_proof).unwrap_err();
 
         let mut bad_non_mem_proof = non_mem_proof.clone();
         bad_non_mem_proof.proof[0] = MerkleNode::Leaf {
@@ -432,8 +381,7 @@ mod mt_tests {
             elem: Default::default(),
             value: Default::default(),
         };
-        mt.non_membership_remember(1u64.into(), &bad_non_mem_proof)
-            .unwrap_err();
+        mt.non_membership_remember(1u64.into(), &bad_non_mem_proof).unwrap_err();
 
         let mut forge_mem_proof = MerkleProof::new(1u64.into(), mem_proof.proof.clone());
         if let MerkleNode::Leaf { pos, elem, .. } = &mut forge_mem_proof.proof[0] {
@@ -442,36 +390,26 @@ mod mt_tests {
         } else {
             panic!("expected membership proof to end in a Leaf");
         }
-        mt.remember(BigUint::from(1u64), F::from(0u64), &forge_mem_proof)
-            .unwrap_err();
+        mt.remember(BigUint::from(1u64), F::from(0u64), &forge_mem_proof).unwrap_err();
 
         let forge_non_mem_proof = non_mem_proof.clone();
         assert!(matches!(forge_non_mem_proof.proof[0], MerkleNode::Empty));
-        mt.non_membership_remember(0u64.into(), &forge_non_mem_proof)
-            .unwrap_err();
+        mt.non_membership_remember(0u64.into(), &forge_non_mem_proof).unwrap_err();
 
         // Remember an occupied and an empty  sub-tree.
         mt.remember(0u64.into(), F::from(1u64), &mem_proof).unwrap();
-        mt.non_membership_remember(1u64.into(), &non_mem_proof)
-            .unwrap();
+        mt.non_membership_remember(1u64.into(), &non_mem_proof).unwrap();
 
         // We should be able to look up everything we remembered.
-        let (elem, proof) = mt
-            .universal_lookup(BigUint::from(0u64))
-            .expect_ok()
-            .unwrap();
+        let (elem, proof) = mt.universal_lookup(BigUint::from(0u64)).expect_ok().unwrap();
         assert_eq!(elem, &1u64.into());
-        assert!(
-            RescueSparseMerkleTree::<BigUint, F>::verify(&root, BigUint::from(0u64), &proof)
-                .unwrap()
-                .is_ok()
-        );
+        assert!(RescueSparseMerkleTree::<BigUint, F>::verify(&root, BigUint::from(0u64), &proof)
+            .unwrap()
+            .is_ok());
 
         match mt.universal_lookup(BigUint::from(1u64)) {
             LookupResult::NotFound(proof) => {
-                assert!(mt
-                    .non_membership_verify(BigUint::from(1u64), &proof)
-                    .unwrap());
+                assert!(mt.non_membership_verify(BigUint::from(1u64), &proof).unwrap());
             },
             res => {
                 panic!("expected NotFound, got {:?}", res);
@@ -498,10 +436,7 @@ mod mt_tests {
             res => panic!("expected NotFound, got {:?}", res),
         };
 
-        assert_eq!(
-            mt,
-            bincode::deserialize(&bincode::serialize(&mt).unwrap()).unwrap()
-        );
+        assert_eq!(mt, bincode::deserialize(&bincode::serialize(&mt).unwrap()).unwrap());
         assert_eq!(
             mem_proof,
             bincode::deserialize(&bincode::serialize(&mem_proof).unwrap()).unwrap()
@@ -510,9 +445,6 @@ mod mt_tests {
             non_mem_proof,
             bincode::deserialize(&bincode::serialize(&non_mem_proof).unwrap()).unwrap()
         );
-        assert_eq!(
-            *node,
-            bincode::deserialize(&bincode::serialize(node).unwrap()).unwrap()
-        );
+        assert_eq!(*node, bincode::deserialize(&bincode::serialize(node).unwrap()).unwrap());
     }
 }

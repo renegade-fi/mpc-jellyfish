@@ -24,10 +24,7 @@ pub fn round_trip<V, R>(
         let vid = vid_factory(payload_chunk_size, num_storage_nodes);
 
         for &len in payload_byte_lens {
-            println!(
-                "m: {} n: {} byte_len: {}",
-                payload_chunk_size, num_storage_nodes, len
-            );
+            println!("m: {} n: {} byte_len: {}", payload_chunk_size, num_storage_nodes, len);
 
             let mut bytes_random = vec![0u8; len];
             rng.fill_bytes(&mut bytes_random);
@@ -45,16 +42,14 @@ pub fn round_trip<V, R>(
             shares.shuffle(rng);
 
             // give minimum number of shares for recovery
-            let bytes_recovered = vid
-                .recover_payload(&shares[..payload_chunk_size], &common)
-                .unwrap();
+            let bytes_recovered =
+                vid.recover_payload(&shares[..payload_chunk_size], &common).unwrap();
             assert_eq!(bytes_recovered, bytes_random);
 
             // give an intermediate number of shares for recovery
             let intermediate_num_shares = (payload_chunk_size + num_storage_nodes) / 2;
-            let bytes_recovered = vid
-                .recover_payload(&shares[..intermediate_num_shares], &common)
-                .unwrap();
+            let bytes_recovered =
+                vid.recover_payload(&shares[..intermediate_num_shares], &common).unwrap();
             assert_eq!(bytes_recovered, bytes_random);
 
             // give all shares for recovery

@@ -120,10 +120,7 @@ where
     ) -> Result<RescueStateVar, CircuitError> {
         let permutation = Permutation::default();
         let keys = permutation.round_keys_ref();
-        let keys = keys
-            .iter()
-            .map(|key| RescueVector::from(key.elems().as_slice()))
-            .collect_vec();
+        let keys = keys.iter().map(|key| RescueVector::from(key.elems().as_slice())).collect_vec();
         let mds_matrix = permutation.mds_matrix_ref();
 
         self.permutation_with_const_round_keys(input_var, mds_matrix, keys.as_slice())
@@ -194,12 +191,9 @@ where
         let rate = STATE_SIZE - 1;
         let data_len = compute_len_to_next_multiple(data_vars.len() + 1, rate);
 
-        let data_vars: Vec<Variable> = [
-            data_vars,
-            &[self.one()],
-            vec![zero_var; data_len - data_vars.len() - 1].as_ref(),
-        ]
-        .concat();
+        let data_vars: Vec<Variable> =
+            [data_vars, &[self.one()], vec![zero_var; data_len - data_vars.len() - 1].as_ref()]
+                .concat();
 
         RescueNativeGadget::<F>::rescue_sponge_no_padding(self, &data_vars, num_output)
     }
@@ -389,20 +383,12 @@ where
         for (i, output) in output_vars.iter_mut().enumerate().take(STATE_SIZE) {
             let matrix_vec_i = matrix.vec(i);
             *output = self.create_variable(output_val.elems()[i])?;
-            let wire_vars = &[
-                input_var.0[0],
-                input_var.0[1],
-                input_var.0[2],
-                input_var.0[3],
-                *output,
-            ];
+            let wire_vars =
+                &[input_var.0[0], input_var.0[1], input_var.0[2], input_var.0[3], *output];
             let constant_i = constant.elems()[i];
             self.insert_gate(
                 wire_vars,
-                Box::new(RescueAffineGate {
-                    matrix_vector: matrix_vec_i,
-                    constant: constant_i,
-                }),
+                Box::new(RescueAffineGate { matrix_vector: matrix_vec_i, constant: constant_i }),
             )?;
         }
         Ok(RescueStateVar::from(output_vars))
@@ -430,13 +416,8 @@ where
             for (i, output) in output_vars.iter_mut().enumerate().take(STATE_SIZE) {
                 let matrix_vec_i = matrix.vec(i);
                 *output = self.create_variable(output_val.elems()[i])?;
-                let wire_vars = &[
-                    input_var.0[0],
-                    input_var.0[1],
-                    input_var.0[2],
-                    input_var.0[3],
-                    *output,
-                ];
+                let wire_vars =
+                    &[input_var.0[0], input_var.0[1], input_var.0[2], input_var.0[3], *output];
                 let constant_i = constant.elems()[i];
                 self.insert_gate(
                     wire_vars,
@@ -460,9 +441,7 @@ where
             // perform linear transformation
             self.affine_transform(&input_power_11_vars, matrix, constant)
         } else {
-            Err(CircuitError::ParameterError(
-                "incorrect Rescue parameters".to_string(),
-            ))
+            Err(CircuitError::ParameterError("incorrect Rescue parameters".to_string()))
         }
     }
 
@@ -480,9 +459,7 @@ where
             self.power_11_gate(output_var, input_var)?;
             Ok(output_var)
         } else {
-            Err(CircuitError::ParameterError(
-                "incorrect Rescue parameters".to_string(),
-            ))
+            Err(CircuitError::ParameterError("incorrect Rescue parameters".to_string()))
         }
     }
 
@@ -493,10 +470,8 @@ where
     ) -> Result<RescueStateVar, CircuitError> {
         let mut res = RescueStateVar([Variable::default(); STATE_SIZE]);
 
-        for (res1, (&left_var, &right_var)) in res
-            .0
-            .iter_mut()
-            .zip(left_state_var.0.iter().zip(right_state_var.0.iter()))
+        for (res1, (&left_var, &right_var)) in
+            res.0.iter_mut().zip(left_state_var.0.iter().zip(right_state_var.0.iter()))
         {
             *res1 = self.add(left_var, right_var)?;
         }
@@ -602,15 +577,10 @@ mod tests {
         let input_var = circuit.create_rescue_state_variable(&state).unwrap();
         let out_var = circuit.add_constant_state(&input_var, &constant).unwrap();
 
-        let out_value: Vec<F> = (0..STATE_SIZE)
-            .map(|i| constant.elems()[i] + state.elems()[i])
-            .collect();
+        let out_value: Vec<F> =
+            (0..STATE_SIZE).map(|i| constant.elems()[i] + state.elems()[i]).collect();
 
-        check_state(
-            &circuit,
-            &out_var,
-            &RescueVector::from(out_value.as_slice()),
-        );
+        check_state(&circuit, &out_var, &RescueVector::from(out_value.as_slice()));
 
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
 
@@ -642,15 +612,9 @@ mod tests {
         let input_var = circuit.create_rescue_state_variable(&state).unwrap();
         let out_var = circuit.pow_alpha_inv_state(&input_var).unwrap();
 
-        let out_value: Vec<F> = (0..STATE_SIZE)
-            .map(|i| state.elems()[i].pow(F::A_INV))
-            .collect();
+        let out_value: Vec<F> = (0..STATE_SIZE).map(|i| state.elems()[i].pow(F::A_INV)).collect();
 
-        check_state(
-            &circuit,
-            &out_var,
-            &RescueVector::from(out_value.as_slice()),
-        );
+        check_state(&circuit, &out_var, &RescueVector::from(out_value.as_slice()));
 
         check_circuit_satisfiability(&mut circuit, out_value, out_var);
     }
@@ -669,9 +633,7 @@ mod tests {
 
         let input_var = circuit.create_rescue_state_variable(&state_in).unwrap();
 
-        let out_var = circuit
-            .affine_transform(&input_var, &matrix, &constant)
-            .unwrap();
+        let out_var = circuit.affine_transform(&input_var, &matrix, &constant).unwrap();
 
         let mut out_value = state_in;
         out_value.linear(&matrix, &constant);
@@ -694,9 +656,7 @@ mod tests {
 
         let input_var = circuit.create_rescue_state_variable(&state_in).unwrap();
 
-        let out_var = circuit
-            .non_linear_transform(&input_var, &matrix, &constant)
-            .unwrap();
+        let out_var = circuit.non_linear_transform(&input_var, &matrix, &constant).unwrap();
 
         let mut out_value = state_in;
         out_value.non_linear(&matrix, &constant);
@@ -740,12 +700,8 @@ mod tests {
     fn test_add_state_helper<F: RescueParameter>() {
         let mut circuit = PlonkCircuit::<F>::new_turbo_plonk();
 
-        let state1 = RescueVector::from(&[
-            F::from(12_u32),
-            F::from(7_u32),
-            F::from(4_u32),
-            F::from(3_u32),
-        ]);
+        let state1 =
+            RescueVector::from(&[F::from(12_u32), F::from(7_u32), F::from(4_u32), F::from(3_u32)]);
 
         let state2 = RescueVector::from(&[
             F::from(1_u32),
@@ -758,15 +714,10 @@ mod tests {
         let input2_var = circuit.create_rescue_state_variable(&state2).unwrap();
         let out_var = circuit.add_state(&input1_var, &input2_var).unwrap();
 
-        let out_value: Vec<F> = (0..STATE_SIZE)
-            .map(|i| state1.elems()[i] + state2.elems()[i])
-            .collect();
+        let out_value: Vec<F> =
+            (0..STATE_SIZE).map(|i| state1.elems()[i] + state2.elems()[i]).collect();
 
-        check_state(
-            &circuit,
-            &out_var,
-            &RescueVector::from(out_value.as_slice()),
-        );
+        check_state(&circuit, &out_var, &RescueVector::from(out_value.as_slice()));
 
         assert!(circuit.check_circuit_satisfiability(&[]).is_ok());
 
@@ -849,10 +800,7 @@ mod tests {
 
         let mut prng = jf_utils::test_rng();
         let data = (0..2 * CRHF_RATE).map(|_| F::rand(&mut prng)).collect_vec();
-        let data_vars = data
-            .iter()
-            .map(|&x| circuit.create_variable(x).unwrap())
-            .collect_vec();
+        let data_vars = data.iter().map(|&x| circuit.create_variable(x).unwrap()).collect_vec();
 
         let expected_sponge = RescueCRHF::sponge_no_padding(&data, 1).unwrap()[0];
         let sponge_var = RescueNativeGadget::<F>::rescue_sponge_no_padding(
@@ -874,10 +822,7 @@ mod tests {
 
         let size = 2 * CRHF_RATE + 1; // Non multiple of RATE
         let data = (0..size).map(|_| F::rand(&mut prng)).collect_vec();
-        let data_vars = data
-            .iter()
-            .map(|&x| circuit.create_variable(x).unwrap())
-            .collect_vec();
+        let data_vars = data.iter().map(|&x| circuit.create_variable(x).unwrap()).collect_vec();
 
         assert!(RescueNativeGadget::<F>::rescue_sponge_no_padding(
             &mut circuit,
@@ -938,12 +883,7 @@ mod tests {
 
         // bad path: incorrect number of inputs
         let mut circuit = PlonkCircuit::new_turbo_plonk();
-        let input_vec = [
-            F::from(11_u32),
-            F::from(144_u32),
-            F::from(87_u32),
-            F::from(45_u32),
-        ];
+        let input_vec = [F::from(11_u32), F::from(144_u32), F::from(87_u32), F::from(45_u32)];
         let input_var = [
             circuit.create_variable(input_vec[0]).unwrap(),
             circuit.create_variable(input_vec[1]).unwrap(),
@@ -967,10 +907,8 @@ mod tests {
                 let mut circuit = PlonkCircuit::new_turbo_plonk();
 
                 let input_vec: Vec<F> = (0..input_len).map(|i| F::from((i + 10) as u32)).collect();
-                let input_var: Vec<Variable> = input_vec
-                    .iter()
-                    .map(|x| circuit.create_variable(*x).unwrap())
-                    .collect();
+                let input_var: Vec<Variable> =
+                    input_vec.iter().map(|x| circuit.create_variable(*x).unwrap()).collect();
 
                 let out_var = RescueNativeGadget::<F>::rescue_sponge_with_padding(
                     &mut circuit,
@@ -1016,10 +954,8 @@ mod tests {
         let key_var = circuit.create_variable(key).unwrap();
         let input_len = 8;
         let data: Vec<F> = (0..input_len).map(|_| F::rand(&mut prng)).collect_vec();
-        let data_vars: Vec<Variable> = data
-            .iter()
-            .map(|&x| circuit.create_variable(x).unwrap())
-            .collect_vec();
+        let data_vars: Vec<Variable> =
+            data.iter().map(|&x| circuit.create_variable(x).unwrap()).collect_vec();
 
         let expected_fsks_output =
             RescuePRFCore::full_state_keyed_sponge_no_padding(&key, &data, 1).unwrap();
@@ -1042,13 +978,11 @@ mod tests {
         // make data_vars of bad length
         let mut data_vars = data_vars;
         data_vars.push(circuit.zero());
-        assert!(
-            RescueNativeGadget::<F>::rescue_full_state_keyed_sponge_no_padding(
-                &mut circuit,
-                key_var,
-                &data_vars
-            )
-            .is_err()
-        );
+        assert!(RescueNativeGadget::<F>::rescue_full_state_keyed_sponge_no_padding(
+            &mut circuit,
+            key_var,
+            &data_vars
+        )
+        .is_err());
     }
 }

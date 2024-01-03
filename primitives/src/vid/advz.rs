@@ -178,9 +178,7 @@ where
         for coeffs in elems_iter.chunks(self.payload_chunk_size).into_iter() {
             let poly = DenseUVPolynomial::from_coefficients_vec(coeffs.collect());
             let commitment = P::commit(&self.ck, &poly).map_err(vid)?;
-            commitment
-                .serialize_uncompressed(&mut hasher)
-                .map_err(vid)?;
+            commitment.serialize_uncompressed(&mut hasher).map_err(vid)?;
         }
         Ok(hasher.finalize())
     }
@@ -231,10 +229,7 @@ where
         // scalar.
         let aggregate_poly_commit = P::Commitment::from(
             polynomial_eval(
-                common
-                    .poly_commits
-                    .iter()
-                    .map(|x| CurveMultiplier(x.as_ref())),
+                common.poly_commits.iter().map(|x| CurveMultiplier(x.as_ref())),
                 pseudorandom_scalar,
             )
             .into(),
@@ -356,9 +351,7 @@ where
             let mut hasher = H::new();
             for poly_commit in common.poly_commits.iter() {
                 // TODO compiler bug? `as` should not be needed here!
-                (poly_commit as &P::Commitment)
-                    .serialize_uncompressed(&mut hasher)
-                    .map_err(vid)?;
+                (poly_commit as &P::Commitment).serialize_uncompressed(&mut hasher).map_err(vid)?;
             }
             hasher.finalize()
         };
@@ -394,11 +387,7 @@ where
             })
             .collect::<Result<_, VidError>>()?;
 
-        Ok(VidDisperse {
-            shares,
-            common,
-            commit,
-        })
+        Ok(VidDisperse { shares, common, commit })
     }
 
     /// Same as [`VidScheme::recover_payload`] except returns a [`Vec`] of field
@@ -417,15 +406,10 @@ where
         }
 
         // all shares must have equal evals len
-        let num_polys = shares
-            .first()
-            .ok_or_else(|| VidError::Argument("shares is empty".into()))?
-            .evals
-            .len();
-        if let Some((index, share)) = shares
-            .iter()
-            .enumerate()
-            .find(|(_, s)| s.evals.len() != num_polys)
+        let num_polys =
+            shares.first().ok_or_else(|| VidError::Argument("shares is empty".into()))?.evals.len();
+        if let Some((index, share)) =
+            shares.iter().enumerate().find(|(_, s)| s.evals.len() != num_polys)
         {
             return Err(VidError::Argument(format!(
                 "shares do not have equal evals lengths: share {} len {}, share {} len {}",
@@ -457,14 +441,9 @@ where
     fn pseudorandom_scalar(common: &<Self as VidScheme>::Common) -> VidResult<P::Evaluation> {
         let mut hasher = H::new();
         for poly_commit in common.poly_commits.iter() {
-            poly_commit
-                .serialize_uncompressed(&mut hasher)
-                .map_err(vid)?;
+            poly_commit.serialize_uncompressed(&mut hasher).map_err(vid)?;
         }
-        common
-            .all_evals_digest
-            .serialize_uncompressed(&mut hasher)
-            .map_err(vid)?;
+        common.all_evals_digest.serialize_uncompressed(&mut hasher).map_err(vid)?;
 
         // Notes on hash-to-field:
         // - Can't use `Field::from_random_bytes` because it's fallible (in what sense
@@ -523,9 +502,7 @@ where
     I::Item: for<'a> Mul<&'a F, Output = U>,
     U: Add<Output = U> + Zero,
 {
-    coeffs
-        .into_iter()
-        .fold(U::zero(), |res, coeff| coeff * point.borrow() + res)
+    coeffs.into_iter().fold(U::zero(), |res, coeff| coeff * point.borrow() + res)
 }
 
 struct FieldMultiplier<'a, F>(&'a F);
@@ -591,10 +568,8 @@ mod tests {
         for (i, share) in shares.iter().enumerate() {
             // missing share eval
             {
-                let share_missing_eval = Share {
-                    evals: share.evals[1..].to_vec(),
-                    ..share.clone()
-                };
+                let share_missing_eval =
+                    Share { evals: share.evals[1..].to_vec(), ..share.clone() };
                 assert_arg_err(
                     advz.verify_share(&share_missing_eval, &common),
                     "1 missing share should be arg error",
@@ -612,10 +587,8 @@ mod tests {
 
             // corrupted index, in bounds
             {
-                let share_bad_index = Share {
-                    index: (share.index + 1) % advz.num_storage_nodes,
-                    ..share.clone()
-                };
+                let share_bad_index =
+                    Share { index: (share.index + 1) % advz.num_storage_nodes, ..share.clone() };
                 advz.verify_share(&share_bad_index, &common)
                     .unwrap()
                     .expect_err("bad share index should fail verification");
@@ -623,10 +596,8 @@ mod tests {
 
             // corrupted index, out of bounds
             {
-                let share_bad_index = Share {
-                    index: share.index + advz.num_storage_nodes,
-                    ..share.clone()
-                };
+                let share_bad_index =
+                    Share { index: share.index + advz.num_storage_nodes, ..share.clone() };
                 advz.verify_share(&share_bad_index, &common)
                     .unwrap()
                     .expect_err("bad share index should fail verification");
@@ -655,10 +626,8 @@ mod tests {
         let (shares, common) = (disperse.shares, disperse.common);
 
         // missing commit
-        let common_missing_item = Common {
-            poly_commits: common.poly_commits[1..].to_vec(),
-            ..common.clone()
-        };
+        let common_missing_item =
+            Common { poly_commits: common.poly_commits[1..].to_vec(), ..common.clone() };
         assert_arg_err(
             advz.verify_share(&shares[0], &common_missing_item),
             "1 missing commit should be arg error",

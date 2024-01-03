@@ -67,11 +67,7 @@ impl<E: Pairing> StructuredReferenceString for UnivariateUniversalParams<E> {
 
     /// Extract the verifier parameters from the public parameters.
     fn extract_verifier_param(&self, _supported_degree: usize) -> Self::VerifierParam {
-        Self::VerifierParam {
-            g: self.powers_of_g[0],
-            h: self.h,
-            beta_h: self.beta_h,
-        }
+        Self::VerifierParam { g: self.powers_of_g[0], h: self.h, beta_h: self.beta_h }
     }
 
     /// Trim the universal parameters to specialize the public parameters
@@ -92,11 +88,7 @@ impl<E: Pairing> StructuredReferenceString for UnivariateUniversalParams<E> {
         let powers_of_g = self.powers_of_g[..=supported_degree].to_vec();
 
         let pk = Self::ProverParam { powers_of_g };
-        let vk = Self::VerifierParam {
-            g: self.powers_of_g[0],
-            h: self.h,
-            beta_h: self.beta_h,
-        };
+        let vk = Self::VerifierParam { g: self.powers_of_g[0], h: self.h, beta_h: self.beta_h };
         Ok((pk, vk))
     }
 
@@ -155,11 +147,7 @@ mod tests {
         let h = h.into_affine();
         let beta_h = (h * beta).into_affine();
 
-        let pp = UnivariateUniversalParams {
-            powers_of_g,
-            h,
-            beta_h,
-        };
+        let pp = UnivariateUniversalParams { powers_of_g, h, beta_h };
         end_timer!(setup_time);
         Ok(pp)
     }

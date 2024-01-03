@@ -124,9 +124,7 @@ macro_rules! impl_forgetable_merkle_tree_scheme {
             fn from_commitment(com: impl Borrow<Self::Commitment>) -> Self {
                 let com = com.borrow();
                 $name {
-                    root: Box::new(MerkleNode::ForgettenSubtree {
-                        value: com.digest(),
-                    }),
+                    root: Box::new(MerkleNode::ForgettenSubtree { value: com.digest() }),
                     height: com.height(),
                     num_leaves: com.size(),
                     _phantom_h: PhantomData,
@@ -156,12 +154,7 @@ macro_rules! impl_forgetable_merkle_tree_scheme {
             ) -> Result<(), PrimitivesError> {
                 let proof = proof.borrow();
                 let traversal_path = pos.to_traversal_path(self.height);
-                if let MerkleNode::<E, I, T>::Leaf {
-                    value: _,
-                    pos,
-                    elem,
-                } = &proof.proof[0]
-                {
+                if let MerkleNode::<E, I, T>::Leaf { value: _, pos, elem } = &proof.proof[0] {
                     if !elem.eq(element.borrow()) {
                         return Err(PrimitivesError::ParameterError(
                             "Element does not match the proof.".to_string(),
@@ -197,9 +190,7 @@ macro_rules! impl_forgetable_merkle_tree_scheme {
                         &proof.proof,
                     )
                 } else {
-                    Err(PrimitivesError::ParameterError(
-                        "Invalid proof type".to_string(),
-                    ))
+                    Err(PrimitivesError::ParameterError("Invalid proof type".to_string()))
                 }
             }
         }
