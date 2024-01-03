@@ -165,6 +165,15 @@ impl<F: PrimeField> PlonkCircuit<F> {
         // Check that each offset occurs after the public inputs
         let n = layout.circuit_alignment();
         for (id, layout) in layout.group_layouts.iter() {
+            // Check that the layout does not exceed its alignment
+            let alignment_bound = 1 << layout.alignment;
+            if layout.offset + layout.size >= alignment_bound {
+                return Err(CircuitError::Layout(format!(
+                    "Link group {id} (layout = {layout:?}) exceeds its alignment",
+                )));
+            }
+
+            // Check that each offset occurs after the public inputs
             let (start, _) = layout.range_in_nth_roots(n);
             if start < self.num_inputs() {
                 return Err(CircuitError::Layout(format!(
@@ -253,7 +262,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         gates: &mut Vec<Box<dyn Gate<F>>>,
         wire_variables: &mut [Vec<Variable>; GATE_WIDTH + 2],
         gates_iter: &mut impl Iterator<Item = Box<dyn Gate<F>>>,
-        vars_iter: &mut Vec<impl Iterator<Item = Variable>>,
+        vars_iter: &mut [impl Iterator<Item = Variable>],
     ) {
         // May be hit in `append_group` if spacing is one, so best to short circuit
         if n == 0 {
@@ -280,7 +289,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         gates: &mut Vec<Box<dyn Gate<F>>>,
         wire_variables: &mut [Vec<Variable>; GATE_WIDTH + 2],
         gates_iter: &mut impl Iterator<Item = Box<dyn Gate<F>>>,
-        vars_iter: &mut Vec<impl Iterator<Item = Variable>>,
+        vars_iter: &mut [impl Iterator<Item = Variable>],
     ) {
         // Translate the layout alignment to the circuit's alignment
         let spacing = 1 << (circuit_layout.circuit_alignment() - layout.alignment);
@@ -315,27 +324,69 @@ fn ranges_intersect(range1: (usize, usize), range2: (usize, usize)) -> bool {
     range_start <= range_end
 }
 
-// ---------
-// | Tests |
-// ---------
-
 #[cfg(test)]
 mod test {
     use ark_ed_on_bn254::Fq as FqEd254;
-    use ark_ff::One;
+    use ark_ff::{One, PrimeField};
     use ark_std::{
         rand::{distributions::uniform::SampleRange, thread_rng},
         UniformRand,
     };
+    use itertools::Itertools;
 
     use crate::{
         constants::GATE_WIDTH,
-        gates::{PaddingGate, ProofLinkingGate},
-        traits::Circuit,
-        PlonkCircuit,
+        gates::{Gate, IoGate, PaddingGate, ProofLinkingGate},
+        traits::{Circuit, LinkGroup},
+        PlonkCircuit, Variable,
     };
 
     use super::GroupLayout;
+
+    // -----------
+    // | Helpers |
+    // -----------
+
+    /// A dummy gate that we use to test circuit layouts
+    #[derive(Clone, Debug)]
+    pub struct DummyGate;
+    impl<F: PrimeField> Gate<F> for DummyGate {
+        fn name(&self) -> &'static str {
+            "DummyGate"
+        }
+    }
+
+    /// Add a random link group to the circuit
+    fn add_random_link_group(
+        alignment: usize,
+        size: usize,
+        cs: &mut PlonkCircuit<FqEd254>,
+    ) -> LinkGroup {
+        assert!(size <= 2usize.pow(alignment as u32));
+        let mut rng = thread_rng();
+
+        let n = cs.circuit_alignment();
+        let n_inputs = cs.num_inputs();
+
+        // Scale the offset so it is after the public inputs
+        let offset_min = if n <= alignment {
+            n_inputs
+        } else {
+            let scale = 1 << (n - alignment);
+            n_inputs.next_multiple_of(scale) / scale
+        };
+        let offset_max = 2usize.pow(alignment as u32) - size - 1;
+        let offset = (offset_min..offset_max).sample_single(&mut rng);
+
+        // Create the group and add variables to it
+        let placement = GroupLayout::new(alignment, offset);
+        let group = cs.create_link_group("group1".to_string(), Some(placement));
+        for _ in 0..size {
+            cs.create_variable_with_link_groups(FqEd254::rand(&mut rng), &[group.clone()]).unwrap();
+        }
+
+        group
+    }
 
     /// Check that the given link group has been placed correctly
     fn assert_link_group_placement(
@@ -364,6 +415,10 @@ mod test {
             }
         }
     }
+
+    // ---------
+    // | Tests |
+    // ---------
 
     /// Tests the layout method of the circuit
     #[test]
@@ -475,5 +530,84 @@ mod test {
         cs.create_variable_with_link_groups(val2, &[group1, group2]).unwrap();
 
         assert!(cs.gen_circuit_layout().is_err());
+    }
+
+    /// Tests that gates added to the circuit remain in the circuit after proof
+    /// linking
+    ///
+    /// Does so by effectively creating a random circuit, and ensuring the gates
+    /// and wires are the same after proof-linking is done
+    #[test]
+    fn test_proof_linking_gates() {
+        const N: usize = 100;
+        const MIN_ALIGNMENT: usize = (N.ilog2() + 1) as usize;
+        const MAX_ALIGNMENT: usize = MIN_ALIGNMENT + 3;
+        let mut rng = thread_rng();
+
+        // Sample circuit dimensions
+        let n_inputs = (1..N).sample_single(&mut rng);
+        let n_gates = (n_inputs..2 * n_inputs).sample_single(&mut rng);
+        let n_witness = (1..N).sample_single(&mut rng);
+        let n_links = (1..N).sample_single(&mut rng);
+
+        // Construct the circuit
+        let mut cs = PlonkCircuit::<FqEd254>::new_turbo_plonk();
+
+        // Create the inputs
+        for _ in 0..n_inputs {
+            cs.create_public_variable(FqEd254::rand(&mut rng)).unwrap();
+        }
+
+        // Create witness variables for the gates
+        for _ in 0..n_witness {
+            cs.create_variable(FqEd254::rand(&mut rng)).unwrap();
+        }
+
+        // Create a random set of gates
+        let mut wiring: Vec<[Variable; GATE_WIDTH + 1]> = Vec::with_capacity(n_gates);
+        for _ in 0..n_gates {
+            let wires = (0..GATE_WIDTH + 1)
+                .map(|_| (0..n_witness).sample_single(&mut rng))
+                .collect_vec()
+                .try_into()
+                .unwrap();
+            cs.insert_gate(&wires, Box::new(DummyGate)).unwrap();
+
+            wiring.push(wires);
+        }
+
+        // Add a random link group and allocate variables in it
+        let alignment = (MIN_ALIGNMENT..MAX_ALIGNMENT).sample_single(&mut rng);
+        add_random_link_group(alignment, n_links, &mut cs);
+
+        // Arithmetize the circuit
+        cs.finalize_for_arithmetization().unwrap();
+
+        // Now check the gates and wires are the same
+        let mut inputs = 0;
+        let mut gates = 0;
+        let mut arithmetized_wiring = Vec::with_capacity(wiring.len());
+
+        for (i, gate) in cs.gates.iter().enumerate() {
+            if gate.as_any().is::<DummyGate>() {
+                gates += 1;
+                let mut wires = [0; GATE_WIDTH + 1];
+                #[allow(clippy::needless_range_loop)]
+                for wire_idx in 0..GATE_WIDTH + 1 {
+                    wires[wire_idx] = cs.wire_variables[wire_idx][i];
+                }
+
+                arithmetized_wiring.push(wires);
+            } else if gate.as_any().is::<IoGate>() {
+                inputs += 1;
+            }
+        }
+
+        assert_eq!(inputs, n_inputs);
+        assert_eq!(gates, n_gates);
+
+        wiring.sort();
+        arithmetized_wiring.sort();
+        assert_eq!(wiring, arithmetized_wiring);
     }
 }
