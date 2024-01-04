@@ -28,6 +28,8 @@ pub enum PlonkError {
     PCSError(PCSError),
     /// An error in the Plonk circuit: {0}
     CircuitError(CircuitError),
+    /// An error during proof linking verification
+    ProofLinkVerification,
     /// An error during IO: {0}
     IoError(ark_std::io::Error),
     /// An error during (de)serialization
