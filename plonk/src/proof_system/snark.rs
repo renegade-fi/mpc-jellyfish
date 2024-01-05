@@ -8,8 +8,8 @@
 use super::{
     prover::Prover,
     structs::{
-        BatchProof, Challenges, Oracles, PlookupProof, PlookupProvingKey, PlookupVerifyingKey,
-        Proof, ProvingKey, VerifyingKey,
+        BatchProof, Challenges, LinkingHint, Oracles, PlookupProof, PlookupProvingKey,
+        PlookupVerifyingKey, Proof, ProvingKey, VerifyingKey,
     },
     verifier::Verifier,
     UniversalSNARK,
@@ -39,7 +39,8 @@ use jf_primitives::{
 };
 use jf_utils::par_utils::parallelizable_slice_iter;
 use mpc_relation::{
-    constants::compute_coset_representatives, gadgets::ecc::SWToTEConParam, traits::*,
+    constants::compute_coset_representatives, gadgets::ecc::SWToTEConParam,
+    proof_linking::PROOF_LINK_WIRE_IDX, traits::*,
 };
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -74,6 +75,42 @@ where
         let (batch_proof, ..) =
             Self::batch_prove_internal::<_, _, T>(prng, circuits, prove_keys, None)?;
         Ok(batch_proof)
+    }
+
+    /// Generate a proof and return a linking hint alongside     
+    pub fn prove_with_link_hint<C, R, T>(
+        prng: &mut R,
+        circuit: &C,
+        prove_key: &ProvingKey<E>,
+    ) -> Result<(Proof<E>, LinkingHint<E>), PlonkError>
+    where
+        C: Arithmetization<E::ScalarField>,
+        C: Circuit<E::ScalarField, Wire = E::ScalarField, Constant = E::ScalarField>,
+        R: CryptoRng + RngCore,
+        T: PlonkTranscript<F>,
+    {
+        // Prove the relation
+        let (batch_proof, oracles, _) =
+            Self::batch_prove_internal::<_, _, T>(prng, &[circuits], &[prove_keys], None)?;
+
+        // Compute the linking hint
+        let hint = LinkingHint {
+            linking_wire_poly: oracles[0].wire_polys[PROOF_LINK_WIRE_IDX].clone(),
+            linking_wire_comm: batch_proof.wires_poly_comms_vec[0][PROOF_LINK_WIRE_IDX],
+        };
+
+        Ok((
+            Proof {
+                wires_poly_comms: batch_proof.wires_poly_comms_vec[0].clone(),
+                prod_perm_poly_comm: batch_proof.prod_perm_poly_comms_vec[0],
+                split_quot_poly_comms: batch_proof.split_quot_poly_comms,
+                opening_proof: batch_proof.opening_proof,
+                shifted_opening_proof: batch_proof.shifted_opening_proof,
+                poly_evals: batch_proof.poly_evals_vec[0].clone(),
+                plookup_proof: batch_proof.plookup_proofs_vec[0].clone(),
+            },
+            hint,
+        ))
     }
 
     /// Verify a single aggregated Plonk proof.
