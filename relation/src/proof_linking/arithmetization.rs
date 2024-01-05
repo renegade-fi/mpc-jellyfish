@@ -59,7 +59,11 @@ impl GroupLayout {
 impl<F: PrimeField> PlonkCircuit<F> {
     /// Generate a layout of the circuit, including where proof-linking gates
     /// will be placed
-    pub fn gen_circuit_layout(&self) -> Result<CircuitLayout, CircuitError> {
+    pub fn gen_circuit_layout(&mut self) -> Result<CircuitLayout, CircuitError> {
+        if let Some(layout) = &self.layout {
+            return Ok(layout.clone());
+        }
+
         // 1. Place the proof linking groups with specific layouts into the circuit
         let alignment = self.current_circuit_alignment();
         let mut sorted_placements = self
@@ -82,6 +86,8 @@ impl<F: PrimeField> PlonkCircuit<F> {
             CircuitLayout { n_inputs: self.num_inputs(), n_gates: self.num_gates(), group_layouts };
 
         self.validate_layout(&circuit_layout)?;
+        self.layout = Some(circuit_layout.clone());
+
         Ok(circuit_layout)
     }
 

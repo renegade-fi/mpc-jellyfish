@@ -218,6 +218,13 @@ where
     /// Groups without specified layouts will be given a layout when the circuit
     /// layout is determined
     pub(crate) link_group_layouts: HashMap<String, GroupLayout>,
+    /// The layout of the circuit if one has been generated
+    ///
+    /// After applying a layout to the circuit, the circuit's topology changes,
+    /// so subsequent calls to `gen_circuit_layout` will change the layout.
+    /// This field is used to cache the layout so that it can be reused even
+    /// after the layout is applied
+    pub(crate) layout: Option<CircuitLayout>,
 
     /// The Plonk parameters.
     plonk_params: PlonkParams,
@@ -262,6 +269,7 @@ impl<F: FftField> PlonkCircuit<F> {
             eval_domain: Radix2EvaluationDomain::new(1).unwrap(),
             link_groups: HashMap::new(),
             link_group_layouts: HashMap::new(),
+            layout: None,
             plonk_params,
             num_table_elems: 0,
             table_gate_ids: vec![],
@@ -1140,6 +1148,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
             // `link_groups` must be empty for both proofs
             link_groups: HashMap::new(),
             link_group_layouts: HashMap::new(),
+            layout: None,
             plonk_params: self.plonk_params,
             num_table_elems: 0,
             table_gate_ids: vec![],

@@ -16,17 +16,14 @@ use jf_primitives::{
     rescue::RescueParameter,
 };
 use mpc_relation::{
-    errors::CircuitError,
     gadgets::ecc::SWToTEConParam,
     proof_linking::{GroupLayout, PROOF_LINK_WIRE_IDX},
-    traits::LinkGroup,
-    PlonkCircuit,
 };
 
 use crate::{errors::PlonkError, transcript::PlonkTranscript};
 
 use super::{
-    structs::{Proof, ProvingKey, VerifyingKey},
+    structs::{LinkingHint, Proof, ProvingKey, VerifyingKey},
     PlonkKzgSnark,
 };
 
@@ -51,37 +48,29 @@ where
 {
     /// Link two proofs on a given domain
     pub fn link_proofs<T: PlonkTranscript<F>>(
-        lhs_circuit: &PlonkCircuit<E::ScalarField>,
-        rhs_circuit: &PlonkCircuit<E::ScalarField>,
-        lhs_proof: &Proof<E>,
-        rhs_proof: &Proof<E>,
+        lhs_link_hint: &LinkingHint<E>,
+        rhs_link_hint: &LinkingHint<E>,
+        group_layout: &GroupLayout,
         proving_key: &ProvingKey<E>,
-        link_group: &LinkGroup,
     ) -> Result<LinkingProof<E>, PlonkError> {
-        // Get the placement of the group in the circuit's layout
-        let circuit_layout = lhs_circuit.gen_circuit_layout().map_err(PlonkError::CircuitError)?;
-        let group_layout = circuit_layout.group_layouts.get(&link_group.id).ok_or_else(|| {
-            PlonkError::CircuitError(CircuitError::LinkGroupNotFound(format!(
-                "link group {} not found in layout",
-                link_group.id
-            )))
-        })?;
-
         // Compute the wiring polynomials that encode the proof-linked values
-        let a1 = lhs_circuit.get_proof_linking_wire_poly();
-        let a2 = rhs_circuit.get_proof_linking_wire_poly();
+        let a1 = &lhs_link_hint.linking_wire_poly;
+        let a2 = &rhs_link_hint.linking_wire_poly;
 
         // Compute the quotient then commit to it
-        let quotient = Self::compute_linking_quotient(&a1, &a2, group_layout)?;
+        let quotient = Self::compute_linking_quotient(a1, a2, group_layout)?;
         let quotient_commitment = UnivariateKzgPCS::commit(&proving_key.commit_key, &quotient)
             .map_err(PlonkError::PCSError)?;
 
         // Squeeze a challenge for the opening
-        let opening_challenge =
-            Self::compute_quotient_challenge::<T>(lhs_proof, rhs_proof, &quotient_commitment)?;
+        let opening_challenge = Self::compute_quotient_challenge::<T>(
+            &lhs_link_hint.linking_wire_comm,
+            &rhs_link_hint.linking_wire_comm,
+            &quotient_commitment,
+        )?;
         let opening_proof = Self::compute_identity_opening(
-            &a1,
-            &a2,
+            a1,
+            a2,
             &quotient,
             opening_challenge,
             group_layout,
@@ -164,15 +153,14 @@ where
     /// the proofs _after_ they have committed to the wiring polynomials
     /// that are being linked
     fn compute_quotient_challenge<T: PlonkTranscript<E::BaseField>>(
-        lhs_proof: &Proof<E>,
-        rhs_proof: &Proof<E>,
+        a1_comm: &Commitment<E>,
+        a2_comm: &Commitment<E>,
         quotient_comm: &Commitment<E>,
     ) -> Result<E::ScalarField, PlonkError> {
         let mut transcript = T::new(b"PlonkLinkingProof");
 
-        let a_comm1 = lhs_proof.wires_poly_comms[PROOF_LINK_WIRE_IDX];
-        let a_comm2 = rhs_proof.wires_poly_comms[PROOF_LINK_WIRE_IDX];
-        transcript.append_commitments(b"linking_wire_comms", &[a_comm1, a_comm2])?;
+        // We encode the proof linking gates in the first wire polynomial
+        transcript.append_commitments(b"linking_wire_comms", &[*a1_comm, *a2_comm])?;
         transcript.append_commitment(b"quotient_comm", quotient_comm)?;
 
         transcript.get_and_append_challenge::<E>(b"eta")
@@ -215,6 +203,11 @@ where
     P: SWCurveConfig<BaseField = F, ScalarField = E::ScalarField>,
 {
     /// Verify a linking proof
+    ///
+    /// The verifier does not have access to the link hint of the proofs -- this
+    /// exposes wiring information -- so it is simpler to pass a proof
+    /// reference directly (which the verifier will have). This avoids the need
+    /// to index into the commitments at the callsite
     pub fn verify_link_proof<T: PlonkTranscript<E::BaseField>>(
         r1cs_proof1: &Proof<E>,
         r1cs_proof2: &Proof<E>,
@@ -224,11 +217,11 @@ where
     ) -> Result<(), PlonkError> {
         // Squeeze a challenge for the opening
         let quotient_comm = &link_proof.quotient_commitment;
-        let eta = Self::compute_quotient_challenge::<T>(r1cs_proof1, r1cs_proof2, quotient_comm)?;
-
-        // Compute a commitment to the proof-linking identity polynomial
         let a1_comm = &r1cs_proof1.wires_poly_comms[PROOF_LINK_WIRE_IDX];
         let a2_comm = &r1cs_proof2.wires_poly_comms[PROOF_LINK_WIRE_IDX];
+        let eta = Self::compute_quotient_challenge::<T>(a1_comm, a2_comm, quotient_comm)?;
+
+        // Compute a commitment to the proof-linking identity polynomial
         let identity_comm =
             Self::compute_identity_commitment(a1_comm, a2_comm, quotient_comm, eta, layout);
 
@@ -279,7 +272,7 @@ mod test {
 
     use crate::{
         proof_system::{
-            structs::{Proof, ProvingKey, VerifyingKey},
+            structs::{LinkingHint, Proof, ProvingKey, VerifyingKey},
             PlonkKzgSnark, UniversalSNARK,
         },
         transcript::SolidityTranscript,
@@ -322,13 +315,14 @@ mod test {
         (circuit, group)
     }
 
-    /// Generate a proof for a circuit
-    fn gen_test_proof(circuit: &PlonkCircuit<FrBn254>) -> Proof<Bn254> {
+    /// Generate a proof and link hint for the circuit by proving its r1cs
+    /// relation
+    fn gen_test_proof(circuit: &PlonkCircuit<FrBn254>) -> (Proof<Bn254>, LinkingHint<Bn254>) {
         let mut rng = thread_rng();
         let (pk, _) = gen_keys(circuit);
 
-        PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(
-            &mut rng, circuit, &pk, None, // extra_init_msg
+        PlonkKzgSnark::<Bn254>::prove_with_link_hint::<_, _, SolidityTranscript>(
+            &mut rng, circuit, &pk,
         )
         .unwrap()
     }
@@ -353,22 +347,23 @@ mod test {
         let witness = (0..N).map(|_| u64::rand(&mut rng)).collect_vec();
 
         // Generate the two circuits
-        let (lhs_circuit, group) = gen_test_circuit(&witness);
+        let (mut lhs_circuit, group) = gen_test_circuit(&witness);
         let (rhs_circuit, _) = gen_test_circuit(&witness);
+
+        let circuit_layout = lhs_circuit.gen_circuit_layout().unwrap();
+        let group_layout = circuit_layout.group_layouts.get(&group.id).unwrap();
 
         // Prove each circuit
         let (pk, vk) = gen_keys(&lhs_circuit);
-        let lhs_proof = gen_test_proof(&lhs_circuit);
-        let rhs_proof = gen_test_proof(&rhs_circuit);
+        let (lhs_proof, lhs_hint) = gen_test_proof(&lhs_circuit);
+        let (rhs_proof, rhs_hint) = gen_test_proof(&rhs_circuit);
 
         // Generate a link proof
         let proof = PlonkKzgSnark::link_proofs::<SolidityTranscript>(
-            &lhs_circuit,
-            &rhs_circuit,
-            &lhs_proof,
-            &rhs_proof,
+            &lhs_hint,
+            &rhs_hint,
+            group_layout,
             &pk,
-            &group,
         )
         .unwrap();
 
