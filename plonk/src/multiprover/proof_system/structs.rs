@@ -4,9 +4,10 @@ use core::{
     task::{Context, Poll},
 };
 
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_mpc::{
-    algebra::{AuthenticatedDensePoly, Scalar, ScalarResult},
+    algebra::{AuthenticatedDensePoly, CurvePoint, Scalar, ScalarResult},
+    network::PartyId,
     MpcFabric,
 };
 use futures::{ready, Future};
@@ -15,7 +16,7 @@ use itertools::Itertools;
 use crate::{
     errors::PlonkError,
     multiprover::primitives::{MultiproverKzgCommitment, MultiproverKzgCommitmentOpening},
-    proof_system::structs::{Proof, ProofEvaluations},
+    proof_system::structs::{LinkingHint, Proof, ProofEvaluations},
 };
 
 /// Multiprover Plonk IOP online polynomial oracles
@@ -211,4 +212,27 @@ pub struct MpcLinkingHint<E: Pairing> {
     pub linking_wire_poly: AuthenticatedDensePoly<E::G1>,
     /// The commitment to the linking wire poly generated while proving
     pub linking_wire_comm: MultiproverKzgCommitment<E>,
+}
+
+impl<E: Pairing> MpcLinkingHint<E> {
+    /// Share a singleprover linking hint in the fabric to produce a multiprover
+    /// linking hint
+    pub fn from_singleprover_hint(
+        singleprover_hint: &LinkingHint<E>,
+        sender: PartyId,
+        fabric: &MpcFabric<E::G1>,
+    ) -> Self {
+        // Share the coefficients of the wiring poly
+        let coeffs =
+            singleprover_hint.linking_wire_poly.coeffs.iter().map(|c| Scalar::new(*c)).collect();
+        let shared_coeffs = fabric.batch_share_scalar(coeffs, sender);
+        let shared_poly = AuthenticatedDensePoly::from_coeffs(shared_coeffs);
+
+        // Share the commitment to the wiring poly
+        let affine_point: E::G1 = singleprover_hint.linking_wire_comm.as_ref().into_group();
+        let commitment = fabric.share_point(CurvePoint::from(affine_point), sender);
+        let shared_comm = MultiproverKzgCommitment { commitment };
+
+        Self { linking_wire_poly: shared_poly, linking_wire_comm: shared_comm }
+    }
 }
