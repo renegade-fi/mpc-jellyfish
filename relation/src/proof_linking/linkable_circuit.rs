@@ -353,6 +353,13 @@ fn validate_layout(num_inputs: usize, layout: &CircuitLayout) -> Result<(), Circ
     // Check that each offset occurs after the public inputs
     let n = layout.circuit_alignment();
     for (id, layout) in layout.group_layouts.iter() {
+        // Check that the layout is not empty
+        if layout.size == 0 {
+            return Err(CircuitError::Layout(format!(
+                "Link group {id} (layout = {layout:?}) is empty",
+            )));
+        }
+
         // Check that the layout does not exceed its alignment
         let alignment_bound = 1 << layout.alignment;
         if layout.offset + layout.size >= alignment_bound {

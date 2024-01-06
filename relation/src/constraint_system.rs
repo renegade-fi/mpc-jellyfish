@@ -290,11 +290,11 @@ impl<F: FftField> PlonkCircuit<F> {
 
         for group in link_groups {
             self.link_groups
-                .get_mut(&group.id)
-                .ok_or_else(|| LinkGroupNotFound(group.id.to_string()))?
+                .get_mut(group)
+                .ok_or_else(|| LinkGroupNotFound(group.to_string()))?
                 .push(var);
 
-            if let Some(layout) = self.link_group_layouts.get_mut(&group.id) {
+            if let Some(layout) = self.link_group_layouts.get_mut(group) {
                 layout.size += 1;
             }
         }
@@ -563,7 +563,7 @@ impl<F: FftField> LinkableCircuit<F> for PlonkCircuit<F> {
             self.link_group_layouts.insert(id.clone(), layout);
         }
 
-        LinkGroup { id }
+        id
     }
 
     fn gates(&self) -> &[Box<dyn Gate<F>>] {

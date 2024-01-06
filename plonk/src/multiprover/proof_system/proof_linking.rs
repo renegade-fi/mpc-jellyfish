@@ -97,7 +97,7 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
     MultiproverPlonkKzgSnark<E>
 {
     /// Link a singleprover proof into a multiprover proof
-    pub fn link_singleprover_proof(
+    pub fn link_proofs(
         lhs_link_hint: &MpcLinkingHint<E>,
         rhs_link_hint: &MpcLinkingHint<E>,
         group_layout: &GroupLayout,
@@ -226,5 +226,341 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         let (opening_proof, _) = MultiproverKZG::open(commit_key, &identity_poly, &challenge)
             .map_err(PlonkError::PCSError)?;
         Ok(opening_proof)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use ark_bn254::{Bn254, G1Projective as Curve};
+    use ark_ec::pairing::Pairing;
+    use ark_ff::Zero;
+    use ark_mpc::{
+        algebra::{AuthenticatedScalarResult, Scalar},
+        test_helpers::execute_mock_mpc,
+        MpcFabric, PARTY0,
+    };
+    use itertools::Itertools;
+    use mpc_relation::{
+        proof_linking::{GroupLayout, LinkableCircuit},
+        PlonkCircuit,
+    };
+    use rand::{thread_rng, Rng};
+
+    use crate::{
+        errors::PlonkError,
+        multiprover::proof_system::{
+            CollaborativeProof, MpcLinkingHint, MpcPlonkCircuit, MultiproverPlonkKzgSnark,
+        },
+        proof_system::{
+            proof_linking::test_helpers::{
+                gen_commit_keys, gen_proving_keys, gen_test_circuit1, gen_test_circuit2,
+                CircuitSelector, GROUP_NAME,
+            },
+            structs::ProvingKey,
+            PlonkKzgSnark,
+        },
+        transcript::SolidityTranscript,
+    };
+
+    /// The number of linked witness elements to use in the tests
+    const WITNESS_ELEMS: usize = 10;
+    /// The test field used
+    type TestField = <Bn254 as Pairing>::ScalarField;
+
+    // -----------
+    // | Helpers |
+    // -----------
+
+    /// Generate a test case proof, group layout, and link hint from the given
+    /// circuit
+    fn gen_circuit_proof_and_hint(
+        witness: &[AuthenticatedScalarResult<Curve>],
+        circuit: CircuitSelector,
+        layout: Option<GroupLayout>,
+        fabric: &MpcFabric<Curve>,
+    ) -> (CollaborativeProof<Bn254>, MpcLinkingHint<Bn254>, GroupLayout) {
+        let mut cs = MpcPlonkCircuit::new(fabric.clone());
+        match circuit {
+            CircuitSelector::Circuit1 => gen_test_circuit1(&mut cs, witness, layout),
+            CircuitSelector::Circuit2 => gen_test_circuit2(&mut cs, witness, layout),
+        };
+        cs.finalize_for_arithmetization().unwrap();
+
+        // Generate a proving key
+        let pk = gen_pk_from_singleprover(circuit, layout);
+
+        // Get the layout
+        let group_layout = cs.get_link_group_layout(GROUP_NAME).unwrap();
+
+        // Generate a proof with a linking hint
+        let (proof, hint) = gen_test_proof(&cs, &pk, fabric);
+        (proof, hint, group_layout)
+    }
+
+    /// Get a proving key by constructing a singleprover circuit of the same
+    /// topology
+    fn gen_pk_from_singleprover(
+        circuit_selector: CircuitSelector,
+        layout: Option<GroupLayout>,
+    ) -> ProvingKey<Bn254> {
+        let mut cs = PlonkCircuit::new_turbo_plonk();
+        let dummy_witness = (0..WITNESS_ELEMS).map(|_| TestField::zero()).collect_vec();
+        match circuit_selector {
+            CircuitSelector::Circuit1 => gen_test_circuit1(&mut cs, &dummy_witness, layout),
+            CircuitSelector::Circuit2 => gen_test_circuit2(&mut cs, &dummy_witness, layout),
+        };
+        cs.finalize_for_arithmetization().unwrap();
+
+        let (pk, _) = gen_proving_keys(&cs);
+        pk
+    }
+
+    /// Generate a proof and link hint for the circuit by proving its r1cs
+    /// relation
+    fn gen_test_proof(
+        circuit: &MpcPlonkCircuit<Curve>,
+        pk: &ProvingKey<Bn254>,
+        fabric: &MpcFabric<Curve>,
+    ) -> (CollaborativeProof<Bn254>, MpcLinkingHint<Bn254>) {
+        MultiproverPlonkKzgSnark::<Bn254>::prove_with_link_hint(circuit, pk, fabric.clone())
+            .unwrap()
+    }
+
+    /// Prove a link between two circuits and verify the link, return the result
+    /// as a result
+    async fn prove_and_verify_link(
+        lhs_hint: &MpcLinkingHint<Bn254>,
+        rhs_hint: &MpcLinkingHint<Bn254>,
+        lhs_proof: &CollaborativeProof<Bn254>,
+        rhs_proof: &CollaborativeProof<Bn254>,
+        layout: &GroupLayout,
+        fabric: &MpcFabric<Curve>,
+    ) -> Result<(), PlonkError> {
+        let (commit_key, open_key) = gen_commit_keys();
+        let proof = MultiproverPlonkKzgSnark::<Bn254>::link_proofs(
+            lhs_hint,
+            rhs_hint,
+            layout,
+            &commit_key,
+            fabric,
+        )?;
+
+        let opened_link = proof.open_authenticated().await?;
+        let lhs_proof = lhs_proof.clone().open_authenticated().await?;
+        let rhs_proof = rhs_proof.clone().open_authenticated().await?;
+
+        PlonkKzgSnark::<Bn254>::verify_link_proof::<SolidityTranscript>(
+            &lhs_proof,
+            &rhs_proof,
+            &opened_link,
+            layout,
+            &open_key,
+        )
+    }
+
+    // --------------
+    // | Test Cases |
+    // --------------
+
+    /// Test the basic case of a valid link on two circuits
+    #[tokio::test]
+    async fn test_valid_link() {
+        let mut rng = thread_rng();
+        let witness = (0..WITNESS_ELEMS).map(|_| Scalar::random(&mut rng)).collect_vec();
+
+        // Generate a proof and link in an MPC
+        let (res, _) = execute_mock_mpc(move |fabric| {
+            let witness = witness.clone();
+            async move {
+                let witness = fabric.batch_share_scalar(witness, PARTY0);
+
+                // Generate r1cs proofs for the two circuits
+                let (lhs_proof, lhs_hint, layout) =
+                    gen_circuit_proof_and_hint(&witness, CircuitSelector::Circuit1, None, &fabric);
+                let (rhs_proof, rhs_hint, _) = gen_circuit_proof_and_hint(
+                    &witness,
+                    CircuitSelector::Circuit2,
+                    Some(layout),
+                    &fabric,
+                );
+
+                // Prove and verify the link
+                prove_and_verify_link(
+                    &lhs_hint, &rhs_hint, &lhs_proof, &rhs_proof, &layout, &fabric,
+                )
+                .await
+            }
+        })
+        .await;
+
+        assert!(res.is_ok());
+    }
+
+    /// Tests a valid link with a layout specified up front
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn test_valid_link__specific_layout() {
+        let mut rng = thread_rng();
+        let witness = (0..WITNESS_ELEMS).map(|_| Scalar::random(&mut rng)).collect_vec();
+
+        // Generate a proof and link in an MPC
+        let (res, _) = execute_mock_mpc(move |fabric| {
+            let witness = witness.clone();
+            async move {
+                let witness = fabric.batch_share_scalar(witness, PARTY0);
+
+                // Generate r1cs proofs for the two circuits
+                let layout = GroupLayout { offset: 20, size: WITNESS_ELEMS, alignment: 8 };
+                let (lhs_proof, lhs_hint, layout) = gen_circuit_proof_and_hint(
+                    &witness,
+                    CircuitSelector::Circuit1,
+                    Some(layout),
+                    &fabric,
+                );
+                let (rhs_proof, rhs_hint, _) = gen_circuit_proof_and_hint(
+                    &witness,
+                    CircuitSelector::Circuit2,
+                    Some(layout),
+                    &fabric,
+                );
+
+                // Prove and verify the link
+                prove_and_verify_link(
+                    &lhs_hint, &rhs_hint, &lhs_proof, &rhs_proof, &layout, &fabric,
+                )
+                .await
+            }
+        })
+        .await;
+
+        assert!(res.is_ok());
+    }
+
+    /// Tests an invalid proof link wherein the witnesses used are different
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn test_invalid_proof_link__different_witnesses() {
+        let mut rng = thread_rng();
+
+        // Modify the second witness at a random location
+        let witness1 = (0..WITNESS_ELEMS).map(|_| Scalar::random(&mut rng)).collect_vec();
+        let mut witness2 = witness1.clone();
+        let modification_idx = rng.gen_range(0..WITNESS_ELEMS);
+        witness2[modification_idx] = Scalar::random(&mut rng);
+
+        let (res, _) = execute_mock_mpc(move |fabric| {
+            let witness1 = witness1.clone();
+            let witness2 = witness2.clone();
+
+            async move {
+                let witness1 = fabric.batch_share_scalar(witness1, PARTY0);
+                let witness2 = fabric.batch_share_scalar(witness2, PARTY0);
+
+                // Generate r1cs proofs for the two circuits
+                let (lhs_proof, lhs_hint, layout) =
+                    gen_circuit_proof_and_hint(&witness1, CircuitSelector::Circuit1, None, &fabric);
+                let (rhs_proof, rhs_hint, _) = gen_circuit_proof_and_hint(
+                    &witness2,
+                    CircuitSelector::Circuit2,
+                    Some(layout),
+                    &fabric,
+                );
+
+                // Prove and verify the link
+                prove_and_verify_link(
+                    &lhs_hint, &rhs_hint, &lhs_proof, &rhs_proof, &layout, &fabric,
+                )
+                .await
+            }
+        })
+        .await;
+
+        assert!(res.is_err());
+    }
+
+    /// Tests the case in which the correct witness is used to link but over
+    /// incorrectly aligned domains
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn test_invalid_proof_link__wrong_alignment() {
+        // Use the same witness between two circuits
+        let mut rng = thread_rng();
+        let witness = (0..WITNESS_ELEMS).map(|_| Scalar::random(&mut rng)).collect_vec();
+
+        let (res, _) = execute_mock_mpc(move |fabric| {
+            let witness = witness.clone();
+            async move {
+                let witness = fabric.batch_share_scalar(witness, PARTY0);
+
+                // Generate r1cs proofs for the two circuits
+                let (lhs_proof, lhs_hint, mut layout) = gen_circuit_proof_and_hint(
+                    &witness,
+                    CircuitSelector::Circuit1,
+                    None, // layout
+                    &fabric,
+                );
+
+                // Modify the layout to be misaligned
+                layout.alignment += 1;
+                let (rhs_proof, rhs_hint, _) = gen_circuit_proof_and_hint(
+                    &witness,
+                    CircuitSelector::Circuit2,
+                    Some(layout),
+                    &fabric,
+                );
+
+                // Prove and verify the link
+                prove_and_verify_link(
+                    &lhs_hint, &rhs_hint, &lhs_proof, &rhs_proof, &layout, &fabric,
+                )
+                .await
+            }
+        })
+        .await;
+
+        assert!(res.is_err());
+    }
+
+    /// Tests the case in which the correct witness is used to link but over
+    /// domains at different offsets
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn test_invalid_proof_link__wrong_offset() {
+        // Use the same witness between two circuits
+        let mut rng = thread_rng();
+        let witness = (0..WITNESS_ELEMS).map(|_| Scalar::random(&mut rng)).collect_vec();
+
+        let (res, _) = execute_mock_mpc(move |fabric| {
+            let witness = witness.clone();
+            async move {
+                let witness = fabric.batch_share_scalar(witness, PARTY0);
+
+                // Generate r1cs proofs for the two circuits
+                let (lhs_proof, lhs_hint, mut layout) = gen_circuit_proof_and_hint(
+                    &witness,
+                    CircuitSelector::Circuit1,
+                    None, // layout
+                    &fabric,
+                );
+
+                // Modify the layout to be misaligned
+                layout.offset -= 1;
+                let (rhs_proof, rhs_hint, _) = gen_circuit_proof_and_hint(
+                    &witness,
+                    CircuitSelector::Circuit2,
+                    Some(layout),
+                    &fabric,
+                );
+
+                // Prove and verify the link
+                prove_and_verify_link(
+                    &lhs_hint, &rhs_hint, &lhs_proof, &rhs_proof, &layout, &fabric,
+                )
+                .await
+            }
+        })
+        .await;
+
+        assert!(res.is_err());
     }
 }

@@ -214,8 +214,8 @@ where
 
         for link_group in link_groups {
             self.link_groups
-                .get_mut(&link_group.id)
-                .ok_or(CircuitError::LinkGroupNotFound(link_group.id.to_string()))?
+                .get_mut(link_group)
+                .ok_or(CircuitError::LinkGroupNotFound(link_group.to_string()))?
                 .push(var);
         }
 
@@ -707,7 +707,7 @@ where
             self.link_group_layouts.insert(id.clone(), layout);
         }
 
-        LinkGroup { id }
+        id
     }
 
     fn gates(&self) -> &[Box<dyn Gate<C::ScalarField>>] {

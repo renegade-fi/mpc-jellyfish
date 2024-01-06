@@ -257,38 +257,37 @@ where
 }
 
 #[cfg(test)]
-mod test {
+pub mod test_helpers {
+    //! Helpers exported for proof-linking tests in the `plonk` crate
+
     use ark_bn254::{Bn254, Fr as FrBn254};
-    use ark_std::UniformRand;
     use itertools::Itertools;
     use jf_primitives::pcs::StructuredReferenceString;
     use lazy_static::lazy_static;
     use mpc_relation::{
         proof_linking::{GroupLayout, LinkableCircuit},
-        traits::Circuit,
         PlonkCircuit,
     };
-    use rand::{thread_rng, Rng, SeedableRng};
+    use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
-    use crate::{
-        errors::PlonkError,
-        proof_system::{
-            structs::{CommitKey, LinkingHint, OpenKey, Proof, ProvingKey, VerifyingKey},
-            PlonkKzgSnark, UniversalSNARK,
-        },
-        transcript::SolidityTranscript,
+    use crate::proof_system::{
+        structs::{CommitKey, OpenKey, ProvingKey, VerifyingKey},
+        PlonkKzgSnark, UniversalSNARK,
     };
 
-    /// The name of the group used in testing
-    const GROUP_NAME: &str = "test_group";
+    /// The field used in testing
+    pub type TestField = FrBn254;
     /// The maximum circuit degree used in testing
-    const MAX_DEGREE_TESTING: usize = 1000;
+    pub const MAX_DEGREE_TESTING: usize = 1000;
+    /// The name of the group used in testing
+    pub const GROUP_NAME: &str = "test_group";
+
     lazy_static! {
         /// The rng seed used to generate the test circuit's SRS
         ///
         /// We generate it once at setup to ensure that the SRS is the same between all constructions
-        static ref SRS_SEED: u64 = rand::thread_rng().gen();
+        pub static ref SRS_SEED: u64 = rand::thread_rng().gen();
     }
 
     // -----------------
@@ -299,7 +298,7 @@ mod test {
     ///
     /// Aids in the ergonomics of templating tests below
     #[derive(Copy, Clone)]
-    enum CircuitSelector {
+    pub enum CircuitSelector {
         /// The first circuit
         Circuit1,
         /// The second circuit
@@ -307,119 +306,79 @@ mod test {
     }
 
     /// Generate a summation circuit with the given witness
-    fn gen_test_circuit1(
-        witness: &[FrBn254],
+    pub fn gen_test_circuit1<C: LinkableCircuit<TestField>>(
+        c: &mut C,
+        witness: &[C::Wire],
         layout: Option<GroupLayout>,
-    ) -> PlonkCircuit<FrBn254> {
-        let mut rng = thread_rng();
-        let mut circuit = PlonkCircuit::new_turbo_plonk();
-
-        // Add a few non-linked witnesses to the sum
-        let non_linked_witnesses = (0..10).map(|_| FrBn254::rand(&mut rng)).collect_vec();
-        let sum = witness.iter().chain(non_linked_witnesses.iter()).cloned().sum::<FrBn254>();
-        let expected = circuit.create_public_variable(sum).unwrap();
+    ) {
+        let sum = witness.iter().cloned().sum::<C::Wire>();
+        let expected = c.create_public_variable(sum).unwrap();
 
         // Add a few public inputs to the circuit
-        for _ in 0..10 {
-            circuit.create_public_variable(FrBn254::rand(&mut rng)).unwrap();
+        // Simplest just to re-use the witness values directly as these are purely for
+        // spacing
+        for val in witness.iter() {
+            c.create_public_variable(val.clone()).unwrap();
         }
 
-        // Create a proof linking group and add the witnesses to it
-        let group = circuit.create_link_group(GROUP_NAME.to_string(), layout);
-        let mut witness_vars = witness
+        // Link the witnesses to the group
+        let group = c.create_link_group(GROUP_NAME.to_string(), layout);
+        let witness_vars = witness
             .iter()
-            .map(|&w| circuit.create_variable_with_link_groups(w, &[group.clone()]).unwrap())
+            .map(|w| c.create_variable_with_link_groups(w.clone(), &[group.clone()]).unwrap())
             .collect_vec();
-        witness_vars.extend(
-            &mut non_linked_witnesses.into_iter().map(|w| circuit.create_variable(w).unwrap()),
-        );
 
-        let sum = circuit.sum(&witness_vars).unwrap();
-        circuit.enforce_equal(sum, expected).unwrap();
-        circuit.finalize_for_arithmetization().unwrap();
+        // Create a few more witnesses that are not linked
+        // Again, for interface simplicity just reuse the witness data to generate new
+        // values
+        witness.iter().map(|w| c.create_variable(w.clone() * w.clone()).unwrap()).collect_vec();
 
-        circuit
+        let sum = c.sum(&witness_vars).unwrap();
+        c.enforce_equal(sum, expected).unwrap();
     }
 
     /// Generate a product circuit with the given witness
-    fn gen_test_circuit2(
-        witness: &[FrBn254],
+    pub fn gen_test_circuit2<C: LinkableCircuit<TestField>>(
+        c: &mut C,
+        witness: &[C::Wire],
         layout: Option<GroupLayout>,
-    ) -> PlonkCircuit<FrBn254> {
-        let mut rng = thread_rng();
-        let mut circuit = PlonkCircuit::new_turbo_plonk();
-
-        // Add a few non-linked witnesses to the product
-        let non_linked_witnesses = (0..10).map(|_| FrBn254::rand(&mut rng)).collect_vec();
-        let product =
-            witness.iter().chain(non_linked_witnesses.iter()).copied().product::<FrBn254>();
-        let expected = circuit.create_public_variable(product).unwrap();
+    ) {
+        // Compute the expected result
+        let mut product = witness[0].clone();
+        for w in witness[1..].iter().cloned() {
+            product = product * w;
+        }
+        let expected = c.create_public_variable(product).unwrap();
 
         // Add a few public inputs to the circuit
-        for _ in 0..10 {
-            circuit.create_public_variable(FrBn254::rand(&mut rng)).unwrap();
+        // Simplest just to re-use the witness values directly as these are purely for
+        // spacing
+        for val in witness.iter() {
+            c.create_public_variable(val.clone()).unwrap();
         }
 
-        // Create a link group with the placement
-        let group = circuit.create_link_group(GROUP_NAME.to_string(), layout);
-        let mut witness_vars = witness
+        // Link half the witnesses to the group
+        let group = c.create_link_group(GROUP_NAME.to_string(), layout);
+        let witness_vars = witness
             .iter()
-            .map(|w| circuit.create_variable_with_link_groups(*w, &[group.clone()]).unwrap())
+            .map(|w| c.create_variable_with_link_groups(w.clone(), &[group.clone()]).unwrap())
             .collect_vec();
-        witness_vars.extend(
-            &mut non_linked_witnesses.into_iter().map(|w| circuit.create_variable(w).unwrap()),
-        );
+
+        // Create a few more witnesses that are not linked
+        // Again, for interface simplicity just reuse the witness data to generate new
+        // values
+        witness.iter().map(|w| c.create_variable(w.clone() * w.clone()).unwrap()).collect_vec();
 
         // Constrain the product
-        let mut product = circuit.one();
+        let mut product = c.one();
         for var in &witness_vars {
-            product = circuit.mul(product, *var).unwrap();
+            product = c.mul(product, *var).unwrap();
         }
-        circuit.enforce_equal(product, expected).unwrap();
-        circuit.finalize_for_arithmetization().unwrap();
-
-        circuit
-    }
-
-    /// Generate a test case proof, group layout, and link hint from the given
-    /// circuit
-    fn gen_circuit_proof_and_hint(
-        witness: &[FrBn254],
-        circuit: CircuitSelector,
-        layout: Option<GroupLayout>,
-    ) -> (Proof<Bn254>, LinkingHint<Bn254>, GroupLayout) {
-        let circuit = match circuit {
-            CircuitSelector::Circuit1 => gen_test_circuit1(witness, layout),
-            CircuitSelector::Circuit2 => gen_test_circuit2(witness, layout),
-        };
-
-        // Get the layout
-        let group_layout = circuit.get_link_group_layout(GROUP_NAME).unwrap();
-
-        // Generate a proof with a linking hint
-        let (proof, hint) = gen_test_proof(&circuit);
-
-        (proof, hint, group_layout)
-    }
-
-    // -----------
-    // | Helpers |
-    // -----------
-
-    /// Generate a proof and link hint for the circuit by proving its r1cs
-    /// relation
-    fn gen_test_proof(circuit: &PlonkCircuit<FrBn254>) -> (Proof<Bn254>, LinkingHint<Bn254>) {
-        let mut rng = thread_rng();
-        let (pk, _) = gen_proving_keys(circuit);
-
-        PlonkKzgSnark::<Bn254>::prove_with_link_hint::<_, _, SolidityTranscript>(
-            &mut rng, circuit, &pk,
-        )
-        .unwrap()
+        c.enforce_equal(product, expected).unwrap();
     }
 
     /// Setup proving and verifying keys for a test circuit
-    fn gen_proving_keys(
+    pub fn gen_proving_keys(
         circuit: &PlonkCircuit<FrBn254>,
     ) -> (ProvingKey<Bn254>, VerifyingKey<Bn254>) {
         let mut rng = ChaCha20Rng::seed_from_u64(*SRS_SEED);
@@ -433,7 +392,7 @@ mod test {
     ///
     /// This is done separately from the proving key to allow helpers to
     /// generate circuit-agnostic keys
-    fn gen_commit_keys() -> (CommitKey<Bn254>, OpenKey<Bn254>) {
+    pub fn gen_commit_keys() -> (CommitKey<Bn254>, OpenKey<Bn254>) {
         let mut rng = ChaCha20Rng::seed_from_u64(*SRS_SEED);
         let srs = PlonkKzgSnark::<Bn254>::universal_setup_for_testing(MAX_DEGREE_TESTING, &mut rng)
             .unwrap();
@@ -442,6 +401,70 @@ mod test {
             srs.extract_prover_param(MAX_DEGREE_TESTING),
             srs.extract_verifier_param(MAX_DEGREE_TESTING),
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use ark_bn254::{Bn254, Fr as FrBn254};
+    use ark_std::UniformRand;
+    use itertools::Itertools;
+    use mpc_relation::{
+        proof_linking::{GroupLayout, LinkableCircuit},
+        PlonkCircuit,
+    };
+    use rand::{thread_rng, Rng};
+
+    use crate::{
+        errors::PlonkError,
+        proof_system::{
+            structs::{LinkingHint, Proof},
+            PlonkKzgSnark,
+        },
+        transcript::SolidityTranscript,
+    };
+
+    use super::test_helpers::{
+        gen_commit_keys, gen_proving_keys, gen_test_circuit1, gen_test_circuit2, CircuitSelector,
+        GROUP_NAME,
+    };
+
+    // -----------
+    // | Helpers |
+    // -----------
+
+    /// Generate a test case proof, group layout, and link hint from the given
+    /// circuit
+    fn gen_circuit_proof_and_hint(
+        witness: &[FrBn254],
+        circuit: CircuitSelector,
+        layout: Option<GroupLayout>,
+    ) -> (Proof<Bn254>, LinkingHint<Bn254>, GroupLayout) {
+        let mut cs = PlonkCircuit::new_turbo_plonk();
+        match circuit {
+            CircuitSelector::Circuit1 => gen_test_circuit1(&mut cs, witness, layout),
+            CircuitSelector::Circuit2 => gen_test_circuit2(&mut cs, witness, layout),
+        };
+        cs.finalize_for_arithmetization().unwrap();
+
+        // Get the layout
+        let group_layout = cs.get_link_group_layout(GROUP_NAME).unwrap();
+
+        // Generate a proof with a linking hint
+        let (proof, hint) = gen_test_proof(&cs);
+        (proof, hint, group_layout)
+    }
+
+    /// Generate a proof and link hint for the circuit by proving its r1cs
+    /// relation
+    fn gen_test_proof(circuit: &PlonkCircuit<FrBn254>) -> (Proof<Bn254>, LinkingHint<Bn254>) {
+        let mut rng = thread_rng();
+        let (pk, _) = gen_proving_keys(circuit);
+
+        PlonkKzgSnark::<Bn254>::prove_with_link_hint::<_, _, SolidityTranscript>(
+            &mut rng, circuit, &pk,
+        )
+        .unwrap()
     }
 
     /// Prove a link between two circuits and verify the link, return the result

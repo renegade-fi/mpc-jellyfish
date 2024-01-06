@@ -11,14 +11,10 @@ use itertools::Itertools;
 /// Represents the parameterization of a proof-linking group in the circuit
 ///
 /// See `Circuit::create_link_group` for more details on proof-linking
-#[derive(Clone, Debug)]
-pub struct LinkGroup {
-    /// The id of the group
-    pub id: String,
-}
+pub type LinkGroup = String;
 
 /// The placement parameterization of a group
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GroupLayout {
     /// The roots-of-unity alignment of the group, i.e. the group is allocated
     /// on the 2^{alignment}-th roots of unity
@@ -45,7 +41,7 @@ impl GroupLayout {
         let spacing = 1 << (n - self.alignment);
 
         let start = self.offset * spacing;
-        let end = start + (self.size - 1) * spacing;
+        let end = start + self.size.saturating_sub(1) * spacing;
 
         (start, end)
     }
@@ -58,7 +54,7 @@ impl GroupLayout {
 }
 
 /// The layout of a circuit
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CircuitLayout {
     /// The number of public inputs to the circuit
     pub n_inputs: usize,
@@ -69,6 +65,14 @@ pub struct CircuitLayout {
 }
 
 impl CircuitLayout {
+    /// Get the layout for a given group
+    ///
+    /// # Panics
+    /// Panics if the group does not exist
+    pub fn get_group_layout(&self, id: &str) -> GroupLayout {
+        self.group_layouts[id]
+    }
+
     /// Get the domain size used to represent the circuit after proof linking
     /// gates are accounted for
     pub fn circuit_size(&self) -> usize {
