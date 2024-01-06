@@ -19,7 +19,7 @@ use itertools::Itertools;
 use mpc_relation::{
     constants::{compute_coset_representatives, GATE_WIDTH, N_MUL_SELECTORS},
     errors::CircuitError,
-    gates::{FifthRootGate, Gate, IoGate, PaddingGate},
+    gates::{FifthRootGate, Gate, IoGate},
     proof_linking::{GroupLayout, LinkGroup, LinkableCircuit},
     traits::*,
     BoolVar, GateId, Variable, WireId,
@@ -272,22 +272,6 @@ where
     /// Use downcast to check whether a gate is of IoGate type
     fn is_io_gate(&self, gate_id: GateId) -> bool {
         self.gates[gate_id].as_any().is::<IoGate>()
-    }
-
-    /// Pad a finalized circuit to match the evaluation domain, prepared for
-    /// arithmetization
-    ///
-    /// This is a pad to a power of two
-    fn pad(&mut self) -> Result<(), CircuitError> {
-        self.check_finalize_flag(true)?;
-        let n = self.eval_domain.size();
-        for _ in self.num_gates()..n {
-            self.gates.push(Box::new(PaddingGate));
-        }
-        for wire_id in 0..self.num_wire_types() {
-            self.wire_variables[wire_id].resize(n, self.zero());
-        }
-        Ok(())
     }
 
     /// Check that the `gate_id`-th gate is satisfied by the circuit's witness
@@ -829,10 +813,11 @@ where
             return Ok(());
         }
 
-        self.eval_domain = Radix2EvaluationDomain::new(self.num_gates())
+        let layout = self.generate_layout()?;
+        self.eval_domain = Radix2EvaluationDomain::new(layout.circuit_size())
             .ok_or(CircuitError::DomainCreationError)?;
-        self.pad()?;
-        self.rearrange_gates()?;
+        self.apply_layout(&layout)?;
+
         self.compute_wire_permutation();
         self.compute_extended_id_permutation();
         Ok(())

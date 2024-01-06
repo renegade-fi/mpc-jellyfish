@@ -3,6 +3,7 @@
 //! arithmetization
 
 mod constraint_system;
+pub mod proof_linking;
 mod prover;
 mod snark;
 mod structs;
