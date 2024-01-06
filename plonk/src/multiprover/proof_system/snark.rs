@@ -15,7 +15,7 @@ use ark_mpc::{
     MpcFabric,
 };
 use itertools::Itertools;
-use mpc_relation::traits::Circuit;
+use mpc_relation::{proof_linking::PROOF_LINK_WIRE_IDX, traits::Circuit};
 
 use crate::{
     errors::{PlonkError, SnarkError},
@@ -23,7 +23,7 @@ use crate::{
     proof_system::structs::ProvingKey,
 };
 
-use super::{MpcArithmetization, MpcChallenges, MpcOracles, MpcProver};
+use super::{MpcArithmetization, MpcChallenges, MpcLinkingHint, MpcOracles, MpcProver};
 
 /// A multiprover Plonk instantiated with KZG as the underlying polynomial
 /// commitment scheme
@@ -44,6 +44,24 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
         proving_key: &ProvingKey<E>,
         fabric: MpcFabric<E::G1>,
     ) -> Result<CollaborativeProof<E>, PlonkError>
+    where
+        C: MpcArithmetization<E::G1>,
+        C: Circuit<
+            E::ScalarField,
+            Wire = AuthenticatedScalarResult<E::G1>,
+            Constant = Scalar<E::G1>,
+        >,
+    {
+        let (proof, _) = Self::prove_with_link_hint(circuit, proving_key, fabric)?;
+        Ok(proof)
+    }
+
+    /// Create a new multiprover proof and return a link hint with it
+    pub fn prove_with_link_hint<C>(
+        circuit: &C,
+        proving_key: &ProvingKey<E>,
+        fabric: MpcFabric<E::G1>,
+    ) -> Result<(CollaborativeProof<E>, MpcLinkingHint<E>), PlonkError>
     where
         C: MpcArithmetization<E::G1>,
         C: Circuit<
@@ -150,14 +168,22 @@ impl<P: SWCurveConfig<BaseField = E::BaseField>, E: Pairing<G1Affine = Affine<P>
             &lin_poly,
         )?;
 
-        Ok(CollaborativeProof {
+        // Build the return values
+        let proof = CollaborativeProof {
             wire_poly_comms: wires_poly_comms_vec,
             prod_perm_poly_comm: prod_perm_poly_comm_open,
             split_quot_poly_comms: split_quote_poly_comm_open,
             opening_proof,
             shifted_opening_proof,
             poly_evals,
-        })
+        };
+
+        let hint = MpcLinkingHint {
+            linking_wire_poly: online_oracles.wire_polys.remove(PROOF_LINK_WIRE_IDX),
+            linking_wire_comm: wires_poly_comms[PROOF_LINK_WIRE_IDX].clone(),
+        };
+
+        Ok((proof, hint))
     }
 
     /// Verify that the shape of the proving key and the circuit match
