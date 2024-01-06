@@ -263,7 +263,11 @@ mod test {
     use itertools::Itertools;
     use jf_primitives::pcs::StructuredReferenceString;
     use lazy_static::lazy_static;
-    use mpc_relation::{proof_linking::GroupLayout, traits::Circuit, PlonkCircuit};
+    use mpc_relation::{
+        proof_linking::{GroupLayout, LinkableCircuit},
+        traits::Circuit,
+        PlonkCircuit,
+    };
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
@@ -384,19 +388,18 @@ mod test {
         circuit: CircuitSelector,
         layout: Option<GroupLayout>,
     ) -> (Proof<Bn254>, LinkingHint<Bn254>, GroupLayout) {
-        let mut circuit = match circuit {
+        let circuit = match circuit {
             CircuitSelector::Circuit1 => gen_test_circuit1(witness, layout),
             CircuitSelector::Circuit2 => gen_test_circuit2(witness, layout),
         };
 
         // Get the layout
-        let circuit_layout = circuit.gen_circuit_layout().unwrap();
-        let group_layout = circuit_layout.group_layouts.get(GROUP_NAME).unwrap();
+        let group_layout = circuit.get_link_group_layout(GROUP_NAME).unwrap();
 
         // Generate a proof with a linking hint
         let (proof, hint) = gen_test_proof(&circuit);
 
-        (proof, hint, *group_layout)
+        (proof, hint, group_layout)
     }
 
     // -----------

@@ -20,7 +20,7 @@ use mpc_relation::{
     constants::{compute_coset_representatives, GATE_WIDTH, N_MUL_SELECTORS},
     errors::CircuitError,
     gates::{FifthRootGate, Gate, IoGate, PaddingGate},
-    proof_linking::GroupLayout,
+    proof_linking::{GroupLayout, LinkGroup, LinkableCircuit},
     traits::*,
     BoolVar, GateId, Variable, WireId,
 };
@@ -629,31 +629,15 @@ where
         Ok(())
     }
 
-    fn create_constant_variable_with_link_groups(
-        &mut self,
-        val: C::ScalarField,
-        link_groups: &[LinkGroup],
-    ) -> Result<Variable, CircuitError> {
-        let authenticated_val = self.fabric.one_authenticated() * Scalar::new(val);
-        let var = self.create_variable_with_link_groups(authenticated_val, link_groups)?;
-        self.enforce_constant(var, val)?;
-
-        Ok(var)
-    }
-
-    fn create_variable_with_link_groups(
+    fn create_variable(
         &mut self,
         val: AuthenticatedScalarResult<C>,
-        link_groups: &[LinkGroup],
     ) -> Result<Variable, CircuitError> {
-        self.check_finalize_flag(false)?;
-        self.witness.push(val);
-        self.num_vars += 1;
+        self.create_variable_with_link_groups(val, &[])
+    }
 
-        let var = self.num_vars - 1;
-        self.add_to_link_groups(var, link_groups)?;
-
-        Ok(var)
+    fn create_constant_variable(&mut self, val: Scalar<C>) -> Result<Variable, CircuitError> {
+        self.create_constant_variable_with_link_groups(val, &[])
     }
 
     fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError> {
@@ -664,15 +648,6 @@ where
         let wire_vars = &[0, 0, 0, 0, var];
         self.insert_gate(wire_vars, Box::new(IoGate))?;
         Ok(())
-    }
-
-    fn create_link_group(&mut self, id: String, layout: Option<GroupLayout>) -> LinkGroup {
-        self.link_groups.insert(id.clone(), Vec::new());
-        if let Some(layout) = layout {
-            self.link_group_layouts.insert(id.clone(), layout);
-        }
-
-        LinkGroup { id }
     }
 
     fn insert_gate(
@@ -700,6 +675,87 @@ where
         let wire_vars = &[x, 0, 0, 0, res_var];
         self.insert_gate(wire_vars, Box::new(FifthRootGate))?;
         Ok(res_var)
+    }
+}
+
+impl<C: CurveGroup> LinkableCircuit<C::ScalarField> for MpcPlonkCircuit<C>
+where
+    C::ScalarField: Unpin,
+{
+    fn num_links(&self) -> usize {
+        self.link_groups.values().map(|group| group.len()).sum()
+    }
+
+    fn create_variable_with_link_groups(
+        &mut self,
+        val: AuthenticatedScalarResult<C>,
+        link_groups: &[LinkGroup],
+    ) -> Result<Variable, CircuitError> {
+        self.check_finalize_flag(false)?;
+        self.witness.push(val);
+        self.num_vars += 1;
+
+        let var = self.num_vars - 1;
+        self.add_to_link_groups(var, link_groups)?;
+
+        Ok(var)
+    }
+
+    fn create_constant_variable_with_link_groups(
+        &mut self,
+        val: Scalar<C>,
+        link_groups: &[LinkGroup],
+    ) -> Result<Variable, CircuitError> {
+        let authenticated_val = self.fabric.one_authenticated() * val;
+        let var = self.create_variable_with_link_groups(authenticated_val, link_groups)?;
+        self.enforce_constant(var, val.inner())?;
+
+        Ok(var)
+    }
+
+    fn set_group_layout(&mut self, id: String, layout: GroupLayout) {
+        self.link_group_layouts.insert(id, layout);
+    }
+
+    fn create_link_group(&mut self, id: String, layout: Option<GroupLayout>) -> LinkGroup {
+        self.link_groups.insert(id.clone(), Vec::new());
+        if let Some(layout) = layout {
+            self.link_group_layouts.insert(id.clone(), layout);
+        }
+
+        LinkGroup { id }
+    }
+
+    fn gates(&self) -> &[Box<dyn Gate<C::ScalarField>>] {
+        &self.gates
+    }
+
+    fn wires(&self) -> &[Vec<Variable>; GATE_WIDTH + 2] {
+        &self.wire_variables
+    }
+
+    unsafe fn gates_mut(&mut self) -> &mut Vec<Box<dyn Gate<C::ScalarField>>> {
+        &mut self.gates
+    }
+
+    unsafe fn wires_mut(&mut self) -> &mut [Vec<Variable>; GATE_WIDTH + 2] {
+        &mut self.wire_variables
+    }
+
+    fn order_gates(&mut self) -> Result<(), CircuitError> {
+        self.rearrange_gates()
+    }
+
+    fn link_group_ids(&self) -> Vec<String> {
+        self.link_groups.keys().cloned().collect()
+    }
+
+    fn get_link_group_members(&self, id: &str) -> Option<&[Variable]> {
+        self.link_groups.get(id).map(|members| members.as_slice())
+    }
+
+    fn get_link_group_layout(&self, id: &str) -> Option<GroupLayout> {
+        self.link_group_layouts.get(id).copied()
     }
 }
 
