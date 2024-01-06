@@ -11,8 +11,8 @@ use crate::{
     constants::{compute_coset_representatives, GATE_WIDTH, N_MUL_SELECTORS},
     errors::{CircuitError, CircuitError::*},
     gates::*,
-    proof_linking::GroupLayout,
-    traits::{Arithmetization, Circuit, LinkGroup},
+    proof_linking::{GroupLayout, LinkGroup, LinkableCircuit},
+    traits::{Arithmetization, Circuit},
 };
 use ark_ff::{FftField, PrimeField};
 use ark_poly::{
@@ -21,7 +21,6 @@ use ark_poly::{
 };
 use ark_std::{boxed::Box, format, iterable::Iterable, string::ToString, vec, vec::Vec};
 use hashbrown::{HashMap, HashSet};
-use itertools::Itertools;
 use jf_utils::par_utils::parallelizable_slice_iter;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -72,53 +71,6 @@ pub enum MergeableCircuitType {
     TypeA,
     /// Second type
     TypeB,
-}
-
-/// The layout of a circuit
-#[derive(Clone, Debug)]
-pub struct CircuitLayout {
-    /// The number of public inputs to the circuit
-    pub n_inputs: usize,
-    /// The number of gates in the circuit
-    pub n_gates: usize,
-    /// The offsets and sizes of the proof linking groups in the circuit
-    pub group_layouts: HashMap<String, GroupLayout>,
-}
-
-impl CircuitLayout {
-    /// Get the domain size used to represent the circuit after proof linking
-    /// gates are accounted for
-    pub fn circuit_size(&self) -> usize {
-        // Check for link group alignments that need larger roots
-        let max_alignment =
-            self.group_layouts.values().map(|layout| layout.alignment).max().unwrap_or(1);
-        let link_gates = self.group_layouts.iter().map(|(_, layout)| layout.size).sum::<usize>();
-
-        let gates = (self.n_gates + link_gates).next_power_of_two();
-        let alignment_domain_size = 1 << max_alignment;
-        usize::max(gates, alignment_domain_size)
-    }
-
-    /// Get the alignment of the circuit, i.e. for return value `n` we use the
-    /// roots of unity
-    pub fn circuit_alignment(&self) -> usize {
-        // `circuit_size` will pad to a power of two, so ilog2 is equivalent to the
-        // actual base 2 logarithm
-        self.circuit_size().ilog2() as usize
-    }
-
-    /// Get an iterator over the groups in the circuit, sorted by the ranges
-    /// they are allocated in
-    ///
-    /// We assume that the group placements are disjoint, so it is safe to
-    /// sort them in any common alignment
-    pub(crate) fn sorted_groups_iter(&self) -> impl Iterator<Item = (&String, &GroupLayout)> {
-        // Compare the ranges in the maximum alignment specified
-        let align = self.group_layouts.values().map(|layout| layout.alignment).max().unwrap_or(1);
-        self.group_layouts
-            .iter()
-            .sorted_by_key(|(_, placement)| placement.range_in_nth_roots(align))
-    }
 }
 
 /// The wire type identifier for range gates.
@@ -218,13 +170,6 @@ where
     /// Groups without specified layouts will be given a layout when the circuit
     /// layout is determined
     pub(crate) link_group_layouts: HashMap<String, GroupLayout>,
-    /// The layout of the circuit if one has been generated
-    ///
-    /// After applying a layout to the circuit, the circuit's topology changes,
-    /// so subsequent calls to `gen_circuit_layout` will change the layout.
-    /// This field is used to cache the layout so that it can be reused even
-    /// after the layout is applied
-    pub(crate) layout: Option<CircuitLayout>,
 
     /// The Plonk parameters.
     plonk_params: PlonkParams,
@@ -269,7 +214,6 @@ impl<F: FftField> PlonkCircuit<F> {
             eval_domain: Radix2EvaluationDomain::new(1).unwrap(),
             link_groups: HashMap::new(),
             link_group_layouts: HashMap::new(),
-            layout: None,
             plonk_params,
             num_table_elems: 0,
             table_gate_ids: vec![],
@@ -521,31 +465,12 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         Ok(())
     }
 
-    fn create_constant_variable_with_link_groups(
-        &mut self,
-        val: F,
-        link_groups: &[LinkGroup],
-    ) -> Result<Variable, CircuitError> {
-        let var = self.create_variable_with_link_groups(val, link_groups)?;
-        self.enforce_constant(var, val)?;
-
-        Ok(var)
+    fn create_variable(&mut self, val: Self::Wire) -> Result<Variable, CircuitError> {
+        self.create_variable_with_link_groups(val, &[])
     }
 
-    fn create_variable_with_link_groups(
-        &mut self,
-        val: Self::Wire,
-        link_groups: &[LinkGroup],
-    ) -> Result<Variable, CircuitError> {
-        self.check_finalize_flag(false)?;
-        self.witness.push(val);
-        self.num_vars += 1;
-
-        // the index is from `0` to `num_vars - 1`
-        let var = self.num_vars - 1;
-        self.add_to_link_groups(var, link_groups)?;
-
-        Ok(var)
+    fn create_constant_variable(&mut self, val: Self::Constant) -> Result<Variable, CircuitError> {
+        self.create_constant_variable_with_link_groups(val, &[])
     }
 
     fn set_variable_public(&mut self, var: Variable) -> Result<(), CircuitError> {
@@ -556,21 +481,6 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         let wire_vars = &[0, 0, 0, 0, var];
         self.insert_gate(wire_vars, Box::new(IoGate))?;
         Ok(())
-    }
-
-    fn create_link_group(&mut self, id: String, layout: Option<GroupLayout>) -> LinkGroup {
-        assert_eq!(
-            self.plonk_params.plonk_type,
-            PlonkType::TurboPlonk,
-            "only TurboPlonk supports link groups"
-        );
-
-        self.link_groups.insert(id.clone(), Vec::new());
-        if let Some(layout) = layout {
-            self.link_group_layouts.insert(id.clone(), layout);
-        }
-
-        LinkGroup { id }
     }
 
     /// Insert a general (algebraic) gate
@@ -602,6 +512,90 @@ impl<F: FftField> Circuit<F> for PlonkCircuit<F> {
         let wire_vars = &[x, 0, 0, 0, res_var];
         self.insert_gate(wire_vars, Box::new(FifthRootGate))?;
         Ok(res_var)
+    }
+}
+
+impl<F: FftField> LinkableCircuit<F> for PlonkCircuit<F> {
+    fn num_links(&self) -> usize {
+        self.link_groups.values().map(|group| group.len()).sum()
+    }
+
+    fn create_variable_with_link_groups(
+        &mut self,
+        val: Self::Wire,
+        link_groups: &[LinkGroup],
+    ) -> Result<Variable, CircuitError> {
+        self.check_finalize_flag(false)?;
+        self.witness.push(val);
+        self.num_vars += 1;
+
+        // the index is from `0` to `num_vars - 1`
+        let var = self.num_vars - 1;
+        self.add_to_link_groups(var, link_groups)?;
+
+        Ok(var)
+    }
+
+    fn create_constant_variable_with_link_groups(
+        &mut self,
+        val: F,
+        link_groups: &[LinkGroup],
+    ) -> Result<Variable, CircuitError> {
+        let var = self.create_variable_with_link_groups(val, link_groups)?;
+        self.enforce_constant(var, val)?;
+
+        Ok(var)
+    }
+
+    fn set_group_layout(&mut self, id: String, layout: GroupLayout) {
+        self.link_group_layouts.insert(id.to_string(), layout);
+    }
+
+    fn create_link_group(&mut self, id: String, layout: Option<GroupLayout>) -> LinkGroup {
+        assert_eq!(
+            self.plonk_params.plonk_type,
+            PlonkType::TurboPlonk,
+            "only TurboPlonk supports link groups"
+        );
+
+        self.link_groups.insert(id.clone(), Vec::new());
+        if let Some(layout) = layout {
+            self.link_group_layouts.insert(id.clone(), layout);
+        }
+
+        LinkGroup { id }
+    }
+
+    fn gates(&self) -> &[Box<dyn Gate<F>>] {
+        &self.gates
+    }
+
+    fn wires(&self) -> &[Vec<Variable>; GATE_WIDTH + 2] {
+        &self.wire_variables
+    }
+
+    unsafe fn gates_mut(&mut self) -> &mut Vec<Box<dyn Gate<F>>> {
+        &mut self.gates
+    }
+
+    unsafe fn wires_mut(&mut self) -> &mut [Vec<Variable>; GATE_WIDTH + 2] {
+        &mut self.wire_variables
+    }
+
+    fn order_gates(&mut self) -> Result<(), CircuitError> {
+        self.rearrange_gates()
+    }
+
+    fn link_group_ids(&self) -> Vec<String> {
+        self.link_groups.keys().cloned().collect()
+    }
+
+    fn get_link_group_members(&self, id: &str) -> Option<&[Variable]> {
+        self.link_groups.get(id).map(|members| members.as_slice())
+    }
+
+    fn get_link_group_layout(&self, id: &str) -> Option<GroupLayout> {
+        self.link_group_layouts.get(id).copied()
     }
 }
 
@@ -982,7 +976,7 @@ impl<F: PrimeField> PlonkCircuit<F> {
         // supported in `UltraPlonk`
         match self.plonk_params.plonk_type {
             PlonkType::TurboPlonk => {
-                let layout = self.gen_circuit_layout()?;
+                let layout = self.generate_layout()?;
                 self.eval_domain = Radix2EvaluationDomain::new(layout.circuit_size())
                     .ok_or(CircuitError::DomainCreationError)?;
 
@@ -1148,7 +1142,6 @@ impl<F: PrimeField> PlonkCircuit<F> {
             // `link_groups` must be empty for both proofs
             link_groups: HashMap::new(),
             link_group_layouts: HashMap::new(),
-            layout: None,
             plonk_params: self.plonk_params,
             num_table_elems: 0,
             table_gate_ids: vec![],
