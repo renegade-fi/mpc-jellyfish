@@ -28,8 +28,8 @@ pub struct GroupLayout {
 
 impl GroupLayout {
     /// Constructor
-    pub fn new(alignment: usize, offset: usize) -> Self {
-        Self { alignment, offset, size: 0 }
+    pub fn new(alignment: usize, offset: usize, size: usize) -> Self {
+        Self { alignment, offset, size }
     }
 
     /// Get the inclusive range this group takes up in the trace when embedded
