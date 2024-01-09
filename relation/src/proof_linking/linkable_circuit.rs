@@ -464,7 +464,7 @@ mod test {
         let offset = (offset_min..offset_max).sample_single(&mut rng);
 
         // Create the group and add variables to it
-        let placement = GroupLayout::new(alignment, offset);
+        let placement = GroupLayout::new(alignment, offset, size);
         let group = cs.create_link_group("group1".to_string(), Some(placement));
         for _ in 0..size {
             cs.create_variable_with_link_groups(FqEd254::rand(&mut rng), &[group.clone()]).unwrap();
@@ -522,7 +522,7 @@ mod test {
         // layout) is slotted in before it
         let alignment1 = (MIN_ALIGNMENT..MAX_ALIGNMENT).sample_single(&mut rng);
         let offset1 = (10..20).sample_single(&mut rng);
-        let placement1 = GroupLayout::new(alignment1, offset1);
+        let placement1 = GroupLayout::new(alignment1, offset1, 1 /* size */);
 
         // Create the third group on a larger or equal alignment, allocate it after the
         // first group
@@ -531,7 +531,7 @@ mod test {
 
         let scaled_offset1 = offset1 * scaling;
         let offset3 = (scaled_offset1 + 1..2usize.pow(alignment3 as u32)).sample_single(&mut rng);
-        let placement3 = GroupLayout::new(alignment3, offset3);
+        let placement3 = GroupLayout::new(alignment3, offset3, 1 /* size */);
 
         // Create the groups
         let group1 = cs.create_link_group(String::from("group1"), Some(placement1));
@@ -587,7 +587,8 @@ mod test {
         let mut cs = PlonkCircuit::<FqEd254>::new_turbo_plonk();
         let val = FqEd254::rand(&mut rng);
 
-        let placement = GroupLayout::new(4 /* alignment */, 0 /* offset */);
+        let placement =
+            GroupLayout::new(4 /* alignment */, 0 /* offset */, 1 /* size */);
         let group = cs.create_link_group(String::from("test"), Some(placement));
 
         cs.create_public_variable(FqEd254::one()).unwrap();
@@ -600,13 +601,13 @@ mod test {
 
         let alignment1 = (0..10).sample_single(&mut rng);
         let offset1 = (0..2usize.pow(alignment1)).sample_single(&mut rng);
-        let placement1 = GroupLayout::new(alignment1 as usize, offset1);
+        let placement1 = GroupLayout::new(alignment1 as usize, offset1, 2 /* size */);
 
         let alignment2 = (alignment1..=10).sample_single(&mut rng);
         let spacing = 1 << (alignment2 - alignment1);
 
         let offset2 = offset1 * spacing + spacing; // Start group2 on the last element of group1
-        let placement2 = GroupLayout::new(alignment2 as usize, offset2);
+        let placement2 = GroupLayout::new(alignment2 as usize, offset2, 2 /* size */);
 
         let group1 = cs.create_link_group(String::from("group1"), Some(placement1));
         let group2 = cs.create_link_group(String::from("group2"), Some(placement2));

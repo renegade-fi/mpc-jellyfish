@@ -293,10 +293,6 @@ impl<F: FftField> PlonkCircuit<F> {
                 .get_mut(group)
                 .ok_or_else(|| LinkGroupNotFound(group.to_string()))?
                 .push(var);
-
-            if let Some(layout) = self.link_group_layouts.get_mut(group) {
-                layout.size += 1;
-            }
         }
 
         Ok(())
