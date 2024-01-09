@@ -551,7 +551,7 @@ pub struct ProvingKey<E: Pairing> {
     pub(crate) selectors: Vec<DensePolynomial<E::ScalarField>>,
 
     // KZG PCS committing key.
-    pub(crate) commit_key: CommitKey<E>,
+    pub commit_key: CommitKey<E>,
 
     /// The verifying key. It is used by prover to initialize transcripts.
     pub vk: VerifyingKey<E>,
