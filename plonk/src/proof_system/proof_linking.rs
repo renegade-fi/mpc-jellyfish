@@ -8,6 +8,7 @@ use ark_ec::{
 };
 use ark_ff::{Field, One, Zero};
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use jf_primitives::{
     pcs::{
         prelude::{Commitment, UnivariateKzgPCS, UnivariateKzgProof},
@@ -19,6 +20,7 @@ use mpc_relation::{
     gadgets::ecc::SWToTEConParam,
     proof_linking::{GroupLayout, PROOF_LINK_WIRE_IDX},
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{errors::PlonkError, transcript::PlonkTranscript};
 
@@ -28,12 +30,34 @@ use super::{
 };
 
 /// A proof that two circuits are linked on a given domain
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LinkingProof<E: Pairing> {
     /// The commitment to the linking quotient polynomial
     pub quotient_commitment: Commitment<E>,
     /// The proof of opening of the linking identity polynomial
     pub opening_proof: UnivariateKzgProof<E>,
+}
+
+impl<E: Pairing> Serialize for LinkingProof<E> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut bytes = Vec::new();
+        self.serialize_compressed(&mut bytes).map_err(serde::ser::Error::custom)?;
+
+        serializer.serialize_bytes(&bytes)
+    }
+}
+
+impl<'de, E: Pairing> Deserialize<'de> for LinkingProof<E> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let bytes = <Vec<u8>>::deserialize(deserializer)?;
+        Self::deserialize_compressed(bytes.as_slice()).map_err(serde::de::Error::custom)
+    }
 }
 
 // ----------
@@ -407,8 +431,10 @@ pub mod test_helpers {
 #[cfg(test)]
 mod test {
     use ark_bn254::{Bn254, Fr as FrBn254};
+    use ark_ec::pairing::Pairing;
     use ark_std::UniformRand;
     use itertools::Itertools;
+    use jf_primitives::pcs::prelude::UnivariateKzgProof;
     use mpc_relation::{
         proof_linking::{GroupLayout, LinkableCircuit},
         PlonkCircuit,
@@ -424,9 +450,12 @@ mod test {
         transcript::SolidityTranscript,
     };
 
-    use super::test_helpers::{
-        gen_commit_keys, gen_proving_keys, gen_test_circuit1, gen_test_circuit2, CircuitSelector,
-        GROUP_NAME,
+    use super::{
+        test_helpers::{
+            gen_commit_keys, gen_proving_keys, gen_test_circuit1, gen_test_circuit2,
+            CircuitSelector, GROUP_NAME,
+        },
+        LinkingProof,
     };
 
     // -----------
@@ -492,6 +521,22 @@ mod test {
     // --------------
     // | Test Cases |
     // --------------
+
+    /// Tests serialization and deserialization of a linking proof
+    #[test]
+    fn test_serde() {
+        let mut rng = thread_rng();
+        let commitment = <Bn254 as Pairing>::G1Affine::rand(&mut rng).into();
+        let opening = UnivariateKzgProof { proof: <Bn254 as Pairing>::G1Affine::rand(&mut rng) };
+
+        let proof =
+            LinkingProof::<Bn254> { quotient_commitment: commitment, opening_proof: opening };
+
+        let bytes = serde_json::to_vec(&proof).unwrap();
+        let recovered = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(proof, recovered);
+    }
 
     /// Tests a linking proof between two circuits that correctly use the same
     /// values in the linking domain
