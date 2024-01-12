@@ -45,6 +45,7 @@ use mpc_relation::{
     },
     PlonkCircuit,
 };
+use serde::{ser::SerializeSeq, Deserialize, Serialize};
 use tagged_base64::tagged;
 
 /// Universal StructuredReferenceString
@@ -87,12 +88,40 @@ pub struct Proof<E: Pairing> {
 ///
 /// The linking hint contains information about the prover's witness needed to
 /// link the proof to another proof of a different circuit
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LinkingHint<E: Pairing> {
     /// The wire polynomial that encodes the proof-linking gates for the circuit
     pub linking_wire_poly: DensePolynomial<E::ScalarField>,
     /// The commitment to the linking wire poly generated while proving
     pub linking_wire_comm: Commitment<E>,
+}
+
+impl<E: Pairing> Serialize for LinkingHint<E> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut bytes = Vec::new();
+        self.serialize_compressed(&mut bytes).map_err(serde::ser::Error::custom)?;
+
+        // Serialize explicitly as a sequence to avoid issues with certain serde
+        // formats, e.g. flexbuffers
+        let mut seq = serializer.serialize_seq(Some(bytes.len()))?;
+        for byte in bytes.iter() {
+            seq.serialize_element(byte)?;
+        }
+        seq.end()
+    }
+}
+
+impl<'de, E: Pairing> Deserialize<'de> for LinkingHint<E> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let bytes = <Vec<u8>>::deserialize(deserializer)?;
+        Self::deserialize_compressed(bytes.as_slice()).map_err(serde::de::Error::custom)
+    }
 }
 
 impl<E, P> TryFrom<Vec<E::BaseField>> for Proof<E>
@@ -931,6 +960,29 @@ mod test {
     use super::*;
     use ark_bn254::{g1::Config, Bn254, Fq};
     use ark_ec::AffineRepr;
+    use ark_poly::DenseUVPolynomial;
+    use ark_std::UniformRand;
+    use itertools::Itertools;
+    use rand::thread_rng;
+
+    /// Test `LinkingHint` serde
+    #[test]
+    fn test_link_hint_serde() {
+        const N_COEFFS: usize = 10;
+        let mut rng = thread_rng();
+
+        let coeffs =
+            (0..N_COEFFS).map(|_| <Bn254 as Pairing>::ScalarField::rand(&mut rng)).collect_vec();
+        let poly = DensePolynomial::from_coefficients_vec(coeffs);
+        let comm = Commitment(<Bn254 as Pairing>::G1Affine::rand(&mut rng));
+
+        let hint = LinkingHint::<Bn254> { linking_wire_poly: poly, linking_wire_comm: comm };
+
+        let bytes = serde_json::to_vec(&hint).unwrap();
+        let recovered = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(hint, recovered);
+    }
 
     #[test]
     fn test_group_to_field() {
