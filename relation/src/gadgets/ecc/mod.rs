@@ -116,7 +116,7 @@ where
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 /// Represent variable of an EC point.
-pub struct PointVariable(Variable, Variable);
+pub struct PointVariable(pub Variable, pub Variable);
 
 impl PointVariable {
     /// Get the variable representing the x coordinate of the point.

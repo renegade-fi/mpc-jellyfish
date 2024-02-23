@@ -44,7 +44,8 @@ pub struct EncKey<P>
 where
     P: Config,
 {
-    pub(crate) key: Projective<P>,
+    /// The underlying elliptic curve point
+    pub key: Projective<P>,
 }
 
 impl<P: Config> Hash for EncKey<P> {
@@ -69,11 +70,12 @@ impl<P: Config> PartialEq for EncKey<P> {
     Clone(bound = "P: Config"),
     PartialEq(bound = "P: Config")
 )]
-pub(crate) struct DecKey<P>
+pub struct DecKey<P>
 where
     P: Config,
 {
-    key: P::ScalarField,
+    /// The underlying field element of the key
+    pub key: P::ScalarField,
 }
 
 impl<P: Config> Drop for DecKey<P> {
@@ -117,8 +119,10 @@ pub struct Ciphertext<P>
 where
     P: Config,
 {
-    pub(crate) ephemeral: EncKey<P>,
-    pub(crate) data: Vec<P::BaseField>,
+    /// The ephemeral key used for encryption
+    pub ephemeral: EncKey<P>,
+    /// The encrypted data
+    pub data: Vec<P::BaseField>,
 }
 
 impl<P> Ciphertext<P>
@@ -164,6 +168,11 @@ where
         let dec = DecKey { key: P::ScalarField::rand(rng) };
         let enc = EncKey::from(&dec);
         KeyPair { enc, dec }
+    }
+
+    /// Get the decryption key
+    pub fn dec_key(&self) -> DecKey<P> {
+        self.dec.clone()
     }
 
     /// Get decryption key reference

@@ -86,7 +86,6 @@ test_apis = ["ark-bn254", "rand", "ark-mpc/test_helpers"]
 parallel = [
     "ark-ec/parallel",
     "ark-ff/parallel",
-    "ark-mpc/multithreaded_executor",
     "ark-poly/parallel",
     "ark-std/parallel",
     "jf-utils/parallel",
