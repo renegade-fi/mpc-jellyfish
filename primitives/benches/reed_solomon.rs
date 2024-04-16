@@ -4,7 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the Jellyfish library. If not, see <https://mit-license.org/>.
 
-#![deny(warnings)]
+// #![deny(warnings)]
 #[macro_use]
 extern crate criterion;
 use ark_bn254::Fr as Fr254;

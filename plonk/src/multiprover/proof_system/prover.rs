@@ -27,7 +27,7 @@ use crate::{
     proof_system::structs::{CommitKey, ProvingKey},
 };
 
-use super::{MpcArithmetization, MpcOracles};
+use super::MpcArithmetization;
 
 // -------------------------
 // | Prover Implementation |
@@ -710,7 +710,7 @@ impl<E: Pairing> MpcProver<E> {
         // with t_lowest_i(X) = t_lowest_i(X) - 0 + b_now_i * X^(n+2)
         // and t_highest_i(X) = t_highest_i(X) - b_last_i
         let mut last_randomizer = self.fabric.zero_authenticated();
-        let mut randomizers = self.fabric.random_shared_scalars_authenticated(num_wire_types - 1);
+        let mut randomizers = self.fabric.random_shared_scalars(num_wire_types - 1);
 
         split_quot_polys.iter_mut().take(num_wire_types - 1).for_each(|poly| {
             poly.coeffs[0] = &poly.coeffs[0] - &last_randomizer;
@@ -934,10 +934,12 @@ pub fn mul_poly_result<C: CurveGroup>(
 
 #[cfg(test)]
 pub(crate) mod test {
+    use ark_ec::CurveGroup;
     use ark_ff::{One, Zero};
     use ark_mpc::{
-        algebra::{AuthenticatedDensePoly, Scalar},
-        beaver::ZeroBeaverSource,
+        algebra::{AuthenticatedDensePoly, Scalar, ScalarShare},
+        network::PartyId,
+        offline_prep::PreprocessingPhase,
         test_helpers::{execute_mock_mpc, execute_mock_mpc_with_beaver_source},
         MpcFabric, PARTY0, PARTY1,
     };
@@ -960,6 +962,57 @@ pub(crate) mod test {
     };
 
     use super::MpcProver;
+
+    /// A beaver source that always returns zero
+    #[cfg(any(feature = "test_helpers", test))]
+    struct ZeroBeaverSource {
+        /// The ID of the local party
+        party_id: PartyId,
+    }
+
+    impl ZeroBeaverSource {
+        /// Create a new beaver source given the local party_id
+        pub fn new(party_id: PartyId) -> Self {
+            Self { party_id }
+        }
+    }
+
+    impl<C: CurveGroup> PreprocessingPhase<C> for ZeroBeaverSource {
+        fn get_mac_key_share(&self) -> Scalar<C> {
+            Scalar::zero()
+        }
+
+        fn next_local_input_mask(&mut self) -> (Scalar<C>, ScalarShare<C>) {
+            (Scalar::zero(), ScalarShare::new(Scalar::zero(), Scalar::zero()))
+        }
+
+        fn next_counterparty_input_mask(&mut self) -> ScalarShare<C> {
+            ScalarShare::new(Scalar::zero(), Scalar::zero())
+        }
+
+        fn next_shared_bit(&mut self) -> ScalarShare<C> {
+            ScalarShare::new(Scalar::zero(), Scalar::zero())
+        }
+
+        fn next_triplet(&mut self) -> (ScalarShare<C>, ScalarShare<C>, ScalarShare<C>) {
+            let zero = ScalarShare::new(Scalar::zero(), Scalar::zero());
+            (zero, zero, zero)
+        }
+
+        /// For the shared inverse pair, we return 1 to give a valid member of
+        /// the multiplicative subgroup
+        ///
+        /// This means that each party holds their party ID as a shared value
+        fn next_shared_inverse_pair(&mut self) -> (ScalarShare<C>, ScalarShare<C>) {
+            let val = Scalar::from(self.party_id);
+            let share = ScalarShare::new(val, val);
+            (share, share)
+        }
+
+        fn next_shared_value(&mut self) -> ScalarShare<C> {
+            ScalarShare::new(Scalar::zero(), Scalar::zero())
+        }
+    }
 
     /// Get a randomized set of challenges
     fn randomized_challenges() -> Challenges<TestScalar> {

@@ -260,7 +260,7 @@ where
     P: Config<BaseField = F>,
 {
     /// Decryption function
-    fn decrypt(&self, ctext: &Ciphertext<P>) -> Vec<P::BaseField> {
+    pub fn decrypt(&self, ctext: &Ciphertext<P>) -> Vec<P::BaseField> {
         let perm = Permutation::default();
         let shared_key = (ctext.ephemeral.key * self.key).into_affine();
         let key =

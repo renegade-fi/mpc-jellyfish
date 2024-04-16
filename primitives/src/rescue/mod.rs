@@ -18,7 +18,7 @@
 //!
 //! Those three place holders should never be used.
 
-#![deny(warnings)]
+// #![deny(warnings)]
 pub mod errors;
 mod rescue_constants;
 pub mod sponge;

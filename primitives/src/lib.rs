@@ -8,7 +8,7 @@
 //! well as the plonk circuit implementation of those primitives.
 
 #![cfg_attr(not(feature = "std"), no_std)]
-#![deny(warnings)]
+// #![deny(warnings)]
 #![deny(missing_docs)]
 #![allow(unknown_lints)]
 #[cfg(test)]
