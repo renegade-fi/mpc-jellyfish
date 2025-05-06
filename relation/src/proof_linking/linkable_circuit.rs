@@ -101,8 +101,8 @@ pub trait LinkableCircuit<F: Field>: Circuit<F> {
     /// back
     fn order_gates(&mut self) -> Result<(), CircuitError>;
 
-    /// Get the current alignment of the circuit
-    fn current_alignment(&self) -> usize {
+    /// Get the minimum alignment needed for proof linking gates in the circuit
+    fn min_alignment(&self) -> usize {
         // The maximum alignment needed by any link group
         let mut max_alignment = 0;
         for id in self.link_group_ids().iter() {
@@ -111,10 +111,10 @@ pub trait LinkableCircuit<F: Field>: Circuit<F> {
             }
         }
 
-        // The total number of gates after proof linking gates are added
-        let n_gates = self.num_gates() + self.num_links();
-        let gates_order = n_gates.next_power_of_two().ilog2() as usize;
-        usize::max(max_alignment, gates_order)
+        // The total number of proof linking gates needed by the circuit
+        let n_links = self.num_links();
+        let all_links_alignment = n_links.next_power_of_two().ilog2();
+        usize::max(max_alignment, all_links_alignment as usize)
     }
 
     /// Get the IDs of all the link groups in the circuit
@@ -146,7 +146,7 @@ pub trait LinkableCircuit<F: Field>: Circuit<F> {
         }
 
         // Sort the placed groups
-        let mut alignment = self.current_alignment();
+        let mut alignment = self.min_alignment();
         sorted_placements.sort_by_key(|(_, layout)| layout.range_in_nth_roots(alignment));
 
         // 2. Place the unplaced groups
