@@ -108,7 +108,7 @@ where
     Clone, Hash, Default, Zeroize, Eq, PartialEq, CanonicalSerialize, CanonicalDeserialize, Debug,
 )]
 /// Signing key for Schnorr signature.
-pub struct SignKey<F: PrimeField>(pub(crate) F);
+pub struct SignKey<F: PrimeField>(pub F);
 
 impl<F: PrimeField> Drop for SignKey<F> {
     fn drop(&mut self) {
@@ -137,7 +137,7 @@ impl<F: PrimeField> SignKey<F> {
     Eq(bound = "P: Config"),
     Clone(bound = "P: Config")
 )]
-pub struct VerKey<P>(pub(crate) Projective<P>)
+pub struct VerKey<P>(pub Projective<P>)
 where
     P: Config;
 
@@ -227,8 +227,10 @@ pub struct Signature<P>
 where
     P: Config,
 {
-    pub(crate) s: P::ScalarField,
-    pub(crate) R: Projective<P>,
+    /// s component.
+    pub s: P::ScalarField,
+    /// R component.
+    pub R: Projective<P>,
 }
 
 impl<P> Hash for Signature<P>
